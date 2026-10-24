@@ -33,7 +33,7 @@ To select `P3-45` on channel 1 send, in this order:
 |---|---|
 | `B0 00 57` | CC 0 (Bank Select MSB) = 87 |
 | `B0 20 0A` | CC 32 (Bank Select LSB) = 10, group P3 |
-| `C0 24` | Program Change 36 = (4−1)×8 + (5−1) |
+| `C0 1C` | Program Change 28 = (4−1)×8 + (5−1) |
 
 For channel *n* (1–16) the status bytes are `0xB0 | (n−1)` and `0xC0 | (n−1)`.
 Send all three every time; do not assume the unit remembers the bank.

@@ -31,8 +31,9 @@ target_compile_options(d05_options INTERFACE
     $<$<CXX_COMPILER_ID:MSVC>:/W4>)
 target_include_directories(d05_options INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-# --- d05core: core + midi + app logic, QtCore only (RtMidi lives with the MIDI layer) ---
+# --- d05core: core + midi + app logic, no Widgets (RtMidi lives with the MIDI layer) ---
 qt_add_library(d05core STATIC
+    src/core/PatchAddress.h src/core/PatchAddress.cpp
     src/core/PresetTable.h src/core/PresetTable.cpp
     src/midi/PortLister.h   src/midi/PortLister.cpp
 )
