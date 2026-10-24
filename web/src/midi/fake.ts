@@ -18,6 +18,7 @@ export const FAKE_IN: PortInfo = { name: 'Fake D-05 In', manufacturer: 'Fake' };
 
 export class FakeMidi extends BasePort implements MidiPort {
   access: AccessState;
+  readonly stalled = false;
   /** Every message sent, in order. */
   readonly sent: number[][] = [];
   /** Pending request outcome (set by tests or the `grant` option). */

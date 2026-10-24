@@ -278,6 +278,9 @@ export function settingsDialog(host: HTMLElement, o: SettingsOptions): OpenDialo
 
   // Options carry the list index (or `missing`), so two ports with the same name stay distinct.
   const fill = (sel: HTMLSelectElement, list: readonly PortInfo[], want: PortInfo | null, none: boolean): void => {
+    const sig = JSON.stringify([none, list.map((p) => [p.name, p.manufacturer ?? '']), want ? [want.name, want.manufacturer ?? ''] : null]);
+    if (sel.dataset['sig'] === sig) return;
+    sel.dataset['sig'] = sig;
     sel.textContent = '';
     if (none) sel.appendChild(Object.assign(el('option'), { value: '', textContent: 'None' }));
     list.forEach((p, i) => {

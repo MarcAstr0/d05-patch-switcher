@@ -78,7 +78,9 @@ export function deniedSteps(e: Env): string[] {
   return ["Allow MIDI for this site in the browser's site settings.", 'Come back here and press TRY AGAIN.'];
 }
 
-export function accessContent(state: AccessState, e: Env): AccessContent | null {
+export const STALLED_HINT = 'No answer from the browser? Reload the page, or check the site permission.';
+
+export function accessContent(state: AccessState, e: Env, stalled = false): AccessContent | null {
   const none = { red: false, body: [] as string[], steps: [] as string[], matrix: false, button: null, note: '' };
   switch (state) {
     case 'granted':
@@ -100,7 +102,7 @@ export function accessContent(state: AccessState, e: Env): AccessContent | null 
           : 'The browser asks once for permission to use MIDI devices. Allow it so this page can change patches on the D-05.',
       ];
       if (browserKind(e) === 'firefox') body.push('Firefox installs a small site permission add-on the first time. That is expected.');
-      return { ...none, title: 'MIDI IS NOT CONNECTED', body, button: state === 'waiting' ? 'WAITING' : 'CONNECT MIDI', note: 'Only Bank Select and Program Change are sent, never SysEx.' };
+      return { ...none, title: 'MIDI IS NOT CONNECTED', body, button: state === 'waiting' && !stalled ? 'WAITING' : 'CONNECT MIDI', note: `${state === 'waiting' && stalled ? `${STALLED_HINT} ` : ''}Only Bank Select and Program Change are sent, never SysEx.` };
     }
   }
 }

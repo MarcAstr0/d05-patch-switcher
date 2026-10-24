@@ -2,6 +2,8 @@
 // No SysEx, ever. Ports are identified by name (and manufacturer when present), never by id.
 import { midiBytes, type PatchAddress } from '../core/address';
 
+export const STALL_MS = 20_000;
+
 export type AccessState = 'insecure' | 'unsupported' | 'prompt' | 'waiting' | 'denied' | 'granted';
 
 export interface PortInfo {
@@ -20,6 +22,8 @@ export interface LinkStatus {
 
 export interface MidiPort {
   readonly access: AccessState;
+  /** In `waiting` for longer than STALL_MS: the browser never answered. One more requestAccess is then allowed. */
+  readonly stalled: boolean;
   /** The user pressed CONNECT MIDI / TRY AGAIN. Moves `access` to `waiting`, then `granted` or `denied`. */
   requestAccess(): void;
   outputs(): readonly PortInfo[];

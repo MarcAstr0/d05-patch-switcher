@@ -2,7 +2,7 @@
 // remembered by name (plus manufacturer), never by id; hot-plug comes from `onstatechange`.
 import type { PatchAddress } from '../core/address';
 import { findPort } from '../logic/settings';
-import { BasePort, patchMessages, type AccessState, type LinkStatus, type MidiPort, type PortInfo } from './port';
+import { BasePort, STALL_MS, patchMessages, type AccessState, type LinkStatus, type MidiPort, type PortInfo } from './port';
 
 export interface WebMidiEnv {
   isSecureContext?: boolean;
@@ -32,10 +32,13 @@ const errText = (e: unknown): string => (e instanceof Error && e.message ? e.mes
 
 export class WebMidi extends BasePort implements MidiPort {
   access: AccessState;
+  stalled = false;
   output: LinkStatus = { state: 'none' };
   input: LinkStatus = { state: 'none' };
 
   private midi: MIDIAccess | null = null;
+  private generation = 0;
+  private stallTimer: ReturnType<typeof setTimeout> | null = null;
   private wantOut: PortInfo | null = null;
   private wantIn: PortInfo | null = null;
   private outPort: MIDIOutput | null = null;
@@ -74,29 +77,55 @@ export class WebMidi extends BasePort implements MidiPort {
   }
 
   requestAccess(): void {
-    if (this.access !== 'prompt' && this.access !== 'denied') return;
+    // One request at a time. A request that never answered may be repeated once it is flagged stalled.
+    const retry = this.access === 'waiting' && this.stalled;
+    if (this.access !== 'prompt' && this.access !== 'denied' && !retry) return;
+    const gen = ++this.generation;
     this.access = 'waiting';
+    this.stalled = false;
+    this.clearStall();
+    this.stallTimer = setTimeout(() => {
+      this.stallTimer = null;
+      if (this.access === 'waiting' && this.generation === gen) {
+        this.stalled = true;
+        this.emitChange();
+      }
+    }, STALL_MS);
     this.emitChange();
     let p: Promise<MIDIAccess>;
     try {
       p = this.env.navigator.requestMIDIAccess({ sysex: false });
     } catch {
-      this.access = 'denied';
-      this.emitChange();
+      this.settle(gen, null);
       return;
     }
     p.then(
-      (a) => {
-        this.midi = a;
-        a.onstatechange = () => this.refresh();
-        this.access = 'granted';
-        this.refresh();
-      },
-      () => {
-        this.access = 'denied';
-        this.refresh();
-      },
+      (a) => this.settle(gen, a),
+      () => this.settle(gen, null),
     );
+  }
+
+  private clearStall(): void {
+    if (this.stallTimer !== null) clearTimeout(this.stallTimer);
+    this.stallTimer = null;
+  }
+
+  /** A grant is accepted from any request; a refusal only from the latest one. */
+  private settle(gen: number, a: MIDIAccess | null): void {
+    if (a) {
+      if (this.access === 'granted') return;
+      this.clearStall();
+      this.stalled = false;
+      this.midi = a;
+      a.onstatechange = () => this.refresh();
+      this.access = 'granted';
+      this.refresh();
+    } else if (gen === this.generation && this.access === 'waiting') {
+      this.clearStall();
+      this.stalled = false;
+      this.access = 'denied';
+      this.refresh();
+    }
   }
 
   outputs(): readonly PortInfo[] {

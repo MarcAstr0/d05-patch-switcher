@@ -15,6 +15,9 @@ import { aboutDialog, confirmDialog, modalOpen, settingsDialog, shortcutsDialog 
 import { SEPARATOR, openMenu, type MenuItem } from './ui/menu';
 import { Panel } from './ui/panel';
 
+export const MAX_IMPORT_BYTES = 1024 * 1024;
+export const UPDATED_TEXT = 'Updated. Reload to use the new version.';
+
 const FLASH_MS = 400;
 /** Dialog heights in CSS px (title strip + client area + border), for the sheet decision. */
 const SETTINGS_H = 474;
@@ -155,10 +158,8 @@ export class Controller {
     w.addEventListener('storage', (e) => {
       if (e.key === 'd05.settings' || e.key === null) {
         // Another tab changed the settings: take them over (never write them back from here).
-        this.settings.reload();
-        this.channel = this.settings.value.channel;
-        this.applyPorts();
-        this.render();
+        if (this.settingsOpen) this.storageStale = true; // applied when the dialog closes
+        else this.takeStoredSettings();
       }
       if (e.key === null || e.key === 'd05.library') {
         this.library.reload();
@@ -287,7 +288,7 @@ export class Controller {
       },
       kind !== 'portrait' || (this.metrics?.W ?? 0) >= 480,
     );
-    this.panel.access.update(accessContent(this.port.access, this.env));
+    this.panel.access.update(accessContent(this.port.access, this.env, this.port.stalled));
     this.pumpCards();
   }
 
@@ -295,6 +296,11 @@ export class Controller {
     if (this.notSaved) return this.notSaved;
     if (!this.storagePersistent || !this.settings.persistent) return 'Storage is blocked: changes last only until this page closes.';
     return null;
+  }
+
+  /** A new version took over (service worker). No reload is forced. */
+  notifyUpdated(): void {
+    this.announce(UPDATED_TEXT, false, true, 'UPDATED');
   }
 
   private say(text: string, error = false): void {
@@ -560,6 +566,18 @@ export class Controller {
 
   // ------------------------------------------------------------------ ports and settings
 
+  private storageStale = false;
+
+  /** Another tab changed the settings. Ports are re-opened only when the port settings actually differ. */
+  private takeStoredSettings(): void {
+    const key = (): string => JSON.stringify([this.settings.value.output, this.settings.value.input, this.settings.value.follow]);
+    const before = key();
+    this.settings.reload();
+    this.channel = this.settings.value.channel;
+    if (key() !== before) this.applyPorts();
+    this.render();
+  }
+
   private applyPorts(): void {
     const s = this.settings.value;
     this.port.setOutput(s.output);
@@ -624,6 +642,10 @@ export class Controller {
       },
       onClosed: () => {
         this.settingsOpen = false;
+        if (this.storageStale) {
+          this.storageStale = false;
+          this.takeStoredSettings();
+        }
         if (this.connectPending) {
           this.connectPending = false;
           if (this.settings.value.resendOnConnect) this.resendCurrent();
@@ -728,6 +750,10 @@ export class Controller {
   private async onImportFile(): Promise<void> {
     const file = this.importInput.files?.[0];
     if (!file) return;
+    if (file.size > MAX_IMPORT_BYTES) {
+      this.announce('Not a library file: it is larger than 1 MB (a library is a few KB)', true, true);
+      return;
+    }
     let text: string;
     try {
       text = await file.text();
@@ -752,9 +778,9 @@ export class Controller {
   }
 
   /** A status message. `card`: in portrait it also opens the message card (import results and refusals only). */
-  private announce(text: string, error = false, card = false): void {
+  private announce(text: string, error = false, card = false, title = 'IMPORT LIBRARY'): void {
     this.say(text, error);
-    if (card) this.cards.push({ title: 'IMPORT LIBRARY', text, red: error });
+    if (card) this.cards.push({ title, text, red: error });
     this.render();
   }
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { fromParts } from '../../src/core/address';
 import { FollowParser } from '../../src/midi/follow';
 import { WebMidi } from '../../src/midi/webmidi';
@@ -260,5 +260,63 @@ describe('input and follow mode', () => {
     expect(b.onmidimessage).toBeNull();
     w.setInput(null);
     expect(w.input.state).toBe('none');
+  });
+});
+
+describe('a request that never answers', () => {
+  afterEach(() => vi.useRealTimers());
+
+  test('stalls after 20 s, allows one retry, and a late grant still wins', async () => {
+    vi.useFakeTimers();
+    const m = mockNavigator();
+    const w = new WebMidi({ isSecureContext: true, navigator: m.nav });
+    w.requestAccess();
+    expect(w.access).toBe('waiting');
+    expect(w.stalled).toBe(false);
+    w.requestAccess(); // not stalled yet: ignored
+    expect(m.requests).toHaveLength(1);
+    vi.advanceTimersByTime(19_999);
+    expect(w.stalled).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(w.stalled).toBe(true);
+    w.requestAccess();
+    expect(m.requests).toHaveLength(2);
+    expect(w.stalled).toBe(false);
+    w.requestAccess(); // a request is in flight again: ignored
+    expect(m.requests).toHaveLength(2);
+    m.settle(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(w.access).toBe('granted');
+    vi.advanceTimersByTime(60_000);
+    expect(w.stalled).toBe(false);
+  });
+
+  test('a refusal settles the wait and stops the timer', async () => {
+    vi.useFakeTimers();
+    const m = mockNavigator();
+    const w = new WebMidi({ isSecureContext: true, navigator: m.nav });
+    w.requestAccess();
+    m.settle(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(w.access).toBe('denied');
+    vi.advanceTimersByTime(60_000);
+    expect(w.stalled).toBe(false);
+  });
+});
+
+describe('statechange storm', () => {
+  test('50 events in one tick: one open per port, nothing sent', async () => {
+    const { m, w } = await granted();
+    const out = new MockPort('o', 'Hapax', 'Squarp');
+    const inp = new MockPort('i', 'Hapax', 'Squarp');
+    m.access.outputs.set('o', out);
+    m.access.inputs.set('i', inp);
+    w.setOutput({ name: 'Hapax', manufacturer: 'Squarp' });
+    w.setInput({ name: 'Hapax', manufacturer: 'Squarp' });
+    for (let i = 0; i < 50; i++) m.access.onstatechange?.();
+    expect(out.opened).toBe(1);
+    expect(inp.opened).toBe(1);
+    expect(out.sent).toEqual([]);
+    expect(w.output.state).toBe('open');
   });
 });
