@@ -13,6 +13,7 @@ class QLabel;
 class QLineEdit;
 class QMenu;
 class QMenuBar;
+class QMessageBox;
 class QButtonGroup;
 
 namespace d05 {
@@ -73,6 +74,15 @@ public:
     // Vertical band top B (DESIGN 4.3).
     int bandTop() const { return m_bandTop; }
 
+    // Library actions; none of them sends MIDI.
+    void toggleFavorite(const PatchAddress &address);
+    void toggleHighlightedFavorite();
+    // F2: opens the inline editor on the highlighted user slot; a preset says so in the status bar.
+    void renameHighlighted();
+    // Opens the DESIGN 10.5 confirmation (window-modal, not blocking); CLEAR empties the recents.
+    void confirmClearRecents();
+    QMessageBox *clearRecentsBox() const { return m_clearBox; }
+
     // Sends and selects the highlighted patch (Enter).
     void sendHighlighted();
     // One step in catalogue order, then send (PgUp/PgDn, PREV/NEXT).
@@ -87,7 +97,7 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
-    enum class Restore { Keep, First, Current, BeforeSearch };
+    enum class Restore { Keep, First, Highlight, BeforeSearch };
 
     void buildWidgets();
     void buildActions();
@@ -109,6 +119,8 @@ private:
     void updateDisplayConnection();
     void relayoutStatus();
     void popupSystemMenu();
+    void onNameCommitted(const PatchAddress &address, const QString &text);
+    void refreshDisplayPatch();
 
     PatchCatalog &m_catalog;
     Library &m_library;
@@ -143,6 +155,7 @@ private:
     QMenu *m_systemMenu = nullptr;
     QWidget *m_statusStrip = nullptr;
     QMenuBar *m_nativeMenuBar = nullptr;  // macOS only
+    QMessageBox *m_clearBox = nullptr;
 };
 
 }  // namespace d05

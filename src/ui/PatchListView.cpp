@@ -71,6 +71,14 @@ void PatchListView::setModel(QAbstractItemModel *m)
     QListView::setModel(m);
     if (m) {
         connect(m, &QAbstractItemModel::modelReset, this, &PatchListView::prepareDelegate);
+        connect(m, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &a, const QModelIndex &b) {
+            auto *delegate = qobject_cast<PatchDelegate *>(itemDelegate());
+            auto *list = qobject_cast<PatchListModel *>(model());
+            if (!delegate || !list)
+                return;
+            for (int r = a.row(); r <= b.row(); ++r)
+                delegate->prepareRow(*list, r, viewport()->width());
+        });
         prepareDelegate();
     }
 }
@@ -90,16 +98,53 @@ void PatchListView::resizeEvent(QResizeEvent *event)
     prepareDelegate();
 }
 
+// The star's hit area: the right 30 px of a row (DESIGN 7.2: centre 16 px from the edge).
+bool PatchListView::starHit(const QPoint &pos, QModelIndex *index) const
+{
+    const QModelIndex i = indexAt(pos);
+    if (!i.isValid() || pos.x() < viewport()->width() - 30)
+        return false;
+    *index = i;
+    return true;
+}
+
+void PatchListView::mousePressEvent(QMouseEvent *event)
+{
+    QModelIndex i;
+    if (event->button() == Qt::LeftButton && starHit(event->position().toPoint(), &i)) {
+        m_swallowRelease = true;
+        emit starClicked(i);
+        event->accept();
+        return;
+    }
+    QListView::mousePressEvent(event);
+}
+
 void PatchListView::mouseDoubleClickEvent(QMouseEvent *event)
 {
-    m_afterDoubleClick = true;
+    QModelIndex i;
+    m_swallowRelease = true;
+    if (event->button() == Qt::LeftButton && starHit(event->position().toPoint(), &i)) {
+        emit starClicked(i);  // a quick second click on a star toggles again
+        event->accept();
+        return;
+    }
     QListView::mouseDoubleClickEvent(event);
+    // Double-click renames a user row (preset rows refuse: edit() checks the item flags).
+    // The first click already sent; this one must not.
+    i = indexAt(event->position().toPoint());
+    if (event->button() == Qt::LeftButton && i.isValid() && (model()->flags(i) & Qt::ItemIsEditable))
+        edit(i);
 }
 
 void PatchListView::mouseReleaseEvent(QMouseEvent *event)
 {
-    const bool swallow = m_afterDoubleClick;
-    m_afterDoubleClick = false;
+    const bool swallow = m_swallowRelease;
+    m_swallowRelease = false;
+    if (swallow && event->button() == Qt::LeftButton) {
+        event->accept();  // the press (star) or the double-click already did its work
+        return;
+    }
     QListView::mouseReleaseEvent(event);
     if (event->button() == Qt::LeftButton && !swallow) {
         const QModelIndex i = indexAt(event->position().toPoint());
@@ -114,6 +159,12 @@ void PatchListView::keyPressEvent(QKeyEvent *event)
         && (event->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier) {
         if (currentIndex().isValid())
             emit sendRequested(currentIndex());
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Space && (event->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier) {
+        if (!event->isAutoRepeat() && currentIndex().isValid())
+            emit favoriteToggleRequested(currentIndex());
         event->accept();
         return;
     }

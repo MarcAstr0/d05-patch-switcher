@@ -39,6 +39,7 @@ DisplayWidget::DisplayWidget(QWidget *parent)
     setFocusPolicy(Qt::NoFocus);
     setAttribute(Qt::WA_TransparentForMouseEvents);
     setAttribute(Qt::WA_OpaquePaintEvent);
+    m_sentTimer.setTimerType(Qt::PreciseTimer);  // the coarse default may fire up to 5% early
     m_sentTimer.setSingleShot(true);
     m_sentTimer.setInterval(SentFlashMs);
     connect(&m_sentTimer, &QTimer::timeout, this, [this] {

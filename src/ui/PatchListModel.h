@@ -38,6 +38,8 @@ public:
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
+    // User-slot rows are editable (the inline name editor, DESIGN 7.4); preset rows are not.
+    Qt::ItemFlags flags(const QModelIndex &index) const override;
 
     View view() const { return m_view; }
     void setView(View view);
@@ -62,6 +64,7 @@ public:
 private:
     void rebuild();
     void onFavoritesChanged();
+    void onUserNamesChanged();
 
     const PatchCatalog &m_catalog;
     const Library &m_library;

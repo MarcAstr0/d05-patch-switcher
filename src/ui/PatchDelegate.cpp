@@ -3,7 +3,11 @@
 #include "ui/PatchListModel.h"
 #include "ui/Theme.h"
 
+#include <QEvent>
+#include <QKeyEvent>
+#include <QLineEdit>
 #include <QPainter>
+#include <QValidator>
 #include <QTransform>
 
 #include <cmath>
@@ -26,6 +30,68 @@ void frame1(QPainter *p, const QRect &r, const QBrush &c)
     p->fillRect(QRect(r.x(), r.y() + 1, 1, r.height() - 2), c);
     p->fillRect(QRect(r.right(), r.y() + 1, 1, r.height() - 2), c);
 }
+
+// Keeps printable ASCII, turns tabs and line breaks into spaces, cuts to 18. Returning
+// Acceptable with a modified string makes QLineEdit adopt the modified text, so typing
+// and pasting go through the same filter (a paste is cleaned, not refused).
+class NameValidator : public QValidator {
+public:
+    using QValidator::QValidator;
+    State validate(QString &input, int &pos) const override
+    {
+        QString out;
+        out.reserve(input.size());
+        int newPos = 0;  // kept characters before the cursor
+        for (int i = 0; i < input.size() && out.size() < PatchDelegate::MaxNameLength; ++i) {
+            const char16_t u = input.at(i).unicode();
+            QChar ch;
+            if (u == u'\t' || u == u'\r' || u == u'\n' || u == u'\v' || u == u'\f')
+                ch = QLatin1Char(' ');
+            else if (u >= 0x20 && u <= 0x7E)
+                ch = input.at(i);
+            else
+                continue;
+            out.append(ch);
+            if (i < pos)
+                ++newPos;
+        }
+        if (out != input) {
+            input = out;
+            pos = qMin(newPos, int(out.size()));
+        }
+        return Acceptable;
+    }
+};
+
+// Esc and Enter belong to the editor while it is open (the window has an Esc shortcut
+// that clears the search; without this it would steal the key and the focus loss would
+// commit the edit).
+class NameEditor : public QLineEdit {
+public:
+    using QLineEdit::QLineEdit;
+
+protected:
+    // QLineEdit ignores Return, which would then reach the list's Enter handler and
+    // send the highlighted patch. The delegate's event filter has queued the commit.
+    void keyPressEvent(QKeyEvent *e) override
+    {
+        QLineEdit::keyPressEvent(e);
+        if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter)
+            e->accept();
+    }
+
+    bool event(QEvent *e) override
+    {
+        if (e->type() == QEvent::ShortcutOverride) {
+            const int k = static_cast<QKeyEvent *>(e)->key();
+            if (k == Qt::Key_Escape || k == Qt::Key_Return || k == Qt::Key_Enter) {
+                e->accept();
+                return true;
+            }
+        }
+        return QLineEdit::event(e);
+    }
+};
 
 }  // namespace
 
@@ -62,6 +128,9 @@ PatchDelegate::PatchDelegate(QObject *parent)
             m_star.lineTo(pt);
     }
     m_star.closeSubpath();
+    for (int i = 0; i <= MaxNameLength; ++i)
+        m_counter[i] = QString::number(i) + QStringLiteral("/18");
+    m_metaRed = QPen(Theme::labelRed);
     m_starOffPen = QPen(Theme::starOff, 1);
     m_starHoverPen = QPen(Theme::labelSecondary, 1);
     m_selection = QBrush(Theme::selection);
@@ -105,6 +174,13 @@ void PatchDelegate::prepare(const PatchListModel &model, int width)
     m_layouts.resize(model.rowCount());
     for (int i = 0; i < m_layouts.size(); ++i)
         layoutRow(model.row(i), width, &m_layouts[i]);
+}
+
+void PatchDelegate::prepareRow(const PatchListModel &model, int row, int width)
+{
+    if (width != m_layoutWidth || row < 0 || row >= m_layouts.size() || m_layouts.size() != model.rowCount())
+        return;  // the cache is not current; a full prepare() is due or paint computes inline
+    layoutRow(model.row(row), width, &m_layouts[row]);
 }
 
 int PatchDelegate::resourceBuildCount()
@@ -170,7 +246,12 @@ void PatchDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const
     p->setPen(row.name.isEmpty() ? m_nameDim : m_namePrimary);
     p->drawText(QPoint(kNameX, kBaseline), rl->elided.isEmpty() ? row.shown : rl->elided);
 
-    if (!row.countText.isEmpty()) {
+    if (m_editing && *m_editing == row.address) {
+        // The editor is open on this row: n/18 in place of the count.
+        p->setFont(m_metaFont);
+        p->setPen(m_editLength >= MaxNameLength ? m_metaRed : m_meta);
+        p->drawText(QRect(Wl - 100, 0, 40, RowHeight), Qt::AlignRight | Qt::AlignVCenter, m_counter[m_editLength]);
+    } else if (!row.countText.isEmpty()) {
         p->setFont(m_metaFont);
         p->setPen(m_meta);
         p->drawText(QRect(Wl - 100, 0, 40, RowHeight), Qt::AlignRight | Qt::AlignVCenter, row.countText);
@@ -197,6 +278,64 @@ void PatchDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const
     }
     p->drawPath(m_star);
     p->restore();
+}
+
+// ---------------------------------------------------------------------------- editor
+
+QWidget *PatchDelegate::createEditor(QWidget *parent, const QStyleOptionViewItem &, const QModelIndex &index) const
+{
+    const auto *model = qobject_cast<const PatchListModel *>(index.model());
+    if (!model || !model->addressAt(index).isUser())
+        return nullptr;
+    auto *e = new NameEditor(parent);
+    e->setObjectName(QStringLiteral("nameEditor"));
+    e->setFont(m_nameFont);
+    // The 18 limit lives in the validator, not setMaxLength: it must drop characters that
+    // are not printable ASCII before counting, so a paste fills the 18 with usable text.
+    e->setValidator(new NameValidator(e));
+    e->setAttribute(Qt::WA_MacShowFocusRect, false);
+    m_editing = model->addressAt(index);
+    m_editLength = 0;
+    QWidget *viewport = parent;
+    connect(e, &QLineEdit::textChanged, this, [this, e, viewport](const QString &text) {
+        const int n = qMin(int(text.size()), int(MaxNameLength));
+        if (n == m_editLength)
+            return;
+        m_editLength = n;
+        viewport->update(QRect(0, e->y() - 2, viewport->width(), RowHeight));
+    });
+    connect(e, &QObject::destroyed, this, [this] { m_editing.reset(); });
+    return e;
+}
+
+void PatchDelegate::setEditorData(QWidget *editor, const QModelIndex &index) const
+{
+    const auto *model = qobject_cast<const PatchListModel *>(index.model());
+    auto *e = qobject_cast<QLineEdit *>(editor);
+    if (!model || !e)
+        return;
+    // The view calls this again whenever the model reports a change (a favourite, the
+    // current LED); that must not overwrite what the user has typed.
+    if (e->property("d05Initialised").toBool())
+        return;
+    e->setProperty("d05Initialised", true);
+    e->setText(model->row(index.row()).name);
+    e->selectAll();
+    m_editLength = qMin(int(e->text().size()), int(MaxNameLength));
+}
+
+void PatchDelegate::setModelData(QWidget *editor, QAbstractItemModel *, const QModelIndex &index) const
+{
+    const auto *model = qobject_cast<const PatchListModel *>(index.model());
+    auto *e = qobject_cast<QLineEdit *>(editor);
+    if (model && e)
+        emit nameCommitted(model->addressAt(index), e->text());
+}
+
+void PatchDelegate::updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option, const QModelIndex &) const
+{
+    const QRect r = option.rect;
+    editor->setGeometry(r.x() + 80, r.y() + 2, r.width() - 180, 24);
 }
 
 }  // namespace d05

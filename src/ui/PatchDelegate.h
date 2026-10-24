@@ -10,6 +10,9 @@
 #include <QStaticText>
 #include <QStyledItemDelegate>
 #include <QVector>
+#include <optional>
+
+#include "core/PatchAddress.h"
 
 namespace d05 {
 
@@ -28,6 +31,16 @@ public:
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 
+    // The user-slot name editor (DESIGN 7.4): a QLineEdit #nameEditor over the name column
+    // taking up to 18 printable ASCII characters (filtered as typed, sanitised when
+    // pasted). Enter commits through nameCommitted (the model itself is never written),
+    // Esc cancels. While it is open the row's count column shows n/18.
+    static constexpr int MaxNameLength = 18;
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+    void setEditorData(QWidget *editor, const QModelIndex &index) const override;
+    void setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const override;
+    void updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+
     // Number of times the prebuilt resources were created in this process: one per
     // delegate, never per paint (tests).
     static int resourceBuildCount();
@@ -37,6 +50,12 @@ public:
     // when the model resets and when the view is resized. A paint finding the cache stale
     // (wrong row count or width) falls back to computing the same values inline.
     void prepare(const PatchListModel &model, int width);
+    // The same for one row (a dataChanged: rename, favourite).
+    void prepareRow(const PatchListModel &model, int row, int width);
+
+signals:
+    // Enter in the editor: the text as typed (the Library sanitises it again).
+    void nameCommitted(const PatchAddress &address, const QString &text) const;
 
 private:
     struct RowLayout {
@@ -62,6 +81,10 @@ private:
     // Prebuilt brushes and pens: handing QPainter a QColor makes it allocate a QBrush
     // or QPen each time.
     QBrush m_selection, m_barFocus, m_barIdle, m_hover, m_ledOn, m_ledCore, m_match, m_tag, m_starOn;
+    QString m_counter[MaxNameLength + 1];  // "0/18" to "18/18", built once
+    QPen m_metaRed;
+    mutable std::optional<PatchAddress> m_editing;
+    mutable int m_editLength = 0;
     QPen m_addrPrimary, m_addrSecondary, m_namePrimary, m_nameDim, m_meta;
 };
 

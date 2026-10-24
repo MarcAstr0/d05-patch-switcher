@@ -27,6 +27,8 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QPainter>
 #include <QScrollBar>
 #include <QStatusBar>
@@ -324,6 +326,12 @@ void MainWindow::buildWidgets()
     connect(m_search, &QLineEdit::textChanged, this, &MainWindow::onQueryChanged);
     connect(m_search, &QLineEdit::returnPressed, this, &MainWindow::sendHighlighted);
     connect(m_list, &PatchListView::sendRequested, this, [this](const QModelIndex &) { sendHighlighted(); });
+    connect(m_list, &PatchListView::starClicked, this,
+            [this](const QModelIndex &index) { toggleFavorite(m_model->addressAt(index)); });
+    connect(m_list, &PatchListView::favoriteToggleRequested, this,
+            [this](const QModelIndex &index) { toggleFavorite(m_model->addressAt(index)); });
+    connect(m_delegate, &PatchDelegate::nameCommitted, this, &MainWindow::onNameCommitted);
+    connect(&m_library, &Library::userNamesChanged, this, &MainWindow::refreshDisplayPatch);
     connect(m_list, &PatchListView::rowClicked, this, [this](const QModelIndex &index) {
         sendAddress(m_model->addressAt(index));
     });
@@ -394,6 +402,11 @@ void MainWindow::buildActions()
          [this] { m_viewFav->setChecked(true); });
     make(QStringLiteral("actionViewRecents"), QStringLiteral("Recents"), QKeySequence(Qt::CTRL | Qt::Key_3),
          [this] { m_viewRecent->setChecked(true); });
+    make(QStringLiteral("actionToggleFavourite"), QStringLiteral("Toggle favourite"), QKeySequence(Qt::CTRL | Qt::Key_D),
+         [this] { toggleHighlightedFavorite(); })
+        ->setAutoRepeat(false);
+    make(QStringLiteral("actionRename"), QStringLiteral("Rename"), QKeySequence(Qt::Key_F2), [this] { renameHighlighted(); })
+        ->setAutoRepeat(false);
     make(QStringLiteral("actionAutoSend"), QStringLiteral("Auto-send"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A),
          [this] { notAvailable(QStringLiteral("Auto-send")); });
 
@@ -406,7 +419,7 @@ void MainWindow::buildActions()
     auto *sheet = make(QStringLiteral("actionShortcuts"), QStringLiteral("Keyboard Shortcuts"), QKeySequence(Qt::Key_F1),
                        [this] { notAvailable(QStringLiteral("The shortcut sheet")); });
     auto *clear = make(QStringLiteral("actionClearRecents"), QStringLiteral("Clear Recents..."), QKeySequence(),
-                       [this] { notAvailable(QStringLiteral("Clearing recents")); });
+                       [this] { confirmClearRecents(); });
     auto *about = make(QStringLiteral("actionAbout"), QStringLiteral("About D-05 Patch Switcher"), QKeySequence(),
                        [this] { notAvailable(QStringLiteral("The About box")); });
     auto *quit = make(QStringLiteral("actionQuit"), QStringLiteral("Quit"), QKeySequence(Qt::CTRL | Qt::Key_Q),
@@ -630,7 +643,7 @@ void MainWindow::onViewToggled()
         v = PatchListModel::View::Favourites;
     else if (m_viewRecent->isChecked())
         v = PatchListModel::View::Recents;
-    m_restore = Restore::Current;
+    m_restore = Restore::Highlight;
     m_model->setView(v);
     m_restore = Restore::Keep;
 }
@@ -651,8 +664,11 @@ void MainWindow::onModelReset()
         highlightRow(0, false);
         m_list->verticalScrollBar()->setValue(0);
         break;
-    case Restore::Current:
-        if (m_model->rowOf(m_current) >= 0)
+    case Restore::Highlight:
+        // Switching views keeps the highlighted patch if the new view has it.
+        if (m_savedHighlight && m_model->rowOf(*m_savedHighlight) >= 0)
+            highlightRow(m_model->rowOf(*m_savedHighlight), true);
+        else if (m_model->rowOf(m_current) >= 0)
             highlightCurrent(true);
         else
             highlightRow(0, false);
@@ -705,6 +721,78 @@ void MainWindow::moveHighlight(int delta)
         return;
     const int cur = m_list->currentIndex().isValid() ? m_list->currentIndex().row() : -1;
     highlightRow(qBound(0, cur + delta, rows - 1), false);
+}
+
+// ---------------------------------------------------------------------------- library actions
+
+void MainWindow::toggleFavorite(const PatchAddress &address)
+{
+    const std::optional<PatchAddress> before = highlighted();
+    const int oldRow = m_list->currentIndex().isValid() ? m_list->currentIndex().row() : 0;
+    m_library.toggleFavorite(address);
+    // In the Favourites view an un-starred row leaves the list; keep the highlight at the
+    // same place rather than jumping to the top.
+    if (before && m_model->rowOf(*before) < 0 && m_model->rowCount() > 0)
+        highlightRow(qMin(oldRow, m_model->rowCount() - 1), false);
+}
+
+void MainWindow::toggleHighlightedFavorite()
+{
+    if (const auto a = highlighted())
+        toggleFavorite(*a);
+}
+
+void MainWindow::renameHighlighted()
+{
+    const QModelIndex i = m_list->currentIndex();
+    if (!i.isValid())
+        return;
+    if (!m_model->addressAt(i).isUser()) {
+        showMessage(QStringLiteral("Only user slots can be renamed"));
+        return;
+    }
+    m_list->scrollTo(i);
+    m_list->edit(i);
+}
+
+void MainWindow::onNameCommitted(const PatchAddress &address, const QString &text)
+{
+    // Deferred one turn: with a search active the rename rebuilds the list, and that must
+    // not happen under the view while it is still closing the editor.
+    QMetaObject::invokeMethod(
+        this,
+        [this, address, text] {
+            m_library.setUserName(address, text);
+            m_list->setFocus(Qt::OtherFocusReason);
+        },
+        Qt::QueuedConnection);
+}
+
+void MainWindow::refreshDisplayPatch()
+{
+    m_display->setPatch(m_current, m_catalog.name(m_current), m_catalog.mode(m_current));
+}
+
+void MainWindow::confirmClearRecents()
+{
+    if (m_clearBox)
+        return;  // already asking
+    auto *box = new QMessageBox(this);
+    box->setObjectName(QStringLiteral("clearRecentsBox"));
+    box->setIcon(QMessageBox::NoIcon);
+    box->setText(QStringLiteral("Clear the list of recently sent patches?"));
+    // The QSS reaches CLEAR only if it is named before addButton (DESIGN 12).
+    auto *clear = new QPushButton(QStringLiteral("CLEAR"));
+    clear->setObjectName(QStringLiteral("clearButton"));
+    box->addButton(clear, QMessageBox::AcceptRole);
+    QPushButton *cancel = box->addButton(QStringLiteral("CANCEL"), QMessageBox::RejectRole);
+    box->setDefaultButton(cancel);
+    box->setEscapeButton(cancel);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    connect(box, &QDialog::finished, this, [this] { m_clearBox = nullptr; });
+    connect(clear, &QAbstractButton::clicked, this, [this] { m_library.clearRecents(); });
+    m_clearBox = box;
+    box->open();
 }
 
 void MainWindow::focusSearch()

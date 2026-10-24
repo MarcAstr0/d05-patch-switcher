@@ -22,6 +22,10 @@ public:
     QString emptyNote() const { return m_note; }
 
 signals:
+    // The star of a row was pressed (the press does not select the row or send).
+    void starClicked(const QModelIndex &index);
+    // Space on the highlighted row.
+    void favoriteToggleRequested(const QModelIndex &index);
     // Enter or Return on the highlighted row (a click is the view's own clicked()).
     void sendRequested(const QModelIndex &index);
     // A single left click released on a row. A double-click yields exactly one of these
@@ -32,6 +36,7 @@ signals:
 protected:
     void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
@@ -43,7 +48,8 @@ private:
     QFont m_noteFont;
     QFontMetricsF m_titleMetrics;
     QFontMetricsF m_noteMetrics;
-    bool m_afterDoubleClick = false;
+    bool starHit(const QPoint &pos, QModelIndex *index) const;
+    bool m_swallowRelease = false;  // the release after a double-click or a star press
     QString m_title;
     QString m_note;
 };

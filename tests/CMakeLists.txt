@@ -34,3 +34,6 @@ if(UNIX AND NOT APPLE)
     add_test(NAME midi_smoke COMMAND ${CMAKE_SOURCE_DIR}/scripts/midi-smoke.sh $<TARGET_FILE:d05-patch-switcher>)
     set_tests_properties(midi_smoke PROPERTIES SKIP_RETURN_CODE 77 LABELS "hardware-free" TIMEOUT 60)
 endif()
+
+d05_add_test(test_library_views test_library_views.cpp)
+target_link_libraries(test_library_views PRIVATE d05ui Qt6::Widgets)

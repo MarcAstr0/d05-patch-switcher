@@ -18,7 +18,7 @@ PatchListModel::PatchListModel(const PatchCatalog &catalog, const Library &libra
         if (m_view == View::Recents)
             rebuild();
     });
-    connect(&m_library, &Library::userNamesChanged, this, &PatchListModel::rebuild);
+    connect(&m_library, &Library::userNamesChanged, this, &PatchListModel::onUserNamesChanged);
     rebuild();
 }
 
@@ -37,6 +37,16 @@ QVariant PatchListModel::data(const QModelIndex &index, int role) const
     case AddressRole: return r.address.toString();
     default: return {};
     }
+}
+
+Qt::ItemFlags PatchListModel::flags(const QModelIndex &index) const
+{
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size())
+        return Qt::NoItemFlags;
+    Qt::ItemFlags f = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+    if (m_rows[index.row()].address.isUser())
+        f |= Qt::ItemIsEditable;
+    return f;
 }
 
 void PatchListModel::setView(View view)
@@ -129,6 +139,27 @@ void PatchListModel::onFavoritesChanged()
             m_rows[r].favorite = fav;
             emit dataChanged(index(r), index(r));
         }
+    }
+}
+
+// A rename. With no search the visible set cannot change, so only the renamed rows
+// repaint; with a search the name may start or stop matching, so rebuild.
+void PatchListModel::onUserNamesChanged()
+{
+    if (searchActive()) {
+        rebuild();
+        return;
+    }
+    for (int r = 0; r < m_rows.size(); ++r) {
+        Row &row = m_rows[r];
+        if (!row.address.isUser())
+            continue;
+        const QString name = m_catalog.name(row.address);
+        if (name == row.name)
+            continue;
+        row.name = name;
+        row.shown = name.isEmpty() ? row.address.toString() : name;
+        emit dataChanged(index(r), index(r));
     }
 }
 
