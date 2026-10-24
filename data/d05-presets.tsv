@@ -1,0 +1,385 @@
+group	bank	number	name	mode
+P1	1	1	Fantasia	D
+P1	1	2	Metal Harp	D
+P1	1	3	Jazz Guitar Duo	D
+P1	1	4	Arco Strings	D
+P1	1	5	Horn Section	D
+P1	1	6	Living Calliope	D
+P1	1	7	D-50 Voices	D
+P1	1	8	Slow Rotor	D
+P1	2	1	DigitalNativeDance	D
+P1	2	2	Bass Marimba	D
+P1	2	3	Flute-Piano Duo	S
+P1	2	4	Combie Strings	D
+P1	2	5	Harpsichord Stabs	D
+P1	2	6	Griitttarr	D
+P1	2	7	Nylon Atmosphere	D
+P1	2	8	Synthetic Electric	D
+P1	3	1	Breathy Chiffer	D
+P1	3	2	Gamelan bell	D
+P1	3	3	Slap Brass	D
+P1	3	4	PressureMe Strings	D
+P1	3	5	Rich Brass	D
+P1	3	6	Pipe Solo	D
+P1	3	7	Soundtrack	D
+P1	3	8	Cathedral Organ	D
+P1	4	1	Shamus Theme	D
+P1	4	2	Vibraphone	D
+P1	4	3	Basin Strat Blues	S
+P1	4	4	Pizzagogo	D
+P1	4	5	Flutish Brass	D
+P1	4	6	Pressure Me Lead	W
+P1	4	7	Spacious Sweep	W
+P1	4	8	Piano-Fifty	D
+P1	5	1	Glass Voices	D
+P1	5	2	Hollowed Harp	D
+P1	5	3	Ethnic Session	D
+P1	5	4	Jete Strings	D
+P1	5	5	Stereo Polysynth	D
+P1	5	6	Tine Wave	D
+P1	5	7	Syn-Harmonium	W
+P1	5	8	Rock Organ	D
+P1	6	1	Staccato Heaven	D
+P1	6	2	Oriental Bells	D
+P1	6	3	E-Bass and E-Piano	S
+P1	6	4	Legato Strings	D
+P1	6	5	JX Horns-Strings	D
+P1	6	6	Shakuhachi	D
+P1	6	7	Choir	D
+P1	6	8	Picked Guitar Duo	D
+P1	7	1	Nightmare	D
+P1	7	2	Syn Marimba	D
+P1	7	3	Slap Bass n Brass	S
+P1	7	4	String Ensemble	D
+P1	7	5	Velo-Brass	W
+P1	7	6	Digital Cello	D
+P1	7	7	O K Chorale	D
+P1	7	8	Pianissimo	D
+P1	8	1	Intruder FX	D
+P1	8	2	Steel Pick	D
+P1	8	3	Synth Bass	D
+P1	8	4	Afterthought	D
+P1	8	5	Bones	D
+P1	8	6	Bottle Blower	D
+P1	8	7	Future Pad	D
+P1	8	8	PCM E-Piano	D
+P2	1	1	Neo Horizon	D
+P2	1	2	Aqua Bells	D
+P2	1	3	Lead with Joystk	D
+P2	1	4	D-50SynBrass	D
+P2	1	5	Fat Warm Pad	D
+P2	1	6	MoodSwingKeys	D
+P2	1	7	PlaceLetsGo Bs	D
+P2	1	8	Industrial Move	D
+P2	2	1	A Bright Day	D
+P2	2	2	Music Box	W
+P2	2	3	Hammer Feel	D
+P2	2	4	Darjiling	D
+P2	2	5	I Saw The Light	D
+P2	2	6	MiamiVibe EP	D
+P2	2	7	Power Key Bs	D
+P2	2	8	Fantasy Orche MW	D
+P2	3	1	Alienz in G	D
+P2	3	2	Space Harp	D
+P2	3	3	Gargle Lead	D
+P2	3	4	Tweeters	D
+P2	3	5	Future is Behind	D
+P2	3	6	80s Clav	D
+P2	3	7	DoubleGritBs	D
+P2	3	8	Transformed	D
+P2	4	1	Grim Sweeper	D
+P2	4	2	Higher Bell	D
+P2	4	3	Minneapolis	D
+P2	4	4	Spectral Voices	D
+P2	4	5	Thoughts	D
+P2	4	6	The House Piano	D
+P2	4	7	MoonStroller Bs	D
+P2	4	8	DanceCombination	D
+P2	5	1	Magnif Pad	D
+P2	5	2	Wonder Drops	D
+P2	5	3	MuiltMod Ld	D
+P2	5	4	The Synth Brass	D
+P2	5	5	Saw Strings	D
+P2	5	6	End of the 7 Era	D
+P2	5	7	Mono Octabass	W
+P2	5	8	Rave Stab P	D
+P2	6	1	Rain Forest	D
+P2	6	2	Fly Fairy	D
+P2	6	3	TrashTalk Ld	D
+P2	6	4	Chop Flutes	D
+P2	6	5	Atmostrings	D
+P2	6	6	Ripper Bars	D
+P2	6	7	Synthectric Bass	D
+P2	6	8	Auto Work	S
+P2	7	1	FastMosphere Pad	D
+P2	7	2	Twinkle Bugs	D
+P2	7	3	Fifty Lead	D
+P2	7	4	D-Choir	D
+P2	7	5	Waving Strings	D
+P2	7	6	Open Da Gate	D
+P2	7	7	Bass Compression	D
+P2	7	8	DeathBrassBand	D
+P2	8	1	Zenigma Pad	D
+P2	8	2	Christmas Time	D
+P2	8	3	Narky Light	D
+P2	8	4	50 Flutes	D
+P2	8	5	Elliptic Orbit	D
+P2	8	6	Wide DooWah	D
+P2	8	7	ControllahBs	D
+P2	8	8	Touchdown	D
+P3	1	1	Bouncing Bows	D
+P3	1	2	Deep Analog Strings	D
+P3	1	3	Psycho Strings	D
+P3	1	4	Warm Strings	D
+P3	1	5	Deep String Ensmbl	D
+P3	1	6	Symphony Strings	D
+P3	1	7	Chase String Ensmb	D
+P3	1	8	Baroque Strings	D
+P3	2	1	Cello	D
+P3	2	2	Viola	D
+P3	2	3	Solo Violin	D
+P3	2	4	Contra Bass	D
+P3	2	5	Choir and Strings	D
+P3	2	6	Harpsi Strings	D
+P3	2	7	Horns and Strings	D
+P3	2	8	Pulse Pad	D
+P3	3	1	Classical Horn	D
+P3	3	2	Fanfare	D
+P3	3	3	Tuba	W
+P3	3	4	Velo-Brass 2	W
+P3	3	5	Stab Brass	D
+P3	3	6	Mallet Horns	D
+P3	3	7	Slow Brass Sweep	D
+P3	3	8	Slappin Brass	D
+P3	4	1	Tenor Saxophone	D
+P3	4	2	Alto Saxophone	D
+P3	4	3	Soprano Saxophone	D
+P3	4	4	EPiano n Sopranino	S
+P3	4	5	Wild Blow	D
+P3	4	6	Squeeze de Sax	W
+P3	4	7	Harmonica	W
+P3	4	8	Whistling Soldiers	S
+P3	5	1	Flute-Piccolo	D
+P3	5	2	Oboe	D
+P3	5	3	Bassoon	D
+P3	5	4	Clarinet	D
+P3	5	5	Ocarina	W
+P3	5	6	Breathing Pipe	D
+P3	5	7	Calliope	D
+P3	5	8	Wabi Sabi	D
+P3	6	1	Synth Lead 1	D
+P3	6	2	Synth Lead 2	W
+P3	6	3	Griitttarr 2	D
+P3	6	4	5th Lead Synth	W
+P3	6	5	Analog Solo	D
+P3	6	6	Synth Lead 3	W
+P3	6	7	Gotham Low	W
+P3	6	8	Taj Mahal	D
+P3	7	1	Ham and Organ	D
+P3	7	2	Slow Rotor 2	D
+P3	7	3	Slow to Fast Rotor	D
+P3	7	4	Good and Old Days	W
+P3	7	5	Percussive E-Organ	D
+P3	7	6	SlapBass and Organ	S
+P3	7	7	Pipe Organ	W
+P3	7	8	Weird Organ	D
+P3	8	1	Star Peace Chorus	D
+P3	8	2	Spacy Voice	D
+P3	8	3	Thinful	D
+P3	8	4	V-Harmonium	D
+P3	8	5	Android	D
+P3	8	6	Nuns	D
+P3	8	7	Pressure Pad	D
+P3	8	8	Digital Sound	D
+P4	1	1	Synthetic Piano 1	D
+P4	1	2	Upright Pianer	D
+P4	1	3	Loud Piano	D
+P4	1	4	Tack Piano	D
+P4	1	5	Synthetic Piano 2	W
+P4	1	6	High Piano	D
+P4	1	7	Two Part Invention	D
+P4	1	8	HarpsichordCoupler	W
+P4	2	1	Electric Piano	D
+P4	2	2	Xmod Attack EPiano	W
+P4	2	3	Harmonic E-Piano	D
+P4	2	4	Reluctant E-Piano	D
+P4	2	5	Tines	D
+P4	2	6	Old Clav	W
+P4	2	7	Painful Clav	D
+P4	2	8	Flanging Clav	D
+P4	3	1	Guitar Frets	D
+P4	3	2	Jazz Guitar	W
+P4	3	3	Spanishart	D
+P4	3	4	Acoustic Guitr Box	D
+P4	3	5	Harp	W
+P4	3	6	Koto	D
+P4	3	7	Sitar	D
+P4	3	8	Hawaiian Palms	S
+P4	4	1	Marimba	D
+P4	4	2	Xylophone	D
+P4	4	3	Glockenspiel	W
+P4	4	4	Jamaican Steel	D
+P4	4	5	Perc AAAH	D
+P4	4	6	Tremolo BrassBells	D
+P4	4	7	5th Voice Bells	D
+P4	4	8	Xylo Gate	W
+P4	5	1	SambaDrum n Agogo	S
+P4	5	2	Drums Set 1	S
+P4	5	3	Drums Set 2	S
+P4	5	4	Percussion Set 1	S
+P4	5	5	Gron Percussion	D
+P4	5	6	Bell Tree	W
+P4	5	7	Serrengetti	D
+P4	5	8	Bellocell	D
+P4	6	1	Fingered Bass	D
+P4	6	2	Slap Bass 1	D
+P4	6	3	Slap It	D
+P4	6	4	Picked Bass	D
+P4	6	5	Fretless Bass	D
+P4	6	6	Acoustic Bass	D
+P4	6	7	Synth Bass 2	D
+P4	6	8	SlapBass-SynBrass	S
+P4	7	1	Stringz n Bellz	D
+P4	7	2	Bright Wave	D
+P4	7	3	Gotham Chords	D
+P4	7	4	Wonderwave	D
+P4	7	5	GamelanBells 2	D
+P4	7	6	Ethnic Fifth	W
+P4	7	7	Japanese Duo 1	S
+P4	7	8	Japanese Duo 2	S
+P4	8	1	AQUA	D
+P4	8	2	Jet Wars	S
+P4	8	3	Orchestra Hit	D
+P4	8	4	Clock Factory	D
+P4	8	5	Gunfire - Ricochet	D
+P4	8	6	Fast Forward	W
+P4	8	7	Air Raid Siren	D
+P4	8	8	Sweep Loop on C	D
+P5	1	1	String Section	D
+P5	1	2	Syn-Strings Hi	D
+P5	1	3	Tension Strings	D
+P5	1	4	Planetary Strings	D
+P5	1	5	Symphony Orchestra	D
+P5	1	6	Analog Syn-Strings	D
+P5	1	7	Crescendo Strings	D
+P5	1	8	Warm Strings Pad	D
+P5	2	1	Vibrato Cello	D
+P5	2	2	String Quartette	D
+P5	2	3	Pizz Typewriter	D
+P5	2	4	Strings Horn	D
+P5	2	5	Strings ElecPiano	D
+P5	2	6	High-Strings Oboe	D
+P5	2	7	Cello-ViolaPiccolo	D
+P5	2	8	Bass-PianoStrings	D
+P5	3	1	Powerful Brass	D
+P5	3	2	Mute Trumpet	W
+P5	3	3	Westerly Brass	D
+P5	3	4	Flugel Horn	W
+P5	3	5	Eye Brasspad	D
+P5	3	6	Trumpetters	D
+P5	3	7	Pressure 5th Horns	D
+P5	3	8	Pianish Horns	D
+P5	4	1	Baritone Saxophone	D
+P5	4	2	Silver Saxophones	D
+P5	4	3	Saxcessive Tones	D
+P5	4	4	Synthesized Sax	W
+P5	4	5	Growl Saxophone	D
+P5	4	6	Sopranino Sax	D
+P5	4	7	Xarmonica	W
+P5	4	8	Happy Whistler	D
+P5	5	1	Breathy Flute	D
+P5	5	2	Bohemian	D
+P5	5	3	Recorder	D
+P5	5	4	Breeze Pipe	D
+P5	5	5	Flutes Ensemble	D
+P5	5	6	Woodwinds	S
+P5	5	7	Pipe Bags	D
+P5	5	8	Vibe n Clarinet	S
+P5	6	1	Heavy Metal Lead	D
+P5	6	2	Monophonic Lead	D
+P5	6	3	Pulse Lead	W
+P5	6	4	Squeeze Lead	D
+P5	6	5	Energetical Lead	D
+P5	6	6	Monotone Lead	D
+P5	6	7	Harmonics Lead	D
+P5	6	8	Metallic Lead	D
+P5	7	1	Jazz Organ	D
+P5	7	2	Huge Pipes	D
+P5	7	3	Velocity Rotor	D
+P5	7	4	Choral Organ	D
+P5	7	5	Click Organ	D
+P5	7	6	Solid Beat	D
+P5	7	7	Wavy Motion	D
+P5	7	8	Pressure Generator	D
+P5	8	1	Whispy Voice	D
+P5	8	2	Alpha Omega Ensemble	D
+P5	8	3	Voice n Sawz	D
+P5	8	4	4th Synth Voice	D
+P5	8	5	Husky Voices	D
+P5	8	6	Stereo Panorama	D
+P5	8	7	Voyageur	D
+P5	8	8	Glass Voice 2	D
+P6	1	1	Perc E-Piano	D
+P6	1	2	Ballad Piano Choir	D
+P6	1	3	New Age Piano	D
+P6	1	4	Xmod E-Piano	W
+P6	1	5	Vividly Piano	D
+P6	1	6	Air Piano	D
+P6	1	7	Honky-Tonk Piano	D
+P6	1	8	Antique harpsichord	D
+P6	2	1	Spanish Guitar	D
+P6	2	2	Ringmod E-Guitar	D
+P6	2	3	Gypsy Guitar	D
+P6	2	4	Rock Guitar	D
+P6	2	5	HarpStrings	D
+P6	2	6	Dulcimer Voice	D
+P6	2	7	Combie Clav	D
+P6	2	8	Stereo Clav	D
+P6	3	1	Toys in the Attic	D
+P6	3	2	Music Toybox	D
+P6	3	3	Bells Harmony	D
+P6	3	4	Star Chime	D
+P6	3	5	African Kalimba	D
+P6	3	6	Okinawa Session	S
+P6	3	7	Jamaican Sounds	D
+P6	3	8	India	S
+P6	4	1	Sweet Vibes	D
+P6	4	2	Clear Bell Pad	W
+P6	4	3	Marimbell	D
+P6	4	4	Venetian Cafe	S
+P6	4	5	Grand Canyon	S
+P6	4	6	Funky Bed Trax	S
+P6	4	7	Ohayashi	S
+P6	4	8	Koto-BambooFlute	S
+P6	5	1	Digital Atmosphere	W
+P6	5	2	Polyphonic Synth	D
+P6	5	3	Pad Combo	D
+P6	5	4	Attack-Reso Synth	D
+P6	5	5	Velo-Oct Pulse	D
+P6	5	6	Perc Release	D
+P6	5	7	Steam Synth Pad	D
+P6	5	8	Zean- - -	D
+P6	6	1	Hopper Bass	D
+P6	6	2	Electric Pick Bass	D
+P6	6	3	Octave Synth Bass	D
+P6	6	4	Natural Bass	D
+P6	6	5	Glide Bass	D
+P6	6	6	Funky Reso-Bass	D
+P6	6	7	Steelblue Bass	D
+P6	6	8	Funky Cutting	S
+P6	7	1	Soundtrack n Hold	D
+P6	7	2	Reso Release	D
+P6	7	3	Ballet Voices U-L	D
+P6	7	4	PressPan SamplHold	D
+P6	7	5	Twilight Zone	D
+P6	7	6	AfterBend-Panning	D
+P6	7	7	All Diminish Chord	D
+P6	7	8	Cosmo Voices	D
+P6	8	1	Marshy Zone	D
+P6	8	2	Dense Forest	D
+P6	8	3	F-1 Grand Prix	D
+P6	8	4	Passing Sky	D
+P6	8	5	Devildom	S
+P6	8	6	Haunted Bells	D
+P6	8	7	Vietnam FX	S
+P6	8	8	Big Waves	D

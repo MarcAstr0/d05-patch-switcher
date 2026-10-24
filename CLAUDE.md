@@ -1,0 +1,65 @@
+# d05-patch-switcher
+
+A small C++17 / Qt 6 Widgets desktop app that finds and selects patches on a Roland
+Boutique D-05 over MIDI (Bank Select + Program Change). Linux, macOS, Windows. One
+window, a search box, a list, a button grid and a green two-line display modelled on
+the D-50's. No editor, no SysEx in v1.
+
+## Read in this order
+
+1. `docs/SPEC.md`: what it does and how it is built. The authority for behaviour.
+2. `docs/MIDI.md`: the bytes, the synth's settings, the owner's cable path, the test
+   recipe without hardware.
+3. `docs/PLAN.md`: milestones, tasks, acceptance criteria, gates. The foreman ticks it.
+4. `docs/DESIGN-BRIEF.md` then `docs/design/DESIGN.md` (once it exists): everything
+   visual. The builder does not invent visuals.
+5. `docs/FOREMAN.md`: how the coordinating session works.
+
+## Build, test, run
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release     # first time fetches RtMidi 6.0.0
+cmake --build build -j
+ctest --test-dir build --output-on-failure          # headless; tests set QT_QPA_PLATFORM=offscreen
+./build/d05-patch-switcher --list-ports
+./build/d05-patch-switcher                          # the GUI
+QT_QPA_PLATFORM=offscreen ./build/d05-patch-switcher --screenshot /tmp/main.png   # once M3 lands
+```
+
+Linux box: Ubuntu 24.04, Qt 6.4.2 (`qt6-base-dev`), GCC 13, ALSA. `aseqdump` (from
+`alsa-utils`) and the ALSA `Midi Through` port are the hardware-free MIDI test path.
+
+## Conventions
+
+- C++17, Qt 6.4 API floor, Qt Widgets only. No QML. No new dependencies. No network.
+- One class per `.h/.cpp` pair under `src/<module>/` (`app`, `core`, `midi`, `ui`).
+  `QStringLiteral` for literals; `QT_NO_CAST_FROM_ASCII` is on.
+- Every `core/` and `midi/` behaviour has a Qt Test in `tests/`. Add tests with
+  `d05_add_test(name sources…)` in `tests/CMakeLists.txt`.
+- MIDI input callbacks arrive on RtMidi's thread: marshal with a queued signal, never
+  touch widgets there. Port open and send can throw `RtMidiError`: catch, report in
+  status, never crash.
+- The app sends MIDI only on an explicit selection (Enter, click, prev/next, `--send`)
+  or when auto-send is on. Never on a list highlight by default.
+- Footprint rules: no timer under 2 s and that one only while disconnected; no repaint
+  without a state change; no allocations in paint paths.
+- `data/d05-presets.tsv` is generated from the guide by `scripts/extract-presets.py`;
+  edit the script, not the file.
+- Nothing trademarked under `assets/`. `assets/local/` is git-ignored and may hold the
+  owner's own artwork.
+- Commit messages: `M<milestone>.<task>: <what>`; the foreman commits, agents do not.
+- No em dashes in user-facing strings or docs.
+
+## Hardware facts you must not get wrong
+
+- Bank Select MSB = 87 always. LSB 0–7 = U1–U8, 8–13 = P1–P6. Program = (bank−1)·8 + (number−1), zero-based. Send MSB, LSB, PC in that order on the configured channel.
+- Panel addresses use digits 1–8 only (`11`…`88`): there is no `P1-19`.
+- The D-05 ignores all of it unless `SYSTEM → MIDI → Prog.C` is ON. The owner's manual also lists a `Bank.S` switch; the owner's unit has none, and bank select reception is not gated (`docs/MIDI.md`).
+- The owner's computer talks to the **Hapax's** USB MIDI port; the Hapax forwards to the D-05 over DIN. There is no "D-05" port to look for.
+
+## Agents
+
+`.claude/agents/builder.md` (Sonnet, code), `designer.md` (Opus, visuals),
+`reviewer.md` (Sonnet, read-only review). Dispatch one task at a time per the plan.
+Copy `docs/claude-settings.example.json` to `.claude/settings.json` once so the routine
+build, test and git commands run without permission prompts.

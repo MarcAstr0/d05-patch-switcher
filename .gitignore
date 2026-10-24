@@ -1,0 +1,17 @@
+# Build trees
+build/
+build-*/
+cmake-build-*/
+_deps/
+
+# IDE / editor
+.vscode/
+.idea/
+*.user
+.DS_Store
+
+# Local, never-committed artwork (trademarked logos live only on the user's machine)
+assets/local/
+
+# Claude Code local state
+.claude/settings.local.json

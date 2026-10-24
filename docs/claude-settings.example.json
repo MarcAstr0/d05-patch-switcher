@@ -1,0 +1,39 @@
+{
+  "_comment": "Copy to .claude/settings.json (shared) or .claude/settings.local.json (personal) so the agents stop asking for permission on the routine commands. Claude could not write .claude/settings.json itself.",
+  "permissions": {
+    "allow": [
+      "Bash(cmake:*)",
+      "Bash(ctest:*)",
+      "Bash(ninja:*)",
+      "Bash(make:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git branch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git switch:*)",
+      "Bash(git worktree:*)",
+      "Bash(gh run:*)",
+      "Bash(gh release:*)",
+      "Bash(gh pr:*)",
+      "Bash(aseqdump:*)",
+      "Bash(aconnect:*)",
+      "Bash(amidi:*)",
+      "Bash(ps:*)",
+      "Bash(pgrep:*)",
+      "Bash(./build/*)",
+      "Bash(scripts/*)",
+      "Bash(python3:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(find:*)",
+      "Bash(file:*)"
+    ]
+  }
+}

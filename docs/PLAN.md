@@ -1,0 +1,93 @@
+# Plan
+
+Milestones in order. Each task names its agent (see `.claude/agents/`), its acceptance
+criteria, and whether it ends at a **gate** where the owner (Mario) has to act. The
+foreman (`docs/FOREMAN.md`) dispatches tasks, verifies, commits, and ticks the boxes
+here. Nothing is "done" until its box is ticked by the foreman after running the checks.
+
+Legend: ☐ not started · ◐ in progress · ☑ done · ⛔ blocked (say why in the Decisions log).
+
+## M0 · Scaffold ☑ (2026-10-24, Fable)
+
+- ☑ Repository, MIT licence, `.gitignore`, folder layout.
+- ☑ `CMakeLists.txt` building a Qt 6 Widgets window with RtMidi 6.0.0 via FetchContent; verified on Ubuntu 24.04 / Qt 6.4.2 / GCC 13.
+- ☑ `data/d05-presets.tsv`: 384 preset names extracted from the guide and verified; `tests/test_presets_table.cpp` guards it.
+- ☑ Docs: `SPEC.md`, `MIDI.md`, `DESIGN-BRIEF.md`, this plan, `FOREMAN.md`, `CLAUDE.md`, `README.md`.
+- ☑ Agents: builder (Sonnet), designer (Opus), reviewer (Sonnet).
+- ☑ `.github/workflows/build.yml` (untested until first push; M4 owns it).
+
+## M1 · Core and command line (builder) ☐
+
+No GUI beyond the scaffold window. Everything here is testable headless.
+
+- ☐ **T1.1 Split the build.** `d05core` and `d05ui` static libraries, the executable, tests linking `d05core`. `cmake --build` and `ctest` green; `--list-ports` still works.
+- ☐ **T1.2 `PatchAddress`.** Parse/format every form in SPEC §4 FR-3 and the canonical `P3-45`; `catalogueIndex()` 0…895 and its inverse; `midiTriplet()`. Tests: round-trip over all 896; rejects `P1-19`, `P1-90`, `P7-11`, `U9-11`, `X1-11`; the five worked examples from `docs/MIDI.md`.
+- ☐ **T1.3 `PatchCatalog`.** Loads the TSV from the resource; `name(addr)`, `mode(addr)`, `displayName(addr)` (user name or address for U groups); user-name overlay; `prev/next` in catalogue order with the ends clamped. Tests: 384 preset names present, `P1-11` = Fantasia, `U1-11` displays as `U1-11` until named, `P1-88`→next = `P2-11`, `P6-88`→next stays.
+- ☐ **T1.4 `SearchQuery`.** The FR-3 grammar as a predicate plus match ranges. Tests: a table with at least 25 cases copied from the spec, including the "bare digits are text" rule, accent-insensitivity (`Cafe` finds *Venetian Cafe*; a query with an accent also matches), and multi-token AND.
+- ☐ **T1.5 `Library`.** JSON load/save per SPEC §3.3, `QSaveFile`, 500 ms debounce, corruption handling, `--config-dir`. Tests in a temp dir: round-trip, recents ordering and counts, cap at 50, broken file is sidelined and the app proceeds.
+- ☐ **T1.6 MIDI layer.** `MidiBackend`, `FakeMidiBackend`, `RtMidiBackend`, `MidiLink` (connect by name, substring match, 2 s poll while disconnected, `sendPatch`, status text, follow-mode parsing with 300 ms echo suppression). Tests on the fake: exact bytes for channels 1, 10 and 16; a vanished port flips status and the poll reconnects when the fake port "reappears"; incoming CC0/CC32/PC updates `current` without a send; the echo of our own send is ignored.
+- ☐ **T1.7 CLI.** `--list-ports`, `--port`, `--in-port`, `--channel`, `--send`, `--fake-midi`, `--config-dir` with the exit codes from FR-15. `scripts/midi-smoke.sh` passes on the Linux box against `Midi Through` (install `alsa-utils` if `aseqdump` is missing). Record the test command in the README's developer section.
+- ☐ **R1 Review** (reviewer): all of M1. Builder fixes anything rated above style.
+- ☐ **Push and CI**: the build-and-test steps green on all three runners (packaging steps may still fail).
+
+**Gate G1 (owner, optional).** If the Hapax can be moved to the Linux box now, run
+`docs/MIDI.md` checklist steps 1–4 with `--send`. Otherwise defer to G3. Either answer
+unblocks M3.
+
+## M2 · Design (designer) ☐ — runs in parallel with M1
+
+Touches only `docs/design/`, `assets/`. No C++.
+
+- ☐ **T2.1 References.** `docs/design/REFERENCES.md`: what the D-50 and D-05 panels actually look like, with the sources looked at; the display's true character grid and colour; decisions taken from them.
+- ☐ **T2.2 Design document.** `docs/design/DESIGN.md` covering everything in `docs/DESIGN-BRIEF.md` §Deliverables: sizes, tokens, type, every component and state, resize rules, keyboard focus visuals, the Settings and Shortcuts dialogs, the logo slot.
+- ☐ **T2.3 Assets.** `assets/fonts/` (OFL, with licences), `assets/icons/d05-patch-switcher.svg` + `.png` 256 px (AppImage needs it) + the `.icns`/`.ico` or the commands to make them, `assets/theme/app.qss` with the tokens as comments at the top.
+- ☐ **T2.4 Mockups.** `docs/design/mockup-main.png` and `mockup-settings.png` at 1× (and 2× if cheap), produced from `docs/design/mockup/` (SVG rendered with Inkscape, or HTML rendered by the foreman through the Playwright MCP; not the system Chrome, see the brief).
+
+**Gate G2 (owner).** The foreman shows the mockups (publish them as an artifact page
+when the Artifact tool is available, otherwise give the paths) and asks for approval or
+changes. One round of changes is budgeted. M3 starts only after approval.
+
+## M3 · GUI (builder, designer reviews) ☐ — after G1 answered and G2 approved
+
+- ☐ **T3.1 Theme and DisplayWidget.** `Theme` loads the QSS and tokens; `DisplayWidget` per DESIGN.md with a pre-rendered glyph atlas per size, repaint only on text change, `flashSent()`. `--screenshot` implemented (fake backend, canned library, every `--screenshot-state`). Test: construction + screenshot of three states under `offscreen`.
+- ☐ **T3.2 Main window.** Layout per DESIGN.md: display, group bar, bank/number grid, search, list with delegate, status bar, toolbar actions, every shortcut in FR-13. Highlight does not send; Enter and clicks do; prev/next works across groups.
+- ☐ **T3.3 Views and library.** All / Favourites / Recents; star toggle; recents counts; `F2` rename for U slots with the 18-character limit; clear-recents with confirmation.
+- ☐ **T3.4 Settings dialog and connection.** FR-9 and FR-10 wired to `MidiLink`; disconnected state on the display; auto-send; follow-the-panel; resend-on-connect; Test button.
+- ☐ **T3.5 Footprint.** `scripts/measure-footprint.sh`; numbers recorded in the PR/commit message; fix until within SPEC §5.
+- ☐ **D3 Design review** (designer): screenshots of every state at 1× and 2× (`QT_SCALE_FACTOR=2`) against DESIGN.md; numbered deviations; builder fixes; one more round at most.
+- ☐ **R3 Review** (reviewer): all of M3, with emphasis on threading, error paths and repaint discipline.
+- ☐ **Push and CI** green on build-and-test.
+
+**Gate G3 (owner).** Hardware test on the Linux box through the Hapax: `docs/MIDI.md`
+checklist steps 1–6. Then, if convenient, build from source on the MacBook
+(`brew install qt cmake`, then the README commands) and repeat steps 3–5. Report what
+the D-05 display showed. Fixes go back to the builder.
+
+## M4 · Packaging and CI (builder) ☐
+
+- ☐ **T4.1 CI green** on all three runners including the packaging steps; artifacts downloadable from the Actions run. Fix the workflow, not the symptom (pin runner images and action versions when a step is flaky).
+- ☐ **T4.2 Linux AppImage** launches on the dev box from `~/Downloads` with no extra packages; desktop file and icon integrated.
+- ☐ **T4.3 macOS .dmg** universal (`lipo -info` shows x86_64 and arm64), ad-hoc signed, opens after right-click → Open. The README documents the Gatekeeper step.
+- ☐ **T4.4 Windows zip** runs on a clean Windows 10/11 (CI-only proof: the exe starts with `--list-ports` on the runner).
+- ☐ **T4.5 Pre-release** `v0.9.0` tag → GitHub release with the three files and generated notes.
+
+**Gate G4 (owner).** Download the `.dmg` on the MacBook, run it against the real rig
+(checklist steps 3–5). Report.
+
+## M5 · Polish and v1.0.0 ☐
+
+- ☐ **T5.1** `F1` shortcut sheet; About box with version, licence and the trademark notice; first-run hint on the display's second line when no port is configured (`OPEN SETTINGS: CTRL+,`).
+- ☐ **T5.2** Everything the owner reported at G3/G4.
+- ☐ **T5.3** `CHANGELOG.md`; README screenshots from `--screenshot` at 2×.
+- ☐ **R5 Final review** (reviewer; the foreman may run this one on Opus).
+- ☐ **T5.4** Tag `v1.0.0`; release green; the vault's project page updated by the owner.
+
+## Decisions log
+
+Append-only. Date, who, what changed and why. The foreman writes here whenever a spec
+detail is changed, a task is dropped, or a gate answer changes the plan.
+
+- 2026-10-24, owner: user banks are unused today; v1 shows them unnamed and editable, SysEx name reading deferred.
+- 2026-10-24, owner: public repository, MIT, no Roland artwork; favourites are a flat list; no Hapax export in v1; the owner runs the foreman on Opus.
+- 2026-10-24, Fable: the owner's path is D-05 → Hapax (thru) → computer over USB, so the app opens the Hapax's port; follow-the-panel is optional.
+- 2026-10-24, Fable: `Bank.S` is not a requirement. The owner's unit has no such switch (verified on the device 2026-08-31) and the guide gates only Program Change. Docs corrected before the first push.

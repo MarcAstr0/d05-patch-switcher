@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=D-05 Patch Switcher
+Comment=Find and select patches on a Roland Boutique D-05 over MIDI
+Exec=d05-patch-switcher
+Icon=d05-patch-switcher
+Terminal=false
+Categories=AudioVideo;Audio;Midi;
+Keywords=MIDI;synthesizer;Roland;D-05;D-50;patch;
