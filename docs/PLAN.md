@@ -35,11 +35,11 @@ in over USB, confirm it shows in `--list-ports` (see `docs/MIDI.md`, "Hardware t
 the Linux box"; if it does not, the Hapax is the fallback), then run checklist steps 1–4
 with `--send`. Otherwise defer to G3. Either answer unblocks M3.
 
-## M2 · Design (designer) ☐ — runs in parallel with M1
+## M2 · Design (designer) ◐ — runs in parallel with M1
 
 Touches only `docs/design/`, `assets/`. No C++.
 
-- ☐ **T2.1 References.** `docs/design/REFERENCES.md`: what the D-50 and D-05 panels actually look like, with the sources looked at; the display's true character grid and colour; decisions taken from them.
+- ☑ **T2.1 References.** `docs/design/REFERENCES.md`: what the D-50 and D-05 panels actually look like, with the sources looked at; the display's true character grid and colour; decisions taken from them.
 - ☐ **T2.2 Design document.** `docs/design/DESIGN.md` covering everything in `docs/DESIGN-BRIEF.md` §Deliverables: sizes, tokens, type, every component and state, resize rules, keyboard focus visuals, the Settings and Shortcuts dialogs, the logo slot.
 - ☐ **T2.3 Assets.** `assets/fonts/` (OFL, with licences), `assets/icons/d05-patch-switcher.svg` + `.png` 256 px (AppImage needs it) + the `.icns`/`.ico` or the commands to make them, `assets/theme/app.qss` with the tokens as comments at the top.
 - ☐ **T2.4 Mockups.** `docs/design/mockup-main.png` and `mockup-settings.png` at 1× (and 2× if cheap), produced from `docs/design/mockup/` (SVG rendered with Inkscape, or HTML rendered by the foreman through the Playwright MCP; not the system Chrome, see the brief).
