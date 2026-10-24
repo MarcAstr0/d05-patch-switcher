@@ -1,0 +1,317 @@
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import {
+  allAddresses,
+  formatAddress as f,
+  fromMidi,
+  midiBytes,
+  midiTriplet,
+  next,
+  parseAddress as p,
+  prev,
+} from '../../src/core/address';
+import { Catalog, parsePresetTable, sanitizeUserName } from '../../src/core/catalog';
+import { Library, LocalLibraryStorage, MemoryStorage, parseIsoUtc } from '../../src/core/library';
+import { SearchQuery, runSearch } from '../../src/core/search';
+import { readWebFile } from './helpers';
+
+const A = (s: string) => p(s)!;
+
+describe('address', () => {
+  test('catalogue has 896 distinct addresses in order', () => {
+    const all = allAddresses();
+    expect(all).toHaveLength(896);
+    expect(f(all[0]!)).toBe('U1-11');
+    expect(f(all[511]!)).toBe('U8-88');
+    expect(f(all[512]!)).toBe('P1-11');
+    expect(f(all[895]!)).toBe('P6-88');
+    expect(new Set(all.map(f)).size).toBe(896);
+  });
+
+  test('prev/next cross group boundaries and clamp at the ends', () => {
+    expect(f(next(A('P1-88')))).toBe('P2-11');
+    expect(f(prev(A('P2-11')))).toBe('P1-88');
+    expect(f(next(A('U8-88')))).toBe('P1-11');
+    expect(f(prev(A('P1-11')))).toBe('U8-88');
+    expect(next(A('P6-88'))).toBe(A('P6-88'));
+    expect(prev(A('U1-11'))).toBe(A('U1-11'));
+  });
+
+  test('MIDI bytes: MSB, LSB, PC on the channel (MIDI.md worked example P3-45)', () => {
+    expect(midiBytes(A('P3-45'), 1)).toEqual([[0xb0, 0x00, 0x57], [0xb0, 0x20, 0x0a], [0xc0, 0x1c]]);
+    expect(midiBytes(A('P6-88'), 16)).toEqual([[0xbf, 0x00, 87], [0xbf, 0x20, 13], [0xcf, 63]]);
+    expect(midiBytes(A('U1-11'), 3)[2]).toEqual([0xc2, 0]);
+  });
+
+  test('inverse of the triplet for every address', () => {
+    for (const a of allAddresses()) {
+      const t = midiTriplet(a);
+      expect(fromMidi(t.msb, t.lsb, t.program)).toBe(a);
+    }
+    expect(fromMidi(86, 0, 0)).toBeNull();
+    expect(fromMidi(87, 14, 0)).toBeNull();
+    expect(fromMidi(87, 0, 64)).toBeNull();
+  });
+});
+
+describe('catalog', () => {
+  test('384 preset names, nothing for user slots, modes', () => {
+    const c = new Catalog();
+    expect(c.presetCount()).toBe(384);
+    expect(c.name(A('P1-11'))).toBe('Fantasia');
+    expect(c.mode(A('P1-11'))).toMatch(/^[WDS]$/);
+    expect(c.name(A('U1-11'))).toBe('');
+    expect(c.mode(A('U1-11'))).toBe('');
+  });
+
+  test('table parser skips bad lines and duplicates', () => {
+    const rows = parsePresetTable(
+      ['group\tbank\tnumber\tname\tmode', 'P1\t1\t1\tOne\tD', 'P1\t1\t1\tDup\tD', 'U1\t1\t1\tUser\tD', 'P1\t1\t9\tBad\tD', 'P1\t1\t2\t\tD', 'P1\t1\t3\tX\tQ', 'P1\t1', ''].join('\n'),
+    );
+    expect(rows.map((r) => r.name)).toEqual(['One']);
+  });
+
+  test('user names: printable ASCII, tabs to spaces, runs collapse, max 18, preset slots refuse', () => {
+    expect(sanitizeUserName('  Tab\there  éx  ')).toBe('Tab here x');
+    expect(sanitizeUserName('a\r\nb\u000bc\fd')).toBe('a b c d');
+    expect(sanitizeUserName('123456789012345678901')).toBe('123456789012345678');
+    expect(sanitizeUserName('12345678901234567 8')).toBe('12345678901234567'); // cut then trimmed
+    expect(sanitizeUserName('あい')).toBe('');
+    const c = new Catalog();
+    expect(c.setUserName(A('P1-11'), 'Nope')).toBe(false);
+    expect(c.name(A('P1-11'))).toBe('Fantasia');
+    c.setUserName(A('U1-11'), 'Pad');
+    expect(c.name(A('U1-11'))).toBe('Pad');
+    c.setUserName(A('U1-11'), '   ');
+    expect(c.hasUserName(A('U1-11'))).toBe(false);
+  });
+});
+
+describe('search', () => {
+  const c = new Catalog();
+  const run = (q: string) => runSearch(q, (a) => c.name(a)).map(f);
+
+  test('text tokens never match unnamed user slots, and match the name only', () => {
+    expect(run('u1-11')).toEqual(['U1-11']);
+    expect(run('u1')).toHaveLength(64);
+    expect(run('u1 pad')).toEqual([]);
+    expect(run('U1-11 u')).toEqual([]);
+  });
+
+  test('odd tokens fall back to text', () => {
+    expect(new SearchQuery('p3-').hasText).toBe(true);
+    expect(new SearchQuery('3-4').hasText).toBe(true);
+    expect(new SearchQuery('p3-45').hasText).toBe(false);
+    expect(new SearchQuery('').isEmpty).toBe(true);
+  });
+
+  test('ranges are UTF-16 indices into the original name, merged and sorted', () => {
+    const q = new SearchQuery('lead synth');
+    const r: { start: number; length: number }[] = [];
+    expect(q.matches(A('P3-66'), 'Synth Lead 3', r)).toBe(true);
+    expect(r).toEqual([{ start: 0, length: 5 }, { start: 6, length: 4 }]);
+    expect(new SearchQuery('synth ynt').matches(A('P3-66'), 'Synth Lead 3', r)).toBe(true);
+    expect(r).toEqual([{ start: 0, length: 5 }]);
+    const q2 = new SearchQuery('d 3');
+    expect(q2.matches(A('P3-66'), 'Synth Lead 3', r)).toBe(true);
+    expect(r).toEqual([{ start: 9, length: 1 }, { start: 11, length: 1 }]);
+  });
+
+  test('accent-insensitive with decomposed input; ranges keep combining marks', () => {
+    const r: { start: number; length: number }[] = [];
+    expect(new SearchQuery('cafe').matches(A('P6-44'), 'Café Bar', r)).toBe(true);
+    expect(r).toEqual([{ start: 0, length: 4 }]);
+    expect(new SearchQuery('cafe').matches(A('P6-44'), 'Café Bar', r)).toBe(true);
+    expect(r).toEqual([{ start: 0, length: 5 }]);
+    expect(new SearchQuery('café').matches(A('P6-44'), 'Cafe', r)).toBe(true);
+  });
+
+  test('ranges cleared when nothing matches', () => {
+    const r = [{ start: 1, length: 1 }];
+    expect(new SearchQuery('zzz').matches(A('P1-11'), 'Fantasia', r)).toBe(false);
+    expect(r).toEqual([]);
+  });
+});
+
+describe('library', () => {
+  let cat: Catalog;
+  let st: MemoryStorage;
+  let lib: Library;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    cat = new Catalog();
+    st = new MemoryStorage();
+    lib = new Library(cat, st);
+    expect(lib.load()).toBe('fresh');
+  });
+  afterEach(() => vi.useRealTimers());
+
+  test('favourites are a set kept in catalogue order', () => {
+    lib.setFavorite(A('P2-57'), true);
+    lib.setFavorite(A('U8-88'), true);
+    lib.setFavorite(A('P1-11'), true);
+    lib.setFavorite(A('P1-11'), true);
+    expect(lib.favorites().map(f)).toEqual(['U8-88', 'P1-11', 'P2-57']);
+    expect(lib.toggleFavorite(A('P1-11'))).toBe(false);
+    expect(lib.isFavorite(A('P1-11'))).toBe(false);
+    expect(lib.favorites().map(f)).toEqual(['U8-88', 'P2-57']);
+  });
+
+  test('recents: resend moves to front and counts; cap 50; clear', () => {
+    lib.recordSend(A('P1-11'), new Date('2026-10-24T10:00:00Z'));
+    lib.recordSend(A('P1-12'), new Date('2026-10-24T10:01:00Z'));
+    lib.recordSend(A('P1-11'), new Date('2026-10-24T10:02:00Z'));
+    expect(lib.recents().map((r) => [f(r.address), r.count, r.last])).toEqual([
+      ['P1-11', 2, '2026-10-24T10:02:00Z'],
+      ['P1-12', 1, '2026-10-24T10:01:00Z'],
+    ]);
+    for (let i = 0; i < 60; i++) lib.recordSend(allAddresses()[512 + i]!);
+    expect(lib.recents()).toHaveLength(50);
+    expect(f(lib.recents()[0]!.address)).toBe(f(allAddresses()[571]!));
+    expect(lib.recents().some((r) => f(r.address) === 'P1-12')).toBe(false);
+    lib.clearRecents();
+    expect(lib.recents()).toEqual([]);
+  });
+
+  test('counts saturate at 2147483647', () => {
+    const l2 = new Library(new Catalog(), new MemoryStorage('{"version":1,"recents":[{"address":"P1-11","count":2147483647,"last":"2026-10-24T10:00:00Z"},{"address":"P1-12","count":1e30,"last":"2026-10-24T09:00:00Z"}]}'));
+    l2.load();
+    expect(l2.recents().map((r) => r.count)).toEqual([2147483647, 2147483647]);
+    l2.recordSend(A('P1-11'));
+    expect(l2.recents()[0]!.count).toBe(2147483647);
+  });
+
+  test('user names go through the sanitiser; presets refuse', () => {
+    expect(lib.setUserName(A('P1-11'), 'x')).toBe(false);
+    lib.setUserName(A('U2-22'), ' a\tb ');
+    expect(cat.name(A('U2-22'))).toBe('a b');
+  });
+
+  test('writes are debounced 500 ms and use the v1 schema', () => {
+    lib.setFavorite(A('P1-11'), true);
+    vi.advanceTimersByTime(499);
+    lib.recordSend(A('P1-11'), new Date('2026-10-24T10:00:00Z'));
+    vi.advanceTimersByTime(499);
+    expect(st.writes).toBe(0);
+    vi.advanceTimersByTime(1);
+    expect(st.writes).toBe(1);
+    expect(JSON.parse(st.text!)).toEqual({
+      version: 1,
+      favorites: ['P1-11'],
+      recents: [{ address: 'P1-11', count: 1, last: '2026-10-24T10:00:00Z' }],
+      userNames: {},
+    });
+    vi.advanceTimersByTime(5000);
+    expect(st.writes).toBe(1);
+  });
+
+  test('flush writes at once; a failing store keeps the data and retries', () => {
+    st.failWrites = true;
+    lib.setFavorite(A('P1-11'), true);
+    expect(lib.flush()).toBe(false);
+    expect(lib.saveError).toBe('write failed');
+    st.failWrites = false;
+    vi.advanceTimersByTime(2000);
+    expect(st.writes).toBe(1);
+    expect(lib.saveError).toBeNull();
+  });
+
+  test('a corrupt stored file is quarantined and a fresh library starts', () => {
+    for (const bad of ['{nope', '[]', '{"version":2}', '{"version":1,"favorites":{}}', '{"version":1,"userNames":[]}', 'null']) {
+      const s = new MemoryStorage(bad);
+      const l = new Library(new Catalog(), s);
+      expect(l.load(), bad).toBe('recovered');
+      expect(s.broken).toEqual([bad]);
+      expect(l.favorites()).toEqual([]);
+    }
+  });
+
+  test('recents are ordered by timestamp, deduplicated and capped on load; bad dates become the epoch', () => {
+    const recents = [{ address: 'P1-11', count: 1, last: 'garbage' }];
+    for (let i = 0; i < 60; i++) recents.push({ address: f(allAddresses()[512 + 1 + i]!), count: 1, last: `2026-10-24T10:${String(i).padStart(2, '0')}:00Z` });
+    recents.push({ address: 'p1-12', count: 5, last: '2020-01-01T00:00:00Z' });
+    const l = new Library(new Catalog(), new MemoryStorage(JSON.stringify({ version: 1, recents })));
+    l.load();
+    expect(l.recents()).toHaveLength(50);
+    expect(l.recents()[0]!.last).toBe('2026-10-24T10:59:00Z');
+    const l2 = new Library(new Catalog(), new MemoryStorage(JSON.stringify({ version: 1, recents: [recents[0], recents[1]] })));
+    l2.load();
+    expect(l2.recents().map((r) => r.last)).toEqual(['2026-10-24T10:00:00Z', '1970-01-01T00:00:00Z']);
+  });
+
+  test('timestamps: Z, offsets and zone-less text', () => {
+    expect(parseIsoUtc('2026-10-24T18:02:11Z')).toBe(Date.UTC(2026, 9, 24, 18, 2, 11));
+    expect(parseIsoUtc('2026-10-24T18:02:11')).toBe(Date.UTC(2026, 9, 24, 18, 2, 11));
+    expect(parseIsoUtc('2026-10-24T20:02:11+02:00')).toBe(Date.UTC(2026, 9, 24, 18, 2, 11));
+    expect(parseIsoUtc('2026-13-24T00:00:00Z')).toBeNull();
+    expect(parseIsoUtc('yesterday')).toBeNull();
+  });
+
+  test('importJson never throws and leaves the library alone on garbage', () => {
+    lib.setFavorite(A('P1-11'), true);
+    for (const bad of ['', 'x', '{', '[1]', '"s"', '{"version":"1"}', '{"version":1,"recents":3}']) {
+      const r = lib.importJson(bad);
+      expect(r.ok, bad).toBe(false);
+    }
+    expect(lib.importJson(undefined as unknown as string).ok).toBe(false);
+    expect(lib.favorites().map(f)).toEqual(['P1-11']);
+  });
+
+  test('importJson replaces, skips bad entries and reports counts', () => {
+    lib.setFavorite(A('P1-11'), true);
+    lib.setUserName(A('U1-11'), 'Old');
+    const r = lib.importJson(
+      JSON.stringify({ version: 1, favorites: ['P3-45', 'P1-19', 7, 'P3-45'], recents: [{ address: 'P7-11' }, { address: 'U2-22', count: 'x', last: 'bad' }], userNames: { 'U1-12': 'New', 'P1-11': 'no', 'U9-11': 'no', 'U1-13': 5 } }),
+    );
+    expect(r).toEqual({ ok: true, favorites: 1, recents: 1, userNames: 1, skipped: 7 });
+    expect(lib.favorites().map(f)).toEqual(['P3-45']);
+    expect(cat.name(A('U1-11'))).toBe('');
+    expect(cat.name(A('U1-12'))).toBe('New');
+    expect(lib.recents()[0]).toMatchObject({ count: 1, last: '1970-01-01T00:00:00Z' });
+    vi.advanceTimersByTime(500);
+    expect(st.writes).toBe(1);
+  });
+
+  test('export then import into a fresh library is the identity', () => {
+    lib.setFavorite(A('P2-57'), true);
+    lib.recordSend(A('P1-11'));
+    lib.setUserName(A('U3-33'), 'Mine');
+    const text = lib.exportJson();
+    const other = new Library(new Catalog(), new MemoryStorage());
+    expect(other.importJson(text).ok).toBe(true);
+    expect(JSON.parse(other.exportJson())).toEqual(JSON.parse(text));
+  });
+
+  test('LocalLibraryStorage round-trips and quarantines under a stamped key', () => {
+    const m = new Map<string, string>();
+    const fake = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+    const s = new LocalLibraryStorage('k', fake);
+    expect(s.read()).toBeNull();
+    s.write('abc');
+    expect(s.read()).toBe('abc');
+    s.quarantine('bad');
+    expect([...m.keys()].some((k) => /^k\.broken-\d{8}T\d{6}$/.test(k))).toBe(true);
+    const throwing = new LocalLibraryStorage('k', { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } });
+    expect(throwing.read()).toBeNull();
+    expect(() => throwing.quarantine('x')).not.toThrow();
+  });
+});
+
+describe('desktop library.json round trip', () => {
+  const text = readWebFile('tests/fixtures/desktop-library.json');
+
+  test('import then export is semantically identical to the desktop file', () => {
+    const cat = new Catalog();
+    const lib = new Library(cat, new MemoryStorage());
+    lib.load();
+    expect(lib.importJson(text)).toEqual({ ok: true, favorites: 4, recents: 2, userNames: 3, skipped: 0 });
+    expect(JSON.parse(lib.exportJson())).toEqual(JSON.parse(text));
+    expect(cat.name(A('U3-18'))).toBe('Tab here x');
+    expect(lib.recents().map((r) => [f(r.address), r.count])).toEqual([['P1-11', 2], ['P3-45', 1]]);
+  });
+
+  test('loading it through storage gives the same state', () => {
+    const lib = new Library(new Catalog(), new MemoryStorage(text));
+    expect(lib.load()).toBe('loaded');
+    expect(JSON.parse(lib.exportJson())).toEqual(JSON.parse(text));
+  });
+});
