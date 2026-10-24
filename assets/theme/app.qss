@@ -16,8 +16,8 @@
  *   wellEdgeDark      #0B0C0D  top and left 1 px border of the list well and fields
  *   wellEdgeLight     #34383B  bottom and right 1 px border of the list well
  *   fieldBack         #0E0F10  search field, combos, spin box, inline editor, tooltip
- *   fieldBorder       #3A3D40  field border, normal; menu border and separator
- *   fieldBorderHover  #4C5053  field border, hover
+ *   fieldBorder       #3A3D40  field border, normal; menu border and separator; disabled checkbox
+ *   fieldBorderHover  #4C5053  field border, hover; unchecked checkbox border
  *   rowHover          #1B1D1F  list row under the mouse
  *   selection         #33373B  highlighted list row, menu item hover
  *   selectionBarIdle  #6B6E70  3 px selection bar when the list is not focused
@@ -566,7 +566,7 @@ QCheckBox::indicator {
     width: 14px;
     height: 4px;
     background-color: #2A1A1A;
-    border: 1px solid #121415;
+    border: 1px solid #4C5053;
     border-radius: 0px;
 }
 
@@ -581,5 +581,5 @@ QCheckBox::indicator:focus {
 
 QCheckBox::indicator:disabled {
     background-color: #2C2E30;
-    border: 1px solid #121415;
+    border: 1px solid #3A3D40;
 }

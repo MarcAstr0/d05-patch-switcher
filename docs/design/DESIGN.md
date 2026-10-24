@@ -51,8 +51,8 @@ One theme. `ui/Theme` exposes each token as a `QColor` constant with the name be
 | `wellEdgeDark` | `#0B0C0D` | Top and left 1 px border of the list well and fields | Recess shading |
 | `wellEdgeLight` | `#34383B` | Bottom and right 1 px border of the list well and fields | Recess shading |
 | `fieldBack` | `#0E0F10` | Search field, combo boxes, spin box, inline editor, tooltip | |
-| `fieldBorder` | `#3A3D40` | Field border, normal | |
-| `fieldBorderHover` | `#4C5053` | Field border, hover | |
+| `fieldBorder` | `#3A3D40` | Field border, normal; disabled checkbox border | |
+| `fieldBorderHover` | `#4C5053` | Field border, hover; unchecked checkbox border | |
 | `rowHover` | `#1B1D1F` | List row under the mouse | |
 | `selection` | `#33373B` | Highlighted list row, menu item hover | |
 | `selectionBarIdle` | `#6B6E70` | 3 px selection bar when the list is not focused | |
@@ -256,7 +256,7 @@ has its face at `x = 16 + 50 i`, width 44, so the faces are 44 wide with 6 px ga
 | +155 | 12 | Section rule `PATCH NUMBER`, blue |
 | +169 | 11 | Numerals `1`..`8` |
 | +182 | 24 | Number buttons, columns 0..7 |
-| +218 | 11 | Labels `PREV` over column 0, `NEXT` over column 1 |
+| +218 | 11 | Labels `PREV` over column 0, `NEXT` over column 1: `type.panelLabel`, `labelPrimary`, centred on the button, baseline at the row's `y + 9` (as 6.5) |
 | +231 | 24 | PREV button column 0, NEXT button column 1 |
 | +267 | | End of content (12 px bottom padding) |
 
@@ -570,7 +570,9 @@ edge aligned to the menu's right edge. Each is its own focus stop (6.2 ring).
 | Disabled | not used | | |
 
 Text `type.field` `labelPrimary`; selection `matchBack` with `labelPrimary` text; caret
-`labelPrimary` 1 px. Placeholder (`labelDim`): `Search names or addresses: brass, P3-45`.
+`labelPrimary` 1 px. With QLineEdit's built-in 2 px horizontal and 1 px vertical text
+margins the text starts at `X + 13` and its baseline is at field `y + 21` in every state
+(the mockup is drawn so; a screenshot that differs means the padding is wrong). Placeholder (`labelDim`): `Search names or addresses: brass, P3-45`.
 No border radius. `Esc` behaviour per FR-13.
 
 ### 7.2 List row (`ui/PatchDelegate`)
@@ -661,12 +663,14 @@ vertically centred, from x 16:
 | `OUT` | x 30 | `type.statusLabel` |
 | Port name | 6 px after `OUT`, max 280 px, elided in the middle | `type.statusValue`; `None` in `labelDim` when no port is set |
 | `NOT FOUND` | 6 px after the name, only when disconnected | `type.statusLabel` in `labelRed` |
-| `CH` + number | 16 px after the previous item | `CH` label, value `type.statusValue` |
-| `IN` + port | 16 px after | as `OUT`; `None` in `labelDim` |
+| `CH` + number | 16 px after the previous item | `CH` label, 6 px, value `type.statusValue` |
+| `IN` + port | 16 px after | as `OUT` (label, 6 px, value); `None` in `labelDim` |
 | `FOLLOW` | 16 px after, only when follow-the-panel is on and an input is set | `type.statusLabel` in `labelPrimary` |
 | Message | right aligned, ending at `W - 16` | `type.statusValue` in `labelSecondary`, e.g. the broken-library notice; stays until replaced |
 
-No size grip.
+Gaps are measured from the end of the previous text's advance. Every status text,
+10 px and 11 px alike, is vertically centred in the 22 px bar, which puts all baselines
+on the bar's `y + 15` (ascent + descent are 10 + 2 and 11 + 3 px). No size grip.
 
 ### 8.2 System menu and context menus
 
@@ -724,7 +728,7 @@ control), control column from x 112.
 | y (from content top) | Row |
 |---|---|
 | 0 | Rule `MIDI OUTPUT` |
-| 20 | `PORT` · combo `(112, y, 260, 26)` · button `REFRESH` `(380, y, 100, 26)` |
+| 20 | `PORT` · combo `(112, y, 260, 26)` · button `REFRESH` `(380, y, 100, 26)` (26 tall to match the combo: `setFixedHeight(26)`) |
 | 54 | `CHANNEL` · spin box `(112, y, 72, 26)`, range 1..16 |
 | 88 | Connection line at x 112, height 20: LED `(112, y+8, 10, 4)` + text at x 130, `type.body`: `Connected to <port>` (`labelPrimary`, LED lit, no core) / `Port not found` (`labelRed`, LED off) / `Error: <text>` (`labelRed`, LED off, elided right at 350 px) |
 | 124 | Rule `MIDI INPUT` |
@@ -737,16 +741,21 @@ control), control column from x 112.
 | 318 | Note (`type.note`, `labelSecondary`, wrapped at 480 px, from x 0): `The D-05 changes patch only when SYSTEM > MIDI > Prog.C is ON. If your unit also has a Bank.S switch, turn it ON too.` |
 | after note + 20 | Button row, height 28: `TEST` at x 0; `CANCEL` and `OK` right aligned, 8 px apart, `OK` rightmost |
 
+Checkbox rows are 20 px tall: indicator at row `y + 7`, text vertically centred
+(baseline `y + 15`). The note sets on two lines at 480 px (line height 15), so the button
+row is at content y 368 and the client area is **520 x 436** at 1x (title bar native, not
+included). Initial focus: the output port combo.
+
 `TEST` is disabled while disconnected. `OK` is the default button. Escape = Cancel.
 
 ### 10.2 Controls in dialogs (QSS)
 
 | Control | Spec |
 |---|---|
-| Dialog button | min width 100, height 28; background `buttonFace`; 1 px `buttonSlot` border, radius 2; text `type.panelLabel` caps `labelPrimary`; hover `buttonFaceHover`; pressed `buttonPressed`; focus 2 px `focusRing` border (padding reduced by 1); default button 1 px `labelRed` border; disabled `buttonDisabled`, text `labelDisabled` |
+| Dialog button | min width 100, height 28 (`REFRESH` 26, 10.1); background `buttonFace`; 1 px `buttonSlot` border, radius 2; text `type.panelLabel` caps `labelPrimary`; hover `buttonFaceHover`; pressed `buttonPressed`; focus 2 px `focusRing` border (padding reduced by 1); default button 1 px `labelRed` border; disabled `buttonDisabled`, text `labelDisabled` |
 | Combo box | height 26; `fieldBack`; 1 px `fieldBorder` (hover `fieldBorderHover`, focus 2 px `focusRing`); padding left 8; text `type.body`; drop-down area 20 px wide, no separator line, arrow image `:/theme/arrow-down.png` (8 x 4 solid wedge in `arrow`, 45-degree steps, rows 8, 6, 4, 2 px; `arrow-down@2x.png` 16 x 8 is picked at DPR 2); popup as `QMenu` (8.2) with `selection` for the current item |
 | Spin box | height 26, width 72, `fieldBack`, borders as combo, text centred `type.body`, `buttonSymbols = NoButtons` (keys and wheel change it) |
-| Checkbox | indicator 16 x 6 rect, spacing 10 to the text; unchecked `ledOff` with 1 px `buttonSlot` border; checked `ledOn` with 1 px `ledOn` border; focus: indicator border `focusRing`; disabled: indicator `buttonDisabled`, text `labelDisabled`; text `type.body` |
+| Checkbox | indicator 16 x 6 rect, spacing 10 to the text; unchecked `ledOff` with 1 px `fieldBorderHover` border (a `buttonSlot` border vanished on `panel` in the T2.4 mockup); checked `ledOn` with 1 px `ledOn` border; focus: indicator border `focusRing`; disabled: indicator `buttonDisabled` with 1 px `fieldBorder` border, text `labelDisabled`; text `type.body` |
 
 The checkbox indicator is an LED: the panel vocabulary for "on" (S2).
 
@@ -929,12 +938,27 @@ nothing else is time based; no allocation in `paintEvent`s or `PatchDelegate::pa
 ### 14.2 T2.4 mockups
 
 Main mockup at 960 x 560 (p = 3), state "search": search field focused with `brass`,
-list showing several matches with highlights, one row highlighted (focused list bar),
-the current patch `P1-11 Fantasia` lit in the grid and list, display line 2
-`<n> MATCHES`, one favourite star on, status connected to `Hapax MIDI 1`, channel 1.
-A second main frame in the disconnected state is welcome. Settings mockup at 520 wide
-with a connected port and auto-send off. Use the exact tokens, fonts and glyph table of
-this file.
+list showing several matches with highlights, one row highlighted, the current patch
+`P1-11 Fantasia` lit in the grid, display line 2 `<n> MATCHES`, one favourite star on,
+status connected to `Hapax MIDI 1`, channel 1. Only one widget has focus, so with the
+search field focused the highlighted row shows the idle bar (`selectionBarIdle`), and
+`Fantasia` (no match for `brass`) is not in the list. A second main frame in the
+disconnected state shows the rest: list focused (focus border, `focusRing` bar), the
+current row with its lit LED, unnamed user slots in `labelDim`, `NO MIDI OUTPUT`,
+`NOT FOUND`. Settings mockup at 520 wide with a connected port and auto-send off. Use
+the exact tokens, fonts and glyph table of this file.
+
+Done (T2.4). Source: `docs/design/mockup/build.py` writes the SVGs next to itself and
+renders them with Inkscape (fontconfig restricted to `assets/fonts`), the display dots
+parsed from Appendix A of this file:
+
+| File | Size (1x; `@2x` twice) | State |
+|---|---|---|
+| `docs/design/mockup-main.png` | 960 x 560 | search `brass`, `17 MATCHES` |
+| `docs/design/mockup-settings.png` | 520 x 436 | Settings, connected, auto-send off |
+| `docs/design/mockup/main-disconnected.png` | 960 x 560 | disconnected, list focused |
+| `docs/design/mockup/display-ghost-on.png`, `-ghost-off.png` | 799 x 111 | 13.3 item 2 |
+| `docs/design/mockup/display-keymode-line1.png`, `-line2.png` | 799 x 111 | 13.3 item 1 |
 
 ---
 
