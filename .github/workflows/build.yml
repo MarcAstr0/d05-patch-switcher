@@ -85,7 +85,36 @@ jobs:
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build --build-config Release --output-on-failure
+        run: ctest --test-dir build --build-config Release --output-on-failure --output-junit ctest-junit.xml
+
+      # On failure, rerun the failed tests directly with Qt Test's verbose text log written
+      # to a file, print it, and keep it as an artifact (some failures show nothing in ctest).
+      - name: Diagnose failed tests
+        if: failure()
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          mkdir -p test-logs
+          cp build/ctest-junit.xml test-logs/ 2>/dev/null || true
+          ctest --test-dir build --build-config Release --rerun-failed -V \
+            > test-logs/ctest-rerun.txt 2>&1 || true
+          cat test-logs/ctest-rerun.txt
+          cd build
+          for t in $(ctest --build-config Release -N | sed -n 's/^ *Test *#[0-9]*: *//p'); do
+            exe="$(find . -type f \( -name "$t.exe" -o -name "$t" \) | head -1)"
+            [ -n "$exe" ] || continue
+            "$exe" -o "../test-logs/$t.txt,txt" -o -,txt -v2 >/dev/null 2>&1 || {
+              echo "=== $t failed on direct run"; cat "../test-logs/$t.txt"; }
+          done
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-logs-${{ matrix.name }}
+          path: test-logs/*
+          if-no-files-found: warn
 
       # ---------------- packaging (owned by milestone 4) ----------------
 
@@ -122,7 +151,28 @@ jobs:
           # --appimage-extract-and-run needs no FUSE.
           "$img" --appimage-extract-and-run --version | tee version.txt
           grep -q "d05-patch-switcher" version.txt
-          "$img" --appimage-extract-and-run --list-ports
+          # The hosted runner usually has no ALSA sequencer. Try to load it; test the real
+          # backend only if /dev/snd/seq exists afterwards, else expect FR-15 exit 3.
+          sudo modprobe snd-seq || true
+          sudo modprobe snd-virmidi || true
+          if [ -e /dev/snd/seq ]; then
+            "$img" --appimage-extract-and-run --list-ports
+          else
+            set +e
+            "$img" --appimage-extract-and-run --list-ports >ports.txt 2>&1
+            rc=$?
+            set -e
+            cat ports.txt
+            test "$rc" -eq 3
+            grep -qi "seq" ports.txt
+          fi
+          # The fake backend exercises the packaged binary end to end without hardware.
+          cfg="$(mktemp -d)"
+          "$img" --appimage-extract-and-run --fake-midi --config-dir "$cfg" --list-ports | tee fake-ports.txt
+          grep -q "Fake D-05 In" fake-ports.txt
+          grep -q "Fake D-05 Out" fake-ports.txt
+          "$img" --appimage-extract-and-run --fake-midi --config-dir "$cfg" --channel 1 --send P3-45 2>&1 | tee fake-send.txt
+          grep -q "C0 1C" fake-send.txt
           # Contents: desktop file and the 256 px icon.
           mkdir verify && cd verify
           "$img" --appimage-extract >/dev/null

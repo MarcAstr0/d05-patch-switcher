@@ -383,7 +383,7 @@ private slots:
         QVERIFY(spy.wait(1500));
         QCOMPARE(spy.count(), 2);
         QVERIFY(spy.at(1).at(0).toBool() == false);
-        QVERIFY(t.elapsed() >= 395);  // PreciseTimer: never early by more than clock granularity
+        QVERIFY2(t.elapsed() >= 380, qPrintable(QString::number(t.elapsed())));  // 15.6 ms Windows clock tick
         QVERIFY(!d.sentActive());
         QCOMPARE(d.line2(), pad(QStringLiteral("PRESET 1: ORIGINAL D-50")));
     }
