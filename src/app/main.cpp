@@ -1,6 +1,6 @@
 // Entry point. Milestone 1 grows this into the real application (docs/PLAN.md).
 
-#include "core/PresetTable.h"
+#include "core/PatchCatalog.h"
 #include "midi/PortLister.h"
 #include "ui/ScaffoldWindow.h"
 
@@ -26,7 +26,8 @@ int main(int argc, char *argv[])
     if (parser.isSet(listPortsOpt))
         return d05::listPorts();
 
-    d05::ScaffoldWindow window(d05::presetRowCount());
+    const d05::PatchCatalog catalog;
+    d05::ScaffoldWindow window(catalog.isValid() ? catalog.presetCount() : -1);
     window.show();
     return app.exec();
 }

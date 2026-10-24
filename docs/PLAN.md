@@ -22,7 +22,7 @@ No GUI beyond the scaffold window. Everything here is testable headless.
 
 - ☑ **T1.1 Split the build.** `d05core` and `d05ui` static libraries, the executable, tests linking `d05core`. `cmake --build` and `ctest` green; `--list-ports` still works.
 - ☑ **T1.2 `PatchAddress`.** Parse/format every form in SPEC §4 FR-3 and the canonical `P3-45`; `catalogueIndex()` 0…895 and its inverse; `midiTriplet()`. Tests: round-trip over all 896; rejects `P1-19`, `P1-90`, `P7-11`, `U9-11`, `X1-11`; the five worked examples from `docs/MIDI.md`.
-- ☐ **T1.3 `PatchCatalog`.** Loads the TSV from the resource; `name(addr)`, `mode(addr)`, `displayName(addr)` (user name or address for U groups); user-name overlay; `prev/next` in catalogue order with the ends clamped. Tests: 384 preset names present, `P1-11` = Fantasia, `U1-11` displays as `U1-11` until named, `P1-88`→next = `P2-11`, `P6-88`→next stays.
+- ☑ **T1.3 `PatchCatalog`.** Loads the TSV from the resource; `name(addr)`, `mode(addr)`, `displayName(addr)` (user name or address for U groups); user-name overlay; `prev/next` in catalogue order with the ends clamped. Tests: 384 preset names present, `P1-11` = Fantasia, `U1-11` displays as `U1-11` until named, `P1-88`→next = `P2-11`, `P6-88`→next stays.
 - ☐ **T1.4 `SearchQuery`.** The FR-3 grammar as a predicate plus match ranges. Tests: a table with at least 25 cases copied from the spec, including the "bare digits are text" rule, accent-insensitivity (`Cafe` finds *Venetian Cafe*; a query with an accent also matches), and multi-token AND.
 - ☐ **T1.5 `Library`.** JSON load/save per SPEC §3.3, `QSaveFile`, 500 ms debounce, corruption handling, `--config-dir`. Tests in a temp dir: round-trip, recents ordering and counts, cap at 50, broken file is sidelined and the app proceeds.
 - ☐ **T1.6 MIDI layer.** `MidiBackend`, `FakeMidiBackend`, `RtMidiBackend`, `MidiLink` (connect by name, substring match, 2 s poll while disconnected, `sendPatch`, status text, follow-mode parsing with 300 ms echo suppression). Tests on the fake: exact bytes for channels 1, 10 and 16; a vanished port flips status and the poll reconnects when the fake port "reappears"; incoming CC0/CC32/PC updates `current` without a send; the echo of our own send is ignored.
@@ -30,9 +30,10 @@ No GUI beyond the scaffold window. Everything here is testable headless.
 - ☐ **R1 Review** (reviewer): all of M1. Builder fixes anything rated above style.
 - ☐ **Push and CI**: the build-and-test steps green on all three runners (packaging steps may still fail).
 
-**Gate G1 (owner, optional).** If the Hapax can be moved to the Linux box now, run
-`docs/MIDI.md` checklist steps 1–4 with `--send`. Otherwise defer to G3. Either answer
-unblocks M3.
+**Gate G1 (owner, optional).** If the D-05 can be brought to the Linux box now, plug it
+in over USB, confirm it shows in `--list-ports` (see `docs/MIDI.md`, "Hardware tests on
+the Linux box"; if it does not, the Hapax is the fallback), then run checklist steps 1–4
+with `--send`. Otherwise defer to G3. Either answer unblocks M3.
 
 ## M2 · Design (designer) ☐ — runs in parallel with M1
 
@@ -58,8 +59,8 @@ changes. One round of changes is budgeted. M3 starts only after approval.
 - ☐ **R3 Review** (reviewer): all of M3, with emphasis on threading, error paths and repaint discipline.
 - ☐ **Push and CI** green on build-and-test.
 
-**Gate G3 (owner).** Hardware test on the Linux box through the Hapax: `docs/MIDI.md`
-checklist steps 1–6. Then, if convenient, build from source on the MacBook
+**Gate G3 (owner).** Hardware test on the Linux box, D-05 on USB directly if it
+enumerates, otherwise through the Hapax: `docs/MIDI.md` checklist steps 1–6. Then, if convenient, build from source on the MacBook
 (`brew install qt cmake`, then the README commands) and repeat steps 3–5. Report what
 the D-05 display showed. Fixes go back to the builder.
 
@@ -92,3 +93,5 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-24, Fable: the owner's path is D-05 → Hapax (thru) → computer over USB, so the app opens the Hapax's port; follow-the-panel is optional.
 - 2026-10-24, Fable: `Bank.S` is not a requirement. The owner's unit has no such switch (verified on the device 2026-08-31) and the guide gates only Program Change. Docs corrected before the first push.
 - 2026-10-24, foreman: `docs/MIDI.md` worked example for `P3-45` said `C0 24` (PC 36); the formula it quotes gives 28. Corrected to `C0 1C`. Found by the builder in T1.2; no behaviour change.
+- 2026-10-24, owner via Fable: hardware tests will use the D-05 plugged into the Linux box over USB directly (the Hapax stays in the synth room). Unverified whether the D-05 enumerates on Linux without a driver; gates G1/G3 now say to check `--list-ports` first and fall back to the Hapax. A web version is specified in `docs/WEB.md`, to be scheduled after M3.
+- 2026-10-24, foreman: SPEC FR-6 "printable text" for user names is narrowed to printable ASCII (0x20 to 0x7E); tabs and newlines become a space, runs of spaces collapse. The D-05 and the LCD-style display cannot show arbitrary Unicode. Preset names are up to 20 characters (`Alpha Omega Ensemble`); the display design (T2.2) must fit 20.

@@ -10,3 +10,4 @@ endfunction()
 
 d05_add_test(test_presets_table test_presets_table.cpp)
 d05_add_test(test_patch_address test_patch_address.cpp)
+d05_add_test(test_patch_catalog test_patch_catalog.cpp)

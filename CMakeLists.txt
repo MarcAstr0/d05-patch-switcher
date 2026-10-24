@@ -34,7 +34,7 @@ target_include_directories(d05_options INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src
 # --- d05core: core + midi + app logic, no Widgets (RtMidi lives with the MIDI layer) ---
 qt_add_library(d05core STATIC
     src/core/PatchAddress.h src/core/PatchAddress.cpp
-    src/core/PresetTable.h src/core/PresetTable.cpp
+    src/core/PatchCatalog.h src/core/PatchCatalog.cpp
     src/midi/PortLister.h   src/midi/PortLister.cpp
 )
 # The preset table ships inside the binary as a Qt resource (:/data/d05-presets.tsv).
