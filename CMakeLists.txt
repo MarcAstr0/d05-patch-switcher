@@ -36,6 +36,8 @@ qt_add_library(d05core STATIC
     src/core/PatchAddress.h src/core/PatchAddress.cpp
     src/core/PatchCatalog.h src/core/PatchCatalog.cpp
     src/core/SearchQuery.h  src/core/SearchQuery.cpp
+    src/core/Library.h      src/core/Library.cpp
+    src/app/Paths.h         src/app/Paths.cpp
     src/midi/PortLister.h   src/midi/PortLister.cpp
 )
 # The preset table ships inside the binary as a Qt resource (:/data/d05-presets.tsv).
