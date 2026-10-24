@@ -222,8 +222,10 @@ H     +-------------------------------------------------------------------------
 
 ### 4.3 Coordinates
 
-Outer margin `M = 16` on the left and right. Display dot pitch `p` (section 5.1) is
-3, 4 or 5 and sets the bezel size `bezelW x bezelH`.
+Outer margin `M = 16` on the left and right. The window width selects the display
+step `p` (3, 4 or 5) from the table below; together with the device pixel ratio it sets
+the device dot pitch `P` and the bezel size `bezelW x bezelH` (section 5.1). Every rect
+below uses the bezel size the display actually reports, never the 1x values.
 
 | Element | Rect | Notes |
 |---|---|---|
@@ -234,13 +236,17 @@ Outer margin `M = 16` on the left and right. Display dot pitch `p` (section 5.1)
 | Left column | `x = 16`, width 394 | Fixed size, top aligned in the band |
 | Right column | `x = 434`, width `W - 450` | 24 px gutter after the left column; grows |
 
-Values by pitch:
+Steps (values at 1x and 2x; other DPRs in the table in 5.1):
 
-| p | bezelW x bezelH | B | Used while |
+| p | bezelW x bezelH | B | Step used while |
 |---|---|---|---|
 | 3 | 767 x 79 | 139 | `W < 1042` |
 | 4 | 1010 x 98 | 158 | `1042 <= W < 1285` |
 | 5 | 1253 x 117 | 177 | `W >= 1285` |
+
+The step thresholds 1042 and 1285 are logical and do not depend on the DPR. At
+fractional DPR the pitch inside a step may take one of two values depending on `W`
+(5.1); the display never exceeds `W - 32`, so it always keeps the 16 px margins.
 
 Left column, y measured from `B` (all rows span x 16 to 410; button column `i` (0..7)
 has its face at `x = 16 + 50 i`, width 44, so the faces are 44 wide with 6 px gaps):
@@ -270,15 +276,18 @@ Right column, y from `B`, x from the column's left edge `X = 434`, width `R = W 
 | +104 | to band bottom - 12 | List well `(X, B+104, R, H-22-B-116)` |
 
 Check at the extremes: the left column needs 267 px of band; the smallest band is
-`480 - 22 - 177 = 281` (p = 5 at minimum height). The smallest list is at 800 x 480:
-`350 x 203`, seven full rows.
+`480 - 22 - 180 = 278` (dpr 1.75, P = 9, at minimum height; 281 at 1x and 2x). The
+smallest list is at 800 x 480: `350 x 203` (B = 139 at 1x and 2x; every other DPR has a
+smaller B at 800 px, so a taller list), seven full rows. The widest display at
+`W = 800` is 767 (1x, 2x), which leaves 17 px on the right.
 
 ### 4.4 Resize rules
 
 1. Width and height never go below 800 x 480.
-2. The display pitch `p` changes only at the width thresholds in 4.3, which changes
-   `bezelH` and therefore `B`. The glyph atlas is rebuilt only when `p` (or the device
-   pixel ratio) changes.
+2. The device dot pitch `P` changes only at the width thresholds in 4.3 and the
+   DPR-dependent ones in the 5.1 table, which changes `bezelH` and therefore `B`. The
+   glyph atlas is rebuilt only when `P` or `g` changes (a resize across a threshold, or
+   a move to a screen with another DPR, which also re-evaluates the thresholds).
 3. The left column (group bar, grid, transport) has a fixed size and position relative
    to `B`; extra height stays empty band below it.
 4. The right column takes all extra width; the list well takes all extra height. Rows
@@ -321,13 +330,14 @@ wordmark heads the About box.
 
 Two lines of 40 cells, 5 x 7 dots per cell (S4, S5, REFERENCES decisions 1 to 3).
 
-Let `p` be the logical dot pitch (3, 4 or 5, from 4.3) and `dpr` the device pixel ratio.
-All drawing of the field happens in **device pixels**:
+Let `p` be the display step (3, 4 or 5, chosen by window width in 4.3), `dpr` the
+device pixel ratio and `W` the window width in logical px. All drawing of the field
+happens in **device pixels**:
 
 | Quantity | Device px | At 1x, p = 3 | At 2x, p = 3 |
 |---|---|---|---|
-| Pitch `P` | `floor(p * dpr)` | 3 | 6 |
-| Gap `g` | `max(1, round(dpr))` | 1 | 2 |
+| Pitch `P` | integer, chosen by the rule below | 3 | 6 |
+| Gap `g` | `clamp(qRound(dpr), 1, P / 3)` (integer division) | 1 | 2 |
 | Dot `d` | `P - g` (square) | 2 | 4 |
 | Cell advance | `6 P` (5 dots + 1 empty pitch) | 18 | 36 |
 | Line advance | `8 P` (7 dots + 1 empty pitch) | 24 | 48 |
@@ -336,6 +346,66 @@ All drawing of the field happens in **device pixels**:
 
 Logical sizes are device sizes divided by `dpr` (exact at 1x and 2x; at fractional
 DPR round the field up to whole logical pixels and centre the dot area in it).
+
+**Choosing `P`.** The step `p` has a design bezel width `T = 243 p + 38` (767, 1010,
+1253). Write `fieldW(P) = ceil(243 P / dpr)`, `fieldH(P) = ceil(19 P / dpr)` and
+`bezelW(P) = fieldW(P) + 38` (logical px). Then:
+
+```
+Pa = floor(p * dpr)            // never wider than T, always fits the step
+Pb = Pa + 1
+P  = Pb  if  p * dpr is not an integer
+         and bezelW(Pb) + 32 <= W                       // fits with the 16 px margins
+         and |bezelW(Pb) - T| < |bezelW(Pa) - T|        // strictly closer; ties keep Pa
+     Pa  otherwise
+```
+
+So `P` is the integer pitch whose logical width is nearest the design width, taken only
+once the window is wide enough to hold it. `Pa` always fits: `bezelW(Pa) <= T` and
+every step starts at `W >= T + 32` (step 3 at the 800 px minimum, `T + 32 = 799`). At
+1x and 2x, `p * dpr` is an integer and `P = p * dpr` exactly, so those two cases are
+unchanged. Compute `Pa` as `int(std::floor(p * dpr + 1e-9))` and treat `p * dpr` as an
+integer when `p * dpr - Pa < 1e-9`, so float error at DPRs that are not exact binary
+fractions (1.1, 1.15) cannot drop a pixel. The gap cap `P / 3` keeps the dot at least two thirds of the pitch, as
+at 1x (`d / P` is 2/3, 3/4 or 4/5 at 1x).
+
+Resulting geometry (logical px unless marked; "vs T" is `bezelW - T`; band and list at
+`H = 480`):
+
+| dpr | p | P dev | pitch log | g dev | d dev | field | bezel | vs T | B | band at H 480 | Used while |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 3 | 3 | 3 | 1 | 2 | 729 x 57 | 767 x 79 | 0 | 139 | 319 | `800 <= W < 1042` |
+| 1 | 4 | 4 | 4 | 1 | 3 | 972 x 76 | 1010 x 98 | 0 | 158 | 300 | `1042 <= W < 1285` |
+| 1 | 5 | 5 | 5 | 1 | 4 | 1215 x 95 | 1253 x 117 | 0 | 177 | 281 | `W >= 1285` |
+| 1.25 | 3 | 3 | 2.4 | 1 | 2 | 584 x 46 | 622 x 68 | -145 | 128 | 330 | `800 <= W < 848` |
+| 1.25 | 3 | 4 | 3.2 | 1 | 3 | 778 x 61 | 816 x 83 | +49 | 143 | 315 | `848 <= W < 1042` |
+| 1.25 | 4 | 5 | 4 | 1 | 4 | 972 x 76 | 1010 x 98 | 0 | 158 | 300 | `1042 <= W < 1285` |
+| 1.25 | 5 | 6 | 4.8 | 1 | 5 | 1167 x 92 | 1205 x 114 | -48 | 174 | 284 | `W >= 1285` |
+| 1.5 | 3 | 4 | 2.67 | 1 | 3 | 648 x 51 | 686 x 73 | -81 | 133 | 325 | `800 <= W < 1042` (P = 5 would be 848, +81: a tie, so P stays 4) |
+| 1.5 | 4 | 6 | 4 | 2 | 4 | 972 x 76 | 1010 x 98 | 0 | 158 | 300 | `1042 <= W < 1285` |
+| 1.5 | 5 | 7 | 4.67 | 2 | 5 | 1134 x 89 | 1172 x 111 | -81 | 171 | 287 | `W >= 1285` (P = 8 would be 1334, +81: tie) |
+| 1.75 | 3 | 5 | 2.86 | 1 | 4 | 695 x 55 | 733 x 77 | -34 | 137 | 321 | `800 <= W < 1042` |
+| 1.75 | 4 | 7 | 4 | 2 | 5 | 972 x 76 | 1010 x 98 | 0 | 158 | 300 | `1042 <= W < 1285` |
+| 1.75 | 5 | 8 | 4.57 | 2 | 6 | 1111 x 87 | 1149 x 109 | -104 | 169 | 289 | `1285 <= W < 1320` |
+| 1.75 | 5 | 9 | 5.14 | 2 | 7 | 1250 x 98 | 1288 x 120 | +35 | 180 | 278 | `W >= 1320` |
+| 2 | 3 | 6 | 3 | 2 | 4 | 729 x 57 | 767 x 79 | 0 | 139 | 319 | `800 <= W < 1042` |
+| 2 | 4 | 8 | 4 | 2 | 6 | 972 x 76 | 1010 x 98 | 0 | 158 | 300 | `1042 <= W < 1285` |
+| 2 | 5 | 10 | 5 | 2 | 8 | 1215 x 95 | 1253 x 117 | 0 | 177 | 281 | `W >= 1285` |
+
+Fit check at 800 x 480: the bezel is at most 767 wide at `W = 800` (16 + 767 = 783, 17
+px to the right edge); the band is at least 278 against the 267 the left column needs;
+the right column (x 434, width 350) does not depend on the display; the list well is at
+least `350 x 203` (B 139). The one case a 1x layout check would miss is 1.25 at
+`848 <= W < 1042`: the display is 49 px wider than at 1x and still leaves 16 px of
+margin, because the bezel sits above the band and only its own row is affected.
+
+`DisplayWidget` needs `W` for this rule: the main window passes the window's width
+(not the widget's) through a setter, for example `setStep(int p, int windowWidth)`,
+and reads `sizeHint()` back for `bezelW x bezelH`. The widget recomputes `P` and `g`
+on that call and on a DPR change (handle `QEvent::ScreenChangeInternal` in `event()`
+on the 6.4 floor, plus `QEvent::DevicePixelRatioChange` when built against 6.6+; in
+both, compare `devicePixelRatioF()` with the cached value), and rebuilds the atlas only
+if `P` or `g` changed.
 
 Around the field, in logical px:
 
@@ -346,7 +416,8 @@ Around the field, in logical px:
 | Lit field | `(19, 11, fieldW, fieldH)` | `lcdBack` |
 | Dot area | field inset by `2P` device px | dots only |
 
-So at 1x: p = 3 gives a 767 x 79 widget, p = 4 gives 1010 x 98, p = 5 gives 1253 x 117.
+So at 1x and 2x: p = 3 gives a 767 x 79 widget, p = 4 gives 1010 x 98, p = 5 gives
+1253 x 117; fractional DPRs follow the table above.
 Corners are square everywhere (S2, S4). The margins (18 px beside the field, 10 above
 and below) are tighter than the real windows (about 2 to 3 character pitches, S2, S4)
 so that 40 columns fit an 800 px window; see 13.
@@ -425,7 +496,7 @@ ignores clicks.
 
 - The glyph atlas: one `QImage` (`Format_RGB32`) per (`P`, `g`, `lcdShowGhost`), holding
   all 95 glyphs (0x20 to 0x7E) as `5P x 7P` device-px cells drawn on `lcdBack`. Built
-  once, rebuilt only when `p` or `dpr` changes.
+  once, rebuilt only when `P` or `g` changes (5.1).
 - The frame: one `QPixmap` of the lit field (device px, `setDevicePixelRatio(dpr)`).
   `setLines(line1, line2)` compares with the stored text; if equal it returns without
   doing anything. Otherwise it blits only the changed cells from the atlas into the
@@ -810,8 +881,14 @@ default; `CLEAR` text in `labelRed`. No icon.
    Everything else (dots, LEDs, rules, rings, wedges) is drawn with antialiasing off.
    Wedges have axis-aligned or 45-degree-ish edges at these sizes; with antialiasing
    off they stay sharp.
-3. The display computes its geometry in device pixels (5.1) so dots stay square and
-   equal at any DPR, including 1.25 and 1.5.
+3. The display computes its geometry in device pixels (5.1) so dots stay square,
+   equal and on whole device pixels at any DPR, including 1.25, 1.5 and 1.75. The
+   device pitch `P` is the integer nearest the design width that fits the window (5.1,
+   "Choosing `P`"), so the logical width moves off the 1x value at fractional DPR (from
+   -145 to +49 px at the listed DPRs) instead of the dots going uneven. Draw the
+   cached field pixmap with `drawPixmap(QPoint)` at its logical origin, never into a
+   scaled target rect: with the pixmap's DPR equal to the widget's, the painter does
+   an unscaled blit and the dots stay crisp.
 4. No raster image ships for chrome except the combo-box arrow (10.2): QSS cannot draw
    a wedge (a border-drawn triangle renders as a bar in Qt 6.4) and an SVG in QSS needs
    the QtSvg image-format plugin, a new dependency. The other rasters on screen are the owner's
