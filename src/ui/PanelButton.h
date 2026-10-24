@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractButton>
+#include <QFont>
 #include <QPoint>
 #include <QString>
 
@@ -45,6 +46,12 @@ public:
     {
         return QRect(face.x() - Margin, face.y() - Margin, FaceW + 2 * Margin, FaceH + 2 * Margin);
     }
+
+    // The advance of `text` in `font` at `dpr`, cached so painting measures nothing: the cache
+    // is dropped when the font or the device pixel ratio differs from the one it was built for.
+    static qreal textAdvance(const QString &text, const QFont &font, qreal dpr);
+    // How many times a text advance was measured (tests: painting must not add to it).
+    static int metricsBuildCount();
 
     // Draws one button with its face's top-left at `face`.
     static void paintFace(QPainter *p, const QPoint &face, const Look &look);

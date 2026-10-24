@@ -35,6 +35,7 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QPainter>
+#include <QRegularExpression>
 #include <QScopedValueRollback>
 #include <QScrollBar>
 #include <QSignalBlocker>
@@ -364,6 +365,11 @@ void MainWindow::buildWidgets()
     });
     connect(m_model, &QAbstractItemModel::modelAboutToBeReset, this, &MainWindow::onModelAboutToReset);
     connect(m_model, &QAbstractItemModel::modelReset, this, &MainWindow::onModelReset);
+    // A first send in the Recents view inserts a row (possibly into an empty list).
+    connect(m_model, &QAbstractItemModel::rowsInserted, this, [this] {
+        m_display->setSearch(m_model->searchActive(), m_model->rowCount());
+        m_list->setEmptyText(m_model->emptyTitle(), m_model->emptyNote());
+    });
 
     connect(m_prev, &QAbstractButton::clicked, this, [this] { step(-1); });
     connect(m_next, &QAbstractButton::clicked, this, [this] { step(1); });
@@ -578,6 +584,8 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *e)
         const auto *ke = static_cast<QKeyEvent *>(e);
         if (!ke->isAutoRepeat())
             m_searchRepeatKey = 0;  // a fresh press (this key or any other) ends a stale hold
+        if (ke->isAutoRepeat() && (ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter))
+            return true;  // a held Return in the search field sends once, not per repeat
         if (ke->key() == Qt::Key_Up || ke->key() == Qt::Key_Down) {
             const std::optional<PatchAddress> before = highlighted();
             moveHighlight(ke->key() == Qt::Key_Up ? -1 : 1);
@@ -1052,9 +1060,9 @@ void MainWindow::noteConnected()
 void MainWindow::setOutput(const QString &port)
 {
     const bool was = m_link.isConnected();
-    const QString before = MidiLink::portKey(m_link.connectedPortName());
+    const QString before = m_link.connectedPortName();
     m_link.setOutputPort(port);
-    if (was && m_link.isConnected() && MidiLink::portKey(m_link.connectedPortName()) != before)
+    if (was && m_link.isConnected() && m_link.connectedPortName() != before)
         noteConnected();
 }
 
@@ -1101,7 +1109,9 @@ void MainWindow::setServices(AppSettings *settings)
 AppSettings::Values MainWindow::currentSettings() const
 {
     AppSettings::Values v;
-    v.outputPort = m_link.isConnected() ? m_link.connectedPortKey() : MidiLink::portKey(m_link.outputPortName());
+    // The key, or the full name when two ports share it (so Cancel restores the right device).
+    v.outputPort = m_link.isConnected() ? MidiLink::portSpec(m_link.connectedPortName(), m_link.outputPortNames(nullptr))
+                                        : m_link.outputPortName();
     v.inputPort = m_inputLabel;
     v.channel = m_link.channel();
     v.autoSend = m_autoSendOn;
@@ -1112,8 +1122,13 @@ AppSettings::Values MainWindow::currentSettings() const
 
 bool MainWindow::sameOutput(const QString &port) const
 {
-    return m_link.isConnected() && !port.isEmpty()
-           && MidiLink::portKey(m_link.connectedPortName()).compare(MidiLink::portKey(port), Qt::CaseInsensitive) == 0;
+    if (!m_link.isConnected() || port.isEmpty())
+        return false;
+    // A full OS name (saved because its key is ambiguous) names one device exactly.
+    static const QRegularExpression idSuffix(QStringLiteral("\\s+\\d+:\\d+$"));
+    if (port.contains(idSuffix))
+        return m_link.connectedPortName() == port;
+    return MidiLink::portKey(m_link.connectedPortName()).compare(port, Qt::CaseInsensitive) == 0;
 }
 
 // Order matters for resend-on-connect: the flag and the channel are in place before the
@@ -1193,7 +1208,7 @@ void MainWindow::onSettingsTest(const AppSettings::Values &v)
     m_link.setChannel(v.channel);
     if (!sameOutput(v.outputPort))
         setOutput(v.outputPort);
-    m_testedTarget = MidiLink::portKey(m_link.connectedPortName()) + QLatin1Char('/') + QString::number(v.channel);
+    m_testedTarget = m_link.connectedPortName() + QLatin1Char('/') + QString::number(v.channel);
     m_testedGeneration = m_connGeneration;  // any disconnect or reconnect after this voids it
     refreshConnection();
     sendQuiet(m_current);
@@ -1204,9 +1219,14 @@ void MainWindow::onSettingsAccepted(SettingsDialog *dialog)
     const AppSettings::Values v = dialog->values();
     const bool tested = dialog->testPressed();
     applySettings(v);  // the dialog is still counted as open: a connect it causes is only noted
-    m_settings->setValues(v);
+    AppSettings::Values toSave = v;
+    if (!m_persistPorts) {
+        toSave.outputPort = m_settings->outputPort();
+        toSave.inputPort = m_settings->inputPort();
+    }
+    m_settings->setValues(toSave);
     m_settingsOpen = false;
-    const QString target = MidiLink::portKey(m_link.connectedPortName()) + QLatin1Char('/') + QString::number(v.channel);
+    const QString target = m_link.connectedPortName() + QLatin1Char('/') + QString::number(v.channel);
     // A TEST to this very port and channel has just put the patch on the synth.
     const bool justTested = tested && target == m_testedTarget && m_connGeneration == m_testedGeneration;
     if (m_connectPending && m_resendOnConnect && m_link.isConnected() && !justTested)

@@ -50,6 +50,9 @@ public:
     // MidiInWinMM / MidiOutWinMM::getPortName, "ensure unique portnames"), and the index
     // changes as devices come and go; the key drops it there. CoreMIDI adds nothing.
     static QString portKey(const QString &name);
+    // What to save or match for the port `name` among `ports`: its key when no other port has
+    // the same key, else the full OS name (two identical devices differ only in their ids).
+    static QString portSpec(const QString &name, const QStringList &ports);
     // The WinMM rule on its own (always compiled, so tests can exercise it on any platform):
     // removes exactly one trailing " <digits>".
     static QString stripWinMMIndex(const QString &name);

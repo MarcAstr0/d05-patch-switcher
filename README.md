@@ -17,9 +17,12 @@ like it belongs next to the synth.
 
 ## What you need
 
-- A Roland Boutique D-05 reachable from your computer over MIDI, directly or through
-  another device that forwards MIDI (the author's D-05 hangs off a Squarp Hapax that
-  acts as a USB-to-DIN thru).
+- A Roland Boutique D-05 reachable from your computer over MIDI, directly (its own USB
+  port) or through another device that forwards MIDI.
+- Through a Squarp Hapax (the author's setup): the Hapax's USB port shows up as 16
+  virtual ports. Pick one in Settings and try them in turn; the author's unit answers on
+  port 3. The app's channel setting does not matter on this path, because the Hapax track
+  rewrites it to its own output channel. `Prog.C` must still be ON at the D-05.
 - On the D-05, in `FUNCTION` → `SYSTEM` → `MIDI`: `Prog.C` **ON** and `CH` set to the
   channel you pick in the app (if your firmware also shows `Bank.S`, turn it on). With
   `Prog.C` off the synth ignores the app in silence.
@@ -33,7 +36,7 @@ Builds for the three platforms are attached to each GitHub release.
 |---|---|---|
 | Linux x86_64 | `d05-patch-switcher-x86_64.AppImage` | `chmod +x`, run |
 | macOS (Intel and Apple Silicon) | `d05-patch-switcher-macos-universal.dmg` | Not notarised: see [Opening the macOS app](#opening-the-macos-app) |
-| Windows x64 | `d05-patch-switcher-windows-x64.zip` | unzip anywhere, run the `.exe` |
+| Windows x64 | `d05-patch-switcher-windows-x64.zip` | unzip anywhere, run the `.exe`. The exe is unsigned: SmartScreen may warn; click *More info*, then *Run anyway* |
 
 ### macOS notes
 
@@ -77,17 +80,25 @@ stops the app.
 
 ## Use
 
-1. Open Settings (`Ctrl+,`), pick the MIDI output port your D-05 is behind, set the
+1. Open Settings (`Ctrl+,`, `Cmd+,` on macOS), pick the MIDI output port your D-05 is behind, set the
    channel, press *Test*. The D-05's display should jump to the patch shown in the app.
 2. Type in the search box: `brass`, `e-piano`, `p3-45`, `345`, `u2`. Arrow keys move,
    Enter sends. `PgUp` / `PgDn` step through the catalogue.
-3. `Ctrl+D` stars the current patch; `Ctrl+2` shows favourites, `Ctrl+3` recents.
+3. `Ctrl+D` toggles the favourite of the highlighted row; `Ctrl+2` shows favourites, `Ctrl+3` recents.
 4. `F1` lists every shortcut.
 
 User banks U1–U8 show their address until you name them (`F2`). Names, favourites and
-recents live in one JSON file in your user data directory, which the About box shows.
+recents live in `library.json`, and the settings in `settings.ini`, both in your user data
+directory:
 
-If a `logo.png` is placed in that directory it is shown in the panel.
+| Platform | Directory |
+|---|---|
+| Linux | `~/.local/share/marcastr0/d05-patch-switcher/` |
+| macOS | `~/Library/Application Support/marcastr0/d05-patch-switcher/` |
+| Windows | `%APPDATA%\marcastr0\d05-patch-switcher\` |
+
+If a `logo.png` is placed in that directory it is shown in the panel instead of the
+wordmark. `--config-dir DIR` points the app at another directory.
 
 ## Build from source
 
@@ -135,4 +146,6 @@ interoperability.
 
 ## Licence
 
-MIT. See `LICENSE`.
+MIT. See `LICENSE`. Third-party components (Qt under the LGPLv3, RtMidi, the Inter
+typeface) and how to replace Qt are in `THIRD-PARTY-NOTICES.md`, which ships in every
+package.

@@ -23,6 +23,7 @@ constexpr int kContentW = 480;
 constexpr int kControlX = 112;
 constexpr int kStatusElideW = 350;
 constexpr int kIsKeyRole = Qt::UserRole + 1;  // item data: true when the data is a saved key, not an OS name
+constexpr int kIsFullRole = Qt::UserRole + 2;  // item data: true when the key is ambiguous, so the full OS name is kept
 
 // The 10 x 4 LED beside the connection text: lit (no core) when connected, else off.
 class StatusLed : public QWidget {
@@ -52,11 +53,13 @@ private:
     bool m_lit = false;
 };
 
-// The selected port as a key: OS names are stripped, a saved key is kept as it is.
+// The selected port as it is saved: OS names are stripped to a key, except when several ports
+// share that key (two identical devices), which keep their full name; a saved key or name is
+// kept as it is.
 QString selectedKey(const QComboBox *c)
 {
     const QString data = c->currentData().toString();
-    return c->currentData(kIsKeyRole).toBool() ? data : MidiLink::portKey(data);
+    return c->currentData(kIsKeyRole).toBool() || c->currentData(kIsFullRole).toBool() ? data : MidiLink::portKey(data);
 }
 
 }  // namespace
@@ -209,6 +212,8 @@ void SettingsDialog::fillCombo(QComboBox *combo, const QStringList &names, const
     for (int i = 0; i < names.size(); ++i) {
         const bool dup = keys.count(keys.at(i)) > 1;
         combo->addItem(dup ? names.at(i) : keys.at(i), names.at(i));
+        if (dup)
+            combo->setItemData(combo->count() - 1, true, kIsFullRole);
     }
     const QString match = MidiLink::matchPort(names, wanted);
     int index = -1;
@@ -288,7 +293,7 @@ QString SettingsDialog::connectionState() const
 void SettingsDialog::updateStatus()
 {
     const QString selected = m_outCombo->currentData().toString();
-    const QString key = selectedKey(m_outCombo);
+    const QString key = MidiLink::portKey(selectedKey(m_outCombo));  // shown without ids
     QString text;
     bool ok = false;
     if (!m_listError.isEmpty()) {

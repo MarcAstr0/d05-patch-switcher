@@ -168,11 +168,12 @@ private slots:
         auto *about = qobject_cast<AboutDialog *>(box);
         QVERIFY(about);
         const QStringList p = about->paragraphs();
-        QCOMPARE(p.size(), 6);
+        QCOMPARE(p.size(), 7);
         QCOMPARE(p[0], QStringLiteral("Version 9.8.7"));
         QVERIFY(p[3].contains(QStringLiteral("MIT licence")));
         QCOMPARE(p[4], AboutDialog::trademarkNotice());
         QVERIFY(p[4].contains(QStringLiteral("not affiliated with or endorsed by Roland")));
+        QCOMPARE(p[6], QStringLiteral("Uses Qt (LGPLv3) and RtMidi. See THIRD-PARTY-NOTICES."));
         QCOMPARE(box->width(), 440);
         QCOMPARE(box->windowTitle(), QStringLiteral("About"));
         QPushButton *ok = box->findChild<QPushButton *>(QStringLiteral("okButton"));

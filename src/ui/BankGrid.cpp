@@ -3,7 +3,7 @@
 #include "ui/SectionRule.h"
 #include "ui/Theme.h"
 
-#include <QFontMetricsF>
+#include <QPaintDevice>
 #include <QKeyEvent>
 #include <QPainter>
 
@@ -138,14 +138,16 @@ void BankGrid::activate(int slot)
 
 void BankGrid::paintNumerals(QPainter *p, int y, bool bright)
 {
+    static const QString numerals[8] = {QStringLiteral("1"), QStringLiteral("2"), QStringLiteral("3"),
+                                        QStringLiteral("4"), QStringLiteral("5"), QStringLiteral("6"),
+                                        QStringLiteral("7"), QStringLiteral("8")};
     const QFont font = Theme::font(Theme::Role::PanelLabel);
-    const QFontMetricsF fm(font);
+    const qreal dpr = p->device()->devicePixelRatioF();
     p->setFont(font);
     p->setPen(bright ? Theme::labelPrimary : Theme::labelAccent);
     for (int i = 0; i < 8; ++i) {
-        const QString s = QString::number(i + 1);
         const int cx = 4 + 50 * i + PanelButton::FaceW / 2;
-        p->drawText(QPoint(qRound(cx - fm.horizontalAdvance(s) / 2), y + 9), s);
+        p->drawText(QPoint(qRound(cx - PanelButton::textAdvance(numerals[i], font, dpr) / 2), y + 9), numerals[i]);
     }
 }
 
@@ -162,7 +164,9 @@ void BankGrid::keyPressEvent(QKeyEvent *event)
     const int key = event->key();
     const Qt::KeyboardModifiers mods = event->modifiers() & ~Qt::KeypadModifier;
     if (key >= Qt::Key_1 && key <= Qt::Key_8 && mods == Qt::NoModifier) {
-        handleDigit(key - Qt::Key_0);
+        // A held key must not stream selections: only the first press counts.
+        if (!event->isAutoRepeat())
+            handleDigit(key - Qt::Key_0);
         event->accept();
         return;
     }

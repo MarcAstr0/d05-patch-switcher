@@ -205,7 +205,7 @@ void PatchListView::keyPressEvent(QKeyEvent *event)
         m_repeatKey = 0;  // a fresh press (this key or any other) ends a stale hold
     if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
         && (event->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier) {
-        if (currentIndex().isValid())
+        if (currentIndex().isValid() && !event->isAutoRepeat())  // a held Enter sends once
             emit sendRequested(currentIndex());
         event->accept();
         return;

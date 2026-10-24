@@ -390,6 +390,72 @@ private slots:
         Paths::setOverride(QString());
     }
 
+    // Two identical devices differ only by their ALSA ids: the combo keeps their full names, and
+    // the saved value, TEST and OK all address the selected one.
+    void identicalDevicesAreToldApartByFullName()
+    {
+        const QString a = QStringLiteral("Boutique:Boutique MIDI 1 24:0");
+        const QString b = QStringLiteral("Boutique:Boutique MIDI 1 32:0");
+        const QString other = QStringLiteral("Other:Port 1 20:0");
+        Rig r(values(QString()));
+        r.backend.setOutputPorts({a, b, other}, false);
+        SettingsDialog *d = r.openDialog();
+        QVERIFY(d);
+        QComboBox *c = d->outputCombo();
+        QCOMPARE(c->count(), 3);
+        QCOMPARE(c->itemText(0), a);  // ambiguous: full names
+        QCOMPARE(c->itemText(1), b);
+        QCOMPARE(c->itemText(2), QStringLiteral("Other:Port 1"));  // unique: stripped key
+        c->setCurrentIndex(1);
+        QCOMPARE(d->values().outputPort, b);
+        c->setCurrentIndex(2);
+        QCOMPARE(d->values().outputPort, QStringLiteral("Other:Port 1"));
+        // TEST opens the selected device, not the first with the same key.
+        c->setCurrentIndex(1);
+        QVERIFY(d->testButton()->isEnabled());
+        QTest::mouseClick(d->testButton(), Qt::LeftButton);
+        QCOMPARE(r.backend.openOutputName(), b);
+        QCOMPARE(r.sent().size(), 3);
+        // Cancel puts back what was open before the dialog (nothing).
+        QTest::mouseClick(d->cancelButton(), Qt::LeftButton);
+        QTRY_VERIFY(!r.w->settingsDialog());
+        QVERIFY(!r.link->isConnected());
+        // OK saves the full name and opens that device.
+        d = r.openDialog();
+        d->outputCombo()->setCurrentIndex(1);
+        QTest::mouseClick(d->okButton(), Qt::LeftButton);
+        QCOMPARE(r.settings->outputPort(), b);
+        QCOMPARE(r.backend.openOutputName(), b);
+        // Reopened, the dialog selects the same device; switching to the other one reconnects.
+        QTRY_VERIFY(!r.w->settingsDialog());
+        d = r.openDialog();
+        QCOMPARE(d->outputCombo()->currentIndex(), 1);
+        d->outputCombo()->setCurrentIndex(0);
+        QTest::mouseClick(d->okButton(), Qt::LeftButton);
+        QCOMPARE(r.settings->outputPort(), a);
+        QCOMPARE(r.backend.openOutputName(), a);
+    }
+
+    // --fake-midi without --config-dir: OK saves the other values but never the fake ports.
+    void fakePortsAreNotPersisted()
+    {
+        Rig r(values(QString()));
+        r.persist(values(QStringLiteral("Real Synth")));  // what the real settings file holds
+        r.w->setPersistPorts(false);
+        SettingsDialog *d = r.openDialog();
+        QVERIFY(d);
+        const int i = d->outputCombo()->findData(kOut);
+        QVERIFY(i >= 0);
+        d->outputCombo()->setCurrentIndex(i);
+        d->channelSpin()->setValue(7);
+        QTest::mouseClick(d->okButton(), Qt::LeftButton);
+        QTRY_VERIFY(r.link->isConnected());  // the run itself uses the fake port
+        const AppSettings::Values saved = r.saved();
+        QCOMPARE(saved.channel, 7);                              // other settings persist
+        QCOMPARE(saved.outputPort, QStringLiteral("Real Synth"));  // the port does not
+        QVERIFY(saved.inputPort.isEmpty());
+    }
+
     void inputErrorElidesWithBodyMetrics()
     {
         Rig r;

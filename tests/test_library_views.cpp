@@ -294,6 +294,36 @@ private slots:
         QCOMPARE(l2.recents().at(2).count, 3);
     }
 
+    // R5: an address sent for the first time while the Recents view is shown appears at the
+    // top; the rows already there keep their order and their counts update in place.
+    void recentsViewShowsAFirstSendWithoutReordering()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        QTest::keyClick(r.w.get(), Qt::Key_3, Qt::ControlModifier);
+        QCOMPARE(r.model()->rowCount(), 0);
+        QVERIFY(!r.model()->emptyTitle().isEmpty());
+        const PatchAddress start = r.w->current();
+        QTest::keyClick(r.w.get(), Qt::Key_PageDown);  // sends the next patch
+        QCOMPARE(r.model()->rowCount(), 1);
+        const PatchAddress first = r.model()->row(0).address;
+        QVERIFY(first != start);
+        QCOMPARE(r.model()->row(0).countText, QStringLiteral("\u00d71"));
+        QVERIFY(r.model()->emptyTitle().isEmpty());
+        QTest::keyClick(r.w.get(), Qt::Key_PageDown);
+        QCOMPARE(r.model()->rowCount(), 2);
+        const PatchAddress second = r.model()->row(0).address;
+        QVERIFY(second != first);
+        QCOMPARE(r.model()->row(1).address, first);  // the old row did not move
+        QCOMPARE(r.model()->rowOf(second), 0);
+        QCOMPARE(r.model()->rowOf(first), 1);
+        // Sending the first again updates its count in place.
+        QTest::keyClick(r.w.get(), Qt::Key_PageUp);
+        QCOMPARE(r.model()->rowCount(), 2);
+        QCOMPARE(r.model()->row(0).address, second);
+        QCOMPARE(r.model()->row(1).countText, QStringLiteral("\u00d72"));
+    }
+
     void clearRecentsAsksFirst()
     {
         Rig r;

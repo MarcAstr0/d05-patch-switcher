@@ -133,7 +133,8 @@ void PanelButtonField::keyPressEvent(QKeyEvent *event)
     case Qt::Key_Return:
     case Qt::Key_Enter:
     case Qt::Key_Space:
-        activate(m_cursor);
+        if (!event->isAutoRepeat())  // a held key must not stream selections
+            activate(m_cursor);
         break;
     default:
         QWidget::keyPressEvent(event);

@@ -151,6 +151,10 @@ jobs:
           # --appimage-extract-and-run needs no FUSE.
           "$img" --appimage-extract-and-run --version | tee version.txt
           grep -q "d05-patch-switcher" version.txt
+          # On a tag build the binary's version must be the tag's.
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            test "$(awk '{print $NF}' version.txt)" = "${GITHUB_REF_NAME#v}"
+          fi
           # The hosted runner usually has no ALSA sequencer. Try to load it; test the real
           # backend only if /dev/snd/seq exists afterwards, else expect FR-15 exit 3.
           sudo modprobe snd-seq || true
@@ -181,6 +185,9 @@ jobs:
             test -f squashfs-root/usr/share/icons/hicolor/${sz}x${sz}/apps/d05-patch-switcher.png
           done
           test -f squashfs-root/usr/share/metainfo/com.marcastr0.d05_patch_switcher.metainfo.xml
+          # Licences travel with the package.
+          test -s squashfs-root/usr/share/doc/d05-patch-switcher/LICENSE
+          test -s squashfs-root/usr/share/doc/d05-patch-switcher/THIRD-PARTY-NOTICES.md
           # Size of the app binary alone (linuxdeploy strips it; Qt is separate files).
           bin=squashfs-root/usr/bin/d05-patch-switcher
           size=$(stat -c %s "$bin")
@@ -240,6 +247,16 @@ jobs:
           test "$minos" = "12.0"
           "$bin" --version | tee version.txt
           grep -q "d05-patch-switcher" version.txt
+          # On a tag build the binary's version must be the tag's.
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            test "$(awk '{print $NF}' version.txt)" = "${GITHUB_REF_NAME#v}"
+          fi
+          # No Info.plist key may expand empty, and the licences are in the bundle.
+          copyright="$(/usr/libexec/PlistBuddy -c 'Print NSHumanReadableCopyright' "$plist")"
+          echo "NSHumanReadableCopyright: $copyright"
+          test -n "$copyright"
+          test -s "$app/Contents/Resources/LICENSE"
+          test -s "$app/Contents/Resources/THIRD-PARTY-NOTICES.md"
           "$bin" --list-ports
           # Size: each architecture slice must fit SPEC section 5 (Qt not included).
           echo "universal binary: $(stat -f %z "$bin") bytes"
@@ -258,6 +275,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path dist/d05-patch-switcher | Out-Null
           Copy-Item build/Release/d05-patch-switcher.exe dist/d05-patch-switcher/
+          Copy-Item LICENSE, THIRD-PARTY-NOTICES.md dist/d05-patch-switcher/
           windeployqt --release --no-translations --no-opengl-sw --no-system-d3d-compiler `
             dist/d05-patch-switcher/d05-patch-switcher.exe
           Compress-Archive -Path dist/d05-patch-switcher/* -DestinationPath dist/d05-patch-switcher-windows-x64.zip
@@ -275,6 +293,9 @@ jobs:
           Expand-Archive -Path $zip -DestinationPath $dir
           $exe = Join-Path $dir 'd05-patch-switcher.exe'
           if (-not (Test-Path $exe)) { throw "exe missing from zip" }
+          foreach ($f in @('LICENSE', 'THIRD-PARTY-NOTICES.md')) {
+            if (-not (Test-Path (Join-Path $dir $f))) { throw "$f missing from zip" }
+          }
           # The exe is GUI-subsystem. Redirecting stdout/stderr to files gives it usable
           # handles, so main.cpp does not need to attach to a console. Exit codes are
           # read from the process object.
@@ -289,6 +310,11 @@ jobs:
           }
           $ver = Get-Content (Join-Path $env:RUNNER_TEMP 'outversion.txt') -Raw
           if ($ver -notmatch 'd05-patch-switcher') { throw "--version printed nothing useful: '$ver'" }
+          # On a tag build the binary's version must be the tag's.
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $want = $env:GITHUB_REF_NAME.Substring(1)
+            if ($ver.Trim().Split(' ')[-1] -ne $want) { throw "version '$($ver.Trim())' does not match tag $env:GITHUB_REF_NAME" }
+          }
           # Size of the app exe alone (Qt DLLs are separate files in the zip).
           $size = (Get-Item $exe).Length
           Write-Host "app exe: $size bytes (limit $env:MAX_BINARY_BYTES)"

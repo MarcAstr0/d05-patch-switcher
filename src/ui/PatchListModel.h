@@ -63,6 +63,8 @@ public:
 
 private:
     void rebuild();
+    // Fills `out` for an address; false when the search hides it.
+    bool buildRow(const PatchAddress &a, int count, Row *out) const;
     void onFavoritesChanged();
     void onRecentsChanged();
     void onUserNamesChanged();

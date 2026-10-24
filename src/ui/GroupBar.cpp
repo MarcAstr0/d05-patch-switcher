@@ -8,9 +8,16 @@
 namespace d05 {
 
 namespace {
-QString legendOf(int group)
+// Built once: lookFor() runs for every button on every paint.
+const QString &legendOf(int group)
 {
-    return PatchAddress::fromParts(group, 1, 1)->groupLabel();
+    static const QList<QString> legends = [] {
+        QList<QString> l;
+        for (int g = 0; g < PatchAddress::GroupCount; ++g)
+            l.append(PatchAddress::fromParts(g, 1, 1)->groupLabel());
+        return l;
+    }();
+    return legends[group];
 }
 }  // namespace
 

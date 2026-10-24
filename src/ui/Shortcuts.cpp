@@ -90,7 +90,8 @@ QString capText(const QKeySequence &key, Platform platform)
             return QStringLiteral("fn \u2193");
         return key.toString(QKeySequence::NativeText);
     }
-    QString t = key.toString(QKeySequence::NativeText);
+    // PortableText, not NativeText: the result must not depend on the platform running it.
+    QString t = key.toString(QKeySequence::PortableText);
     t.replace(QStringLiteral("PgDown"), QStringLiteral("PgDn"));
     return t;
 }

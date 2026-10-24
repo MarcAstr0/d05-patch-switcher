@@ -65,6 +65,9 @@ public:
     // `settings` is where OK, the AUTO SEND toggle, the last patch (on quit) and the window
     // geometry are saved. May be null (the Settings action then says it is not available).
     void setServices(AppSettings *settings);
+    // False for a --fake-midi run without --config-dir: the fake ports must never reach the
+    // real settings file, so OK keeps the saved output and input port (other values are saved).
+    void setPersistPorts(bool persist) { m_persistPorts = persist; }
     // Puts `values` into effect: channel, ports, follow, auto-send, resend-on-connect. Does not save.
     void applySettings(const AppSettings::Values &values);
     // The values in effect now (the open output as its port key).
@@ -190,6 +193,7 @@ private:
     bool m_inLayout = false;  // layoutAll() is running (its own resize of the display must not recurse)
 
     AppSettings *m_settings = nullptr;
+    bool m_persistPorts = true;
     bool m_autoSendOn = false;
     bool m_resendOnConnect = false;
     int m_searchRepeatKey = 0;  // the Up/Down key whose auto-repeat moved the search field highlight

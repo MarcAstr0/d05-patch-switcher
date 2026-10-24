@@ -3,10 +3,11 @@
 #include "ui/Theme.h"
 
 #include <QEvent>
+#include <QHash>
 #include <QFontMetricsF>
 #include <QMouseEvent>
 #include <QPainter>
-#include <QPolygon>
+#include <QPaintDevice>
 
 namespace d05 {
 
@@ -19,7 +20,42 @@ void paintLed(QPainter *p, const QRect &r, bool lit)
         p->fillRect(QRect(r.x() + 2, r.y() + 1, r.width() - 4, qMax(1, r.height() - 2)), Theme::ledCore);
 }
 
+struct AdvanceCache {
+    QFont font;
+    qreal dpr = 0;
+    QHash<QString, qreal> advances;
+    int builds = 0;
+};
+
+AdvanceCache &advanceCache()
+{
+    static AdvanceCache c;
+    return c;
+}
+
 }  // namespace
+
+qreal PanelButton::textAdvance(const QString &text, const QFont &font, qreal dpr)
+{
+    AdvanceCache &c = advanceCache();
+    if (dpr != c.dpr || font != c.font) {
+        c.advances.clear();
+        c.font = font;
+        c.dpr = dpr;
+    }
+    const auto it = c.advances.constFind(text);
+    if (it != c.advances.constEnd())
+        return *it;
+    ++c.builds;
+    const qreal adv = QFontMetricsF(font).horizontalAdvance(text);
+    c.advances.insert(text, adv);
+    return adv;
+}
+
+int PanelButton::metricsBuildCount()
+{
+    return advanceCache().builds;
+}
 
 PanelButton::PanelButton(Kind kind, QWidget *parent)
     : QAbstractButton(parent)
@@ -79,7 +115,7 @@ void PanelButton::paintFace(QPainter *p, const QPoint &face, const Look &look)
         break;
     case Kind::LegendLed: {
         const QFont font = Theme::font(Theme::Role::PanelLabel);
-        const int adv = qRound(QFontMetricsF(font).horizontalAdvance(look.legend));
+        const int adv = qRound(textAdvance(look.legend, font, p->device()->devicePixelRatioF()));
         p->setFont(font);
         p->setPen(look.disabled ? Theme::labelDisabled : Theme::labelPrimary);
         p->drawText(QPoint(face.x() + qRound((FaceW - qreal(adv)) / 2), face.y() + 11 + dy), look.legend);
@@ -91,14 +127,14 @@ void PanelButton::paintFace(QPainter *p, const QPoint &face, const Look &look)
         break;
     case Kind::WedgeLeft:
     case Kind::WedgeRight: {
-        QPolygon tri;
-        if (look.kind == Kind::WedgeLeft)
-            tri << QPoint(18, 12) << QPoint(25, 8) << QPoint(25, 16);
-        else
-            tri << QPoint(26, 12) << QPoint(19, 8) << QPoint(19, 16);
-        tri.translate(face.x(), face.y() + dy);
+        // A fixed array on the stack: nothing is allocated while painting.
+        const int ox = face.x();
+        const int oy = face.y() + dy;
+        const QPoint tri[3] = {look.kind == Kind::WedgeLeft ? QPoint(ox + 18, oy + 12) : QPoint(ox + 26, oy + 12),
+                               look.kind == Kind::WedgeLeft ? QPoint(ox + 25, oy + 8) : QPoint(ox + 19, oy + 8),
+                               look.kind == Kind::WedgeLeft ? QPoint(ox + 25, oy + 16) : QPoint(ox + 19, oy + 16)};
         p->setBrush(look.disabled ? Theme::labelDisabled : Theme::arrow);
-        p->drawPolygon(tri);
+        p->drawPolygon(tri, 3);
         break;
     }
     }

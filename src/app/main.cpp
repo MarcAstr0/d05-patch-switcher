@@ -170,6 +170,8 @@ int main(int argc, char *argv[])
     // The window connects to the link first, so a port error at startup shows its text.
     d05::MainWindow window(catalog, library, link);
     window.setServices(&settings);
+    // The fake backend's ports are not the user's: keep them out of the real settings file.
+    window.setPersistPorts(!(opts.fakeMidi && opts.configDir.isEmpty()));
     // The patch the app last showed comes back without sending anything, so resend-on-connect
     // resends the right one. Then the saved settings take effect; --port, --in-port and
     // --channel override them for this run only and are never written back.

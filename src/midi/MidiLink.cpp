@@ -58,6 +58,16 @@ QString MidiLink::portKey(const QString &name)
     return k;
 }
 
+QString MidiLink::portSpec(const QString &name, const QStringList &ports)
+{
+    const QString key = portKey(name);
+    int same = 0;
+    for (const QString &p : ports)
+        if (portKey(p) == key)
+            ++same;
+    return same > 1 ? name : key;
+}
+
 MidiLink::MidiLink(MidiBackend *backend, QObject *parent)
     : QObject(parent)
     , m_backend(backend)

@@ -12,6 +12,7 @@
 #include "ui/MainWindow.h"
 #include "ui/Nameplate.h"
 #include "ui/PanelButton.h"
+#include "ui/PanelButtonField.h"
 #include "ui/PatchDelegate.h"
 #include "ui/PatchListModel.h"
 #include "ui/PatchListView.h"
@@ -310,6 +311,49 @@ private slots:
         QVERIFY(r.w->bankGrid()->bankLit(3));
         QVERIFY(r.w->bankGrid()->numberLit(4));
         QVERIFY(r.w->display()->line1().startsWith(QStringLiteral("P1-34:")));
+    }
+
+    // A held key (auto-repeat) must never stream selections at the synth.
+    void heldKeysDoNotStreamSends()
+    {
+        Rig r;
+        r.w->resize(960, 560);
+        QVERIFY(r.show());
+        const auto held = [](QWidget *w, Qt::Key k) {
+            QKeyEvent ev(QEvent::KeyPress, k, Qt::NoModifier, QString(), true);
+            QApplication::sendEvent(w, &ev);
+        };
+        // Bank grid digits.
+        r.w->bankGrid()->setFocus();
+        held(r.w->bankGrid(), Qt::Key_3);
+        QCOMPARE(r.w->bankGrid()->stage(), BankGrid::Stage::Idle);
+        QTest::keyClick(r.w->bankGrid(), Qt::Key_3);  // a real press starts the entry
+        QCOMPARE(r.w->bankGrid()->stage(), BankGrid::Stage::AwaitNumber);
+        held(r.w->bankGrid(), Qt::Key_4);  // its repeats do not complete it
+        held(r.w->bankGrid(), Qt::Key_4);
+        QCOMPARE(r.w->bankGrid()->stage(), BankGrid::Stage::AwaitNumber);
+        QVERIFY(r.sent().isEmpty());
+        r.w->bankGrid()->cancelEntry();
+        // Enter and Space on the grid and on the group bar.
+        for (PanelButtonField *f : {static_cast<PanelButtonField *>(r.w->bankGrid()),
+                                    static_cast<PanelButtonField *>(r.w->groupBar())}) {
+            f->setFocus();
+            held(f, Qt::Key_Return);
+            held(f, Qt::Key_Space);
+        }
+        QVERIFY(r.sent().isEmpty());
+        QCOMPARE(r.w->bankGrid()->stage(), BankGrid::Stage::Idle);
+        // Enter in the list and Return in the search field.
+        r.w->list()->setFocus();
+        held(r.w->list(), Qt::Key_Return);
+        held(r.w->searchField(), Qt::Key_Return);
+        QVERIFY(r.sent().isEmpty());
+        // Control: a real press sends once.
+        QTest::keyClick(r.w->list(), Qt::Key_Return);
+        QCOMPARE(r.sent().size(), 3);
+        r.backend.clearSent();
+        QTest::keyClick(r.w->searchField(), Qt::Key_Return);
+        QCOMPARE(r.sent().size(), 3);
     }
 
     void gridEntryFromGroupClick()
@@ -722,6 +766,42 @@ private slots:
         g_counting = false;
         painter.end();
         return g_allocs.load();
+    }
+
+    // Painting the group bar, the bank grid and the PREV/NEXT wedges measures no text and its
+    // allocation count does not grow with the number of paints (numerals, legends and wedge
+    // polygons are built once, DESIGN 11 / SPEC 5).
+    void panelWidgetsPaintWithoutBuildingAnything()
+    {
+#ifdef Q_OS_WIN
+        QSKIP("allocation counting needs the replaced operator new, not used on Windows");
+#endif
+        Rig r;
+        r.w->resize(960, 560);
+        QVERIFY(r.show());
+        QWidget *widgets[] = {r.w->groupBar(), r.w->bankGrid(), r.w->prevButton(), r.w->nextButton()};
+        const auto paintAll = [&](int n) {
+            for (int i = 0; i < n; ++i)
+                for (QWidget *w : widgets) {
+                    QImage img(w->size(), QImage::Format_RGB32);
+                    QPainter p(&img);
+                    w->render(&p);
+                }
+        };
+        paintAll(2);  // warm up
+        const int builds = PanelButton::metricsBuildCount();
+        g_allocs = 0;
+        g_counting = true;
+        paintAll(10);
+        g_counting = false;
+        const long ten = g_allocs.load();
+        g_allocs = 0;
+        g_counting = true;
+        paintAll(100);
+        g_counting = false;
+        const long hundred = g_allocs.load();
+        QCOMPARE(PanelButton::metricsBuildCount(), builds);
+        QVERIFY2(hundred <= ten * 10 + 100, qPrintable(QStringLiteral("%1 vs %2").arg(hundred).arg(ten)));
     }
 
     void delegatePaintAllocationsDoNotGrowWithElisionOrRanges()

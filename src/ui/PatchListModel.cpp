@@ -148,6 +148,40 @@ void PatchListModel::onRecentsChanged()
             emit dataChanged(index(r), index(r));
         }
     }
+    // An address sent for the first time while the view is shown joins at the top; the
+    // existing rows keep their order. Recents are newest first, so insert oldest first.
+    QVector<Library::Recent> missing;
+    for (const Library::Recent &r : m_library.recents())
+        if (m_rowOf[r.address.catalogueIndex()] < 0)
+            missing.append(r);
+    for (int i = missing.size() - 1; i >= 0; --i) {
+        Row row;
+        if (!buildRow(missing[i].address, missing[i].count, &row))
+            continue;  // hidden by the search
+        beginInsertRows(QModelIndex(), 0, 0);
+        m_rows.prepend(std::move(row));
+        for (int &idx : m_rowOf)
+            if (idx >= 0)
+                ++idx;
+        m_rowOf[m_rows[0].address.catalogueIndex()] = 0;
+        endInsertRows();
+    }
+}
+
+bool PatchListModel::buildRow(const PatchAddress &a, int count, Row *out) const
+{
+    Row row;
+    row.address = a;
+    row.name = m_catalog.name(a);
+    if (!m_query.matches(a, row.name, &row.ranges))
+        return false;
+    row.shown = row.name.isEmpty() ? a.toString() : row.name;
+    row.mode = m_catalog.mode(a);
+    row.favorite = m_library.isFavorite(a);
+    if (count > 0)
+        row.countText = QStringLiteral("×") + QString::number(count);
+    *out = std::move(row);
+    return true;
 }
 
 void PatchListModel::onFavoritesChanged()
@@ -194,15 +228,8 @@ void PatchListModel::rebuild()
 
     const auto add = [this](const PatchAddress &a, int count) {
         Row row;
-        row.address = a;
-        row.name = m_catalog.name(a);
-        if (!m_query.matches(a, row.name, &row.ranges))
+        if (!buildRow(a, count, &row))
             return;
-        row.shown = row.name.isEmpty() ? a.toString() : row.name;
-        row.mode = m_catalog.mode(a);
-        row.favorite = m_library.isFavorite(a);
-        if (count > 0)
-            row.countText = QStringLiteral("×") + QString::number(count);
         m_rowOf[a.catalogueIndex()] = m_rows.size();
         m_rows.append(std::move(row));
     };

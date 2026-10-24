@@ -107,12 +107,25 @@ set_target_properties(d05-patch-switcher PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
     MACOSX_BUNDLE_ICON_FILE "d05-patch-switcher.icns"
+    MACOSX_BUNDLE_COPYRIGHT "MIT licence. Copyright 2026 Mario Castro Squella."
+    MACOSX_BUNDLE_INFO_STRING "D-05 Patch Switcher ${PROJECT_VERSION}"
+    MACOSX_BUNDLE_LONG_VERSION_STRING "D-05 Patch Switcher ${PROJECT_VERSION}"
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist.in")
 if(APPLE)
     # Copy the icon into Contents/Resources; CFBundleIconFile names it.
     set(D05_ICNS "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/d05-patch-switcher.icns")
     set_source_files_properties("${D05_ICNS}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
     target_sources(d05-patch-switcher PRIVATE "${D05_ICNS}")
+    # The licences travel inside the bundle (Contents/Resources).
+    set(D05_NOTICES "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" "${CMAKE_CURRENT_SOURCE_DIR}/THIRD-PARTY-NOTICES.md")
+    set_source_files_properties(${D05_NOTICES} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    target_sources(d05-patch-switcher PRIVATE ${D05_NOTICES})
+endif()
+if(WIN32)
+    # Icon and version resource (Explorer's Details tab), generated so the version follows the project.
+    set(D05_ICO_PATH "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/d05-patch-switcher.ico")
+    configure_file(packaging/windows/d05-patch-switcher.rc.in "${CMAKE_CURRENT_BINARY_DIR}/d05-patch-switcher.rc" @ONLY)
+    target_sources(d05-patch-switcher PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/d05-patch-switcher.rc")
 endif()
 
 install(TARGETS d05-patch-switcher
@@ -129,6 +142,7 @@ if(UNIX AND NOT APPLE)
     endforeach()
     install(FILES assets/icons/d05-patch-switcher.png
             DESTINATION share/icons/hicolor/256x256/apps)
+    install(FILES LICENSE THIRD-PARTY-NOTICES.md DESTINATION share/doc/d05-patch-switcher)
 endif()
 
 # --- Tests ---

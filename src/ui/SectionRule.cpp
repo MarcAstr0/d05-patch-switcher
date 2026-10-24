@@ -1,8 +1,9 @@
 #include "ui/SectionRule.h"
 
+#include "ui/PanelButton.h"
 #include "ui/Theme.h"
 
-#include <QFontMetricsF>
+#include <QPaintDevice>
 #include <QPainter>
 
 namespace d05 {
@@ -26,7 +27,7 @@ void SectionRule::paint(QPainter *p, int x, int y, int width, const QString &tit
     const QColor &rule = accent ? Theme::ruleAccent : Theme::ruleSecondary;
     const QColor &text = accent ? Theme::labelAccent : Theme::labelSecondary;
     const QFont font = Theme::font(Theme::Role::PanelLabel);
-    const int adv = qRound(QFontMetricsF(font).horizontalAdvance(title));
+    const int adv = qRound(PanelButton::textAdvance(title, font, p->device()->devicePixelRatioF()));
     const int left = x + qRound((width - qreal(adv)) / 2);
     const int right = left + adv;
     p->fillRect(QRect(x, y + 8, qMax(0, left - 6 - x), 1), rule);

@@ -64,6 +64,7 @@ AboutDialog::AboutDialog(const QString &version, QWidget *parent)
     paragraph(QStringLiteral("MIT licence. Copyright 2026 Mario Castro Squella."), "note");
     paragraph(trademarkNotice(), "note");
     paragraph(QStringLiteral("Inter typeface, SIL Open Font License 1.1."), "note");
+    paragraph(QStringLiteral("Uses Qt (LGPLv3) and RtMidi. See THIRD-PARTY-NOTICES."), "note");
 
     column->addSpacing(12);  // 20 px with the spacing
     auto *row = new QHBoxLayout;
