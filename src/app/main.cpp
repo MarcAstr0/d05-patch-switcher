@@ -45,16 +45,28 @@ QStringList rawArguments(int argc, char *argv[])
 #endif
 }
 
-// The exe is a GUI-subsystem program on Windows; hook up the parent console so
-// help, --list-ports and --send output is visible. (Exit codes still need
-// `start /wait` in cmd.exe.)
+// The exe is a GUI-subsystem program on Windows. For each std stream that was
+// not inherited (no handle: started from Explorer or a console, not redirected),
+// hook up the parent console so help, --list-ports and --send output is visible.
+// Streams redirected to a pipe or file (QProcess, `> out.txt`) are left alone.
+// Exit codes still need `start /wait` in cmd.exe.
 void attachConsole()
 {
 #ifdef Q_OS_WIN
-    if (AttachConsole(ATTACH_PARENT_PROCESS)) {
+    auto usable = [](DWORD which) {
+        const HANDLE h = GetStdHandle(which);
+        return h && h != INVALID_HANDLE_VALUE && GetFileType(h) != FILE_TYPE_UNKNOWN;
+    };
+    const bool needOut = !usable(STD_OUTPUT_HANDLE);
+    const bool needErr = !usable(STD_ERROR_HANDLE);
+    if (!needOut && !needErr)
+        return;
+    if (!AttachConsole(ATTACH_PARENT_PROCESS))
+        return;
+    if (needOut)
         std::freopen("CONOUT$", "w", stdout);
+    if (needErr)
         std::freopen("CONOUT$", "w", stderr);
-    }
 #endif
 }
 

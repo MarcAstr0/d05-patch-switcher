@@ -14,6 +14,14 @@ struct Result {
     int code = -1;
     QString out, err;
     bool crashed = false;
+    bool started = true;
+    QString errorString;
+    // For failure messages.
+    QString describe() const
+    {
+        return QStringLiteral("started=%1 crashed=%2 exit=%3 error=\"%4\"\nstdout:\n%5\nstderr:\n%6")
+            .arg(started).arg(crashed).arg(code).arg(errorString, out, err);
+    }
 };
 
 Result run(const QStringList &args)
@@ -25,11 +33,21 @@ Result run(const QStringList &args)
     p.setProcessEnvironment(env);
     p.start(QStringLiteral(D05_BINARY), args);
     Result r;
+    if (!p.waitForStarted(10000)) {
+        r.started = false;
+        r.errorString = QStringLiteral("failed to start ") + QStringLiteral(D05_BINARY) + QStringLiteral(": ")
+                        + p.errorString();
+        return r;
+    }
     if (!p.waitForFinished(15000)) {
         p.kill();
         p.waitForFinished();
+        r.errorString = QStringLiteral("timeout: ") + p.errorString();
+        r.out = QString::fromLocal8Bit(p.readAllStandardOutput());
+        r.err = QString::fromLocal8Bit(p.readAllStandardError());
         return r;
     }
+    r.errorString = p.errorString();
     r.crashed = p.exitStatus() != QProcess::NormalExit;
     r.code = p.exitCode();
     r.out = QString::fromLocal8Bit(p.readAllStandardOutput());
@@ -47,9 +65,9 @@ private slots:
         QVERIFY(tmp.isValid());
         const Result r = run({QStringLiteral("--fake-midi"), QStringLiteral("--send"), QStringLiteral("P3-45"),
                               QStringLiteral("--config-dir"), tmp.path()});
-        QVERIFY(!r.crashed);
-        QCOMPARE(r.code, 0);
-        QCOMPARE(r.out, QStringLiteral("B0 00 57\nB0 20 0A\nC0 1C\n"));
+        QVERIFY2(!r.crashed && r.code == 0, qPrintable(r.describe()));
+        QVERIFY2(QString(r.out).replace(QStringLiteral("\r\n"), QStringLiteral("\n")) == QStringLiteral("B0 00 57\nB0 20 0A\nC0 1C\n"),
+                 qPrintable(r.describe()));
         QVERIFY(QDir(tmp.path()).isEmpty());
     }
 
@@ -71,17 +89,16 @@ private slots:
         QFETCH(QStringList, args);
         QFETCH(int, code);
         const Result r = run(args);
-        QVERIFY2(!r.crashed, qPrintable(r.err));
-        QCOMPARE(r.code, code);
+        QVERIFY2(!r.crashed && r.code == code, qPrintable(r.describe()));
     }
 
     void listPortsBeatsSend()
     {
         const Result r = run({QStringLiteral("--fake-midi"), QStringLiteral("--list-ports"), QStringLiteral("--send"),
                               QStringLiteral("P1-11")});
-        QCOMPARE(r.code, 0);
-        QVERIFY(r.out.contains(QStringLiteral("MIDI outputs")));
-        QVERIFY(!r.out.contains(QStringLiteral("B0 00 57")));
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QVERIFY2(r.out.contains(QStringLiteral("MIDI outputs")), qPrintable(r.describe()));
+        QVERIFY2(!r.out.contains(QStringLiteral("B0 00 57")), qPrintable(r.describe()));
     }
 };
 
