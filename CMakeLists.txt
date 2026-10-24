@@ -22,24 +22,37 @@ FetchContent_Declare(rtmidi
     GIT_SHALLOW    TRUE)
 FetchContent_MakeAvailable(rtmidi)
 
-# --- Application ---
-qt_add_executable(d05-patch-switcher
-    src/main.cpp
-)
+# --- Shared flags ---
+add_library(d05_options INTERFACE)
+target_compile_definitions(d05_options INTERFACE
+    QT_NO_CAST_FROM_ASCII QT_NO_CAST_TO_ASCII)
+target_compile_options(d05_options INTERFACE
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -Wpedantic>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4>)
+target_include_directories(d05_options INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+# --- d05core: core + midi + app logic, QtCore only (RtMidi lives with the MIDI layer) ---
+qt_add_library(d05core STATIC
+    src/core/PresetTable.h src/core/PresetTable.cpp
+    src/midi/PortLister.h   src/midi/PortLister.cpp
+)
 # The preset table ships inside the binary as a Qt resource (:/data/d05-presets.tsv).
-qt_add_resources(d05-patch-switcher "data"
+qt_add_resources(d05core "data"
     PREFIX "/"
     FILES data/d05-presets.tsv
 )
+target_link_libraries(d05core PUBLIC Qt6::Core d05_options PRIVATE rtmidi)
 
-target_link_libraries(d05-patch-switcher PRIVATE Qt6::Widgets rtmidi)
-target_compile_definitions(d05-patch-switcher PRIVATE
-    D05_VERSION="${PROJECT_VERSION}"
-    QT_NO_CAST_FROM_ASCII QT_NO_CAST_TO_ASCII)
-target_compile_options(d05-patch-switcher PRIVATE
-    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -Wpedantic>
-    $<$<CXX_COMPILER_ID:MSVC>:/W4>)
+# --- d05ui: widgets ---
+qt_add_library(d05ui STATIC
+    src/ui/ScaffoldWindow.h src/ui/ScaffoldWindow.cpp
+)
+target_link_libraries(d05ui PUBLIC Qt6::Widgets d05core)
+
+# --- Application ---
+qt_add_executable(d05-patch-switcher src/app/main.cpp)
+target_link_libraries(d05-patch-switcher PRIVATE d05ui d05core Qt6::Widgets)
+target_compile_definitions(d05-patch-switcher PRIVATE D05_VERSION="${PROJECT_VERSION}")
 
 set_target_properties(d05-patch-switcher PROPERTIES
     WIN32_EXECUTABLE TRUE

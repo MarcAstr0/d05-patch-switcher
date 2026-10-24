@@ -16,11 +16,11 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ⛔ blocked (say why i
 - ☑ Agents: builder (Sonnet), designer (Opus), reviewer (Sonnet).
 - ☑ `.github/workflows/build.yml` (untested until first push; M4 owns it).
 
-## M1 · Core and command line (builder) ☐
+## M1 · Core and command line (builder) ◐
 
 No GUI beyond the scaffold window. Everything here is testable headless.
 
-- ☐ **T1.1 Split the build.** `d05core` and `d05ui` static libraries, the executable, tests linking `d05core`. `cmake --build` and `ctest` green; `--list-ports` still works.
+- ☑ **T1.1 Split the build.** `d05core` and `d05ui` static libraries, the executable, tests linking `d05core`. `cmake --build` and `ctest` green; `--list-ports` still works.
 - ☐ **T1.2 `PatchAddress`.** Parse/format every form in SPEC §4 FR-3 and the canonical `P3-45`; `catalogueIndex()` 0…895 and its inverse; `midiTriplet()`. Tests: round-trip over all 896; rejects `P1-19`, `P1-90`, `P7-11`, `U9-11`, `X1-11`; the five worked examples from `docs/MIDI.md`.
 - ☐ **T1.3 `PatchCatalog`.** Loads the TSV from the resource; `name(addr)`, `mode(addr)`, `displayName(addr)` (user name or address for U groups); user-name overlay; `prev/next` in catalogue order with the ends clamped. Tests: 384 preset names present, `P1-11` = Fantasia, `U1-11` displays as `U1-11` until named, `P1-88`→next = `P2-11`, `P6-88`→next stays.
 - ☐ **T1.4 `SearchQuery`.** The FR-3 grammar as a predicate plus match ranges. Tests: a table with at least 25 cases copied from the spec, including the "bare digits are text" rule, accent-insensitivity (`Cafe` finds *Venetian Cafe*; a query with an accent also matches), and multi-token AND.
