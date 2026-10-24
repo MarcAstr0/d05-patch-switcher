@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- d05-patch-switcher maskable PWA icon (Android adaptive icons). Full bleed, no
+     transparency; everything that matters sits inside the central 80 % circle
+     (radius 204.8 around 256,256; the farthest corner, the display rim at 112,130, is at
+     radius 191). The application icon d05-patch-switcher.svg scaled by 1.5 around its
+     content centre (128,132): dot pitch 12, dot 9, glyphs P and 1 from DESIGN.md
+     Appendix A. Drawn for this project; no trademarked artwork, no text objects.
+     Geometry and use: docs/design/DESIGN-WEB.md section 13. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- panel, full bleed -->
+  <rect x="0" y="0" width="512" height="512" fill="#202326"/>
+  <!-- band from y 310 to the bottom, 3 px bandEdge line on its top -->
+  <rect x="0" y="310" width="512" height="202" fill="#26292B"/>
+  <rect x="0" y="310" width="512" height="3" fill="#3A3E41"/>
+  <!-- display window: bezelRim 3 px frame, bezel inside -->
+  <rect x="112" y="130" width="288" height="144" fill="#2E3134"/>
+  <rect x="115" y="133" width="282" height="138" fill="#050606"/>
+  <!-- lit field -->
+  <rect x="130" y="148" width="252" height="108" fill="#071104"/>
+  <!-- dots: P11 -->
+  <path fill="#98CF1C" d="M155 161h9v9h-9zM155 173h9v9h-9zM155 185h9v9h-9zM155 197h9v9h-9zM155 209h9v9h-9zM155 221h9v9h-9zM155 233h9v9h-9zM167 161h9v9h-9zM167 197h9v9h-9zM179 161h9v9h-9zM179 197h9v9h-9zM191 161h9v9h-9zM191 197h9v9h-9zM203 173h9v9h-9zM203 185h9v9h-9zM239 173h9v9h-9zM239 233h9v9h-9zM251 161h9v9h-9zM251 173h9v9h-9zM251 185h9v9h-9zM251 197h9v9h-9zM251 209h9v9h-9zM251 221h9v9h-9zM251 233h9v9h-9zM263 233h9v9h-9zM311 173h9v9h-9zM311 233h9v9h-9zM323 161h9v9h-9zM323 173h9v9h-9zM323 185h9v9h-9zM323 197h9v9h-9zM323 209h9v9h-9zM323 221h9v9h-9zM323 233h9v9h-9zM335 233h9v9h-9z"/>
+  <!-- three button faces with LEDs; the middle LED lit -->
+  <rect x="124" y="346" width="72" height="36" rx="4" ry="4" fill="#3F4244"/>
+  <rect x="220" y="346" width="72" height="36" rx="4" ry="4" fill="#3F4244"/>
+  <rect x="316" y="346" width="72" height="36" rx="4" ry="4" fill="#3F4244"/>
+  <rect x="148" y="360" width="24" height="8" fill="#2A1A1A"/>
+  <rect x="244" y="360" width="24" height="8" fill="#F0383F"/>
+  <rect x="340" y="360" width="24" height="8" fill="#2A1A1A"/>
+</svg>

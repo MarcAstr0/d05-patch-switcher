@@ -12,6 +12,8 @@ panel buttons with the middle LED lit. No trademarked artwork, no text objects.
 | `d05-patch-switcher-{48,64,128}.png` | The SVG rendered at each size | 1,051 to 1,949 bytes |
 | `d05-patch-switcher.ico` | Windows: 16, 24, 32, 48, 64, 128, 256 px, each stored as PNG | 8,893 bytes |
 | `d05-patch-switcher.icns` | macOS: `icp4` 16, `icp5` 32, `ic07` 128, `ic08` 256, `ic09` 512, `ic11` 16@2x, `ic12` 32@2x, `ic13` 128@2x, `ic14` 256@2x, `ic10` 512@2x; PNG entries | 43,184 bytes |
+| `d05-patch-switcher-maskable.svg` | Web app (PWA) maskable icon source, 512 x 512 viewBox, full bleed, opaque (DESIGN-WEB.md 13) | 2,365 bytes |
+| `d05-patch-switcher-maskable-{192,512}.png` | The maskable SVG rendered at 192 and 512; copied to `web/public/icons/icon-maskable-{192,512}.png` | 1,618 and 2,902 bytes |
 | `make-small-icons.py` | Writes the 16, 24 and 32 px PNGs (Pillow) | |
 | `make-icns.py` | Writes the `.icns` from a directory of PNGs (standard library only) | |
 
@@ -43,6 +45,19 @@ inkscape d05-patch-switcher.svg --export-type=png --export-width=256 \
 for s in 48 64 128; do
   inkscape d05-patch-switcher.svg --export-type=png --export-width=$s \
     --export-filename=d05-patch-switcher-$s.png
+done
+```
+
+Maskable web app icon (Android adaptive icons crop it to a circle, squircle or rounded
+square). The application icon's content scaled by 1.5 around its centre on a full-bleed
+`panel` square, with the band running to the edges; every lit or drawn detail lies inside
+the central 80 % circle (radius 204.8 of 512; the farthest point, a display rim corner,
+is at 191):
+
+```sh
+for s in 192 512; do
+  inkscape d05-patch-switcher-maskable.svg --export-type=png --export-width=$s \
+    --export-filename=d05-patch-switcher-maskable-$s.png
 done
 ```
 

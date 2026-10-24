@@ -77,13 +77,18 @@ WOFF2 without any other change. Both weights:
 
 | Served path (`web/public/`) | From | Bytes | sha256 |
 |---|---|---|---|
-| `fonts/Inter-Regular.woff2` | `assets/fonts/Inter-Regular.ttf` | 22,644 | `838ee579324d87058f2f4a1655e8603684ee41d2138b355a121b0b3e43722e6d` |
-| `fonts/Inter-Medium.woff2` | `assets/fonts/Inter-Medium.ttf` | 23,052 | `3637f1b8efc688c41562b864a529bed8f033210ca97c1a321caa3ad635c168ff` |
+| `fonts/Inter-Regular.woff2` | `assets/fonts/Inter-Regular.ttf` | 22,664 | `a8a0bf4b3eecae1b2fe703cd2f7d04a6e997395310ab1d112df072dfa06d4375` |
+| `fonts/Inter-Medium.woff2` | `assets/fonts/Inter-Medium.ttf` | 23,084 | `9a5c338ed57e8636b4619de0e119776aeb7f3582f3e5da21a504571bc7741185` |
 | `fonts/OFL.txt` | `assets/fonts/OFL.txt`, unchanged | 4,380 | as in `assets/fonts/README.md` |
 
 45.7 KB together (the TTFs are 114 KB). The fonts are outside the 60 KB JS + CSS budget
 (WEB.md 4). Conversion, in a scratch virtual environment (not a system package, no
-network at run time; the command is deterministic, a second run gave identical bytes):
+network at run time). `recalcTimestamp=False` keeps the TTF's `head.modified`: without
+it fontTools writes the current time into `head`, and every run gives different bytes
+and a slightly different size (that is why the first version of this command, without
+the flag, produced 22,644 / 23,052 here and 22,744 / 23,060 for the builder). With the
+flag, two runs at different times gave identical bytes (checked 2026-10-24, Python
+3.12.4, fonttools 4.67.0, brotli 1.2.1):
 
 ```sh
 python3 -m venv /tmp/venv-fonts
@@ -92,14 +97,14 @@ for w in Regular Medium; do
   /tmp/venv-fonts/bin/python -I -c "
 import sys
 from fontTools.ttLib import TTFont
-f = TTFont(sys.argv[1]); f.flavor = 'woff2'; f.save(sys.argv[2])
+f = TTFont(sys.argv[1], recalcTimestamp=False); f.flavor = 'woff2'; f.save(sys.argv[2])
 " assets/fonts/Inter-$w.ttf web/public/fonts/Inter-$w.woff2
 done
 cp assets/fonts/OFL.txt web/public/fonts/OFL.txt
 ```
 
-Checked on the outputs: same glyph count (446), same cmap, family `Inter`, GSUB features
-`case` and `tnum` kept (kerning is in GPOS, kept). Record the command and hashes in a
+Checked on the outputs: same glyph count (446), same cmap, same `head.modified` as the
+TTF, family `Inter`, GSUB features `case` and `tnum` kept (kerning is in GPOS, kept). Record the command and hashes in a
 `web/public/fonts/README.md` (builder, W3). The OFL allows this: no Reserved Font Name,
 and the WOFF2 files stay under the OFL.
 
@@ -395,7 +400,9 @@ and `unsupported` use W1, `prompt` and `waiting` W3, `denied` W2). The status ba
 
 On the first change to `granted` with no output port ever saved, the Settings dialog
 opens by itself with the first listed output preselected (as DESIGN.md's first run,
-one step shorter; 15 item 2).
+one step shorter; 15 item 2). Only the change opens it: a page that loads with access
+already granted and no saved port opens nothing and shows line 2 `CHOOSE A PORT IN
+SETTINGS` (phones `CHOOSE A PORT`, 5.3 row 1a) until a port is chosen.
 
 ### 6.2 What is disabled
 
@@ -425,11 +432,14 @@ From the top of the block:
 | Gap | 8 |
 | Body | `type.body`, `labelPrimary`, centred, wrapped at the block width, line 16 |
 | Steps (`denied` only) | 12 px gap, then one 20 px row per step: the number `1.` at the block's step column x 0 in `labelSecondary`, the text at x 20 in `labelPrimary`, `type.body`, vertically centred. The step column is as wide as the widest step + 20 and centred in the block (portrait: left aligned at the block's left) |
-| Support matrix (`unsupported`, `insecure`) | 16 px gap, four 20 px rows: browser at x 0, answer at x 200, both `type.body`; browser `labelPrimary`, answer `labelSecondary`; the 380 px wide table centred in the block. Rows: `Chrome, Edge, Brave, Opera` · `Yes`; `Chrome on Android` · `Yes, with a USB OTG cable`; `Firefox 108 or later` · `Yes, after a site permission`; `Safari, iPhone and iPad` · `No` |
+| Support matrix (`unsupported`, `insecure`) | 16 px gap, four 20 px rows: browser at x 0, answer at x 200, both `type.body`; browser `labelPrimary`, answer `labelSecondary`; the 380 px wide table centred in the block. Rows: `Chrome, Edge, Brave, Opera` · `Yes`; `Chrome on Android` · `Yes, with a USB OTG cable`; `Firefox 108 or later` · `Yes, after a site permission`; `Safari, iPhone and iPad` · `No`. **Stacked form** whenever the block is narrower than 380 (portrait, landscape, the phone About sheet): each entry is two 16 px lines at x 0, browser (`labelPrimary`) above its answer (`labelSecondary`), 8 px between entries (152 px for the four), left aligned at the block's left edge. Nothing in the matrix ever wraps |
 | Button | 20 px gap, then a dialog button (DESIGN.md 10.2) with the default style (1 px `labelRed` border): `CONNECT MIDI` 160 x 32 on desktop and landscape; full block width x 48 with `type.padLabel` in portrait. `TRY AGAIN` 120 x 28 (portrait: full width x 48). Disabled with the text `WAITING` while `waiting` |
 | Note (`prompt` only) | 16 px gap, `type.note`, `labelDim`, centred, wrapped: `Only Bank Select and Program Change are sent, never SysEx.` |
 
-The button has initial keyboard focus when the panel appears (desktop and landscape).
+The button has initial keyboard focus when the panel appears (desktop and landscape; a
+focused button opens no soft keyboard, so this is the one exception to 10's "no initial
+focus on phones"). The ring then shows at load, drawn over the red default border (9.7);
+the mockups omit it.
 
 ### 6.4 Texts
 
@@ -465,6 +475,8 @@ Permissions API cannot query `midi`, step 4 reads `Come back here and press TRY 
 | Anything else | `NO WEB MIDI IN THIS BROWSER` | `Open this page in Chrome, Edge, Brave, Opera, or Firefox 108 or later.` |
 
 `insecure`: title `MIDI NEEDS A SECURE PAGE`, body `Browsers offer MIDI only to pages served over https:// or from localhost. Open https://marcastr0.github.io/d05-patch-switcher/ instead.`
+The URL is one unbreakable run (`white-space: nowrap` on a span around it); the line
+breaks before it, never inside it.
 
 All of these are user-facing strings: no em dashes, `D-05` as plain text.
 
@@ -611,7 +623,14 @@ y + 15). Items from x 16: activity LED `(16, 9, 8, 4)`, `OUT`, port name (elided
 middle to fit `W - 150`), output `NOT FOUND` when disconnected, `CH` and the channel.
 `IN`, the input name, its `NOT FOUND` and `FOLLOW` follow only when `W >= 480`. No
 message slot in portrait (messages that the desktop puts there show in the Settings
-sheet or are dropped).
+sheet, in the message card 7.10, or are dropped).
+
+**`NOT SAVED` marker (all layouts).** While storage is blocked or the last save failed
+(WEB.md, W1 storage rules), `NOT SAVED` in `type.statusLabel` `labelRed` (role
+`statusError`) follows the last left item shown (`CH` value in narrow portrait, else the
+input name, its `NOT FOUND` or `FOLLOW`) at a 16 px gap, as an item of its own. Its
+`title` carries the reason. On desktop and landscape the reason also shows as the status
+message in `labelRed`; in portrait the Settings sheet shows it.
 
 ### 7.8 List overlay (search)
 
@@ -630,14 +649,23 @@ Rows are 52 tall; the DESIGN.md 7.2 row is centred vertically in them (all its y
 +12), with these changes for touch: key-mode box at `x = Wl - 88`; star centred at
 `(Wl - 26, 26)` with outer radius 7 and inner radius 3; the star's touch target is the
 row's right 52 x 52. The recents count, when shown, is `(Wl - 136, 0, 40, 52)`, right
-aligned. No row highlight or selection bar on touch (keyboard use still shows them as
-DESIGN.md 7.2).
+aligned; the name ends at `Wl - 140`.
+
+**Highlight on phones.** The highlighted row keeps existing in the model (Enter on a
+hardware keyboard sends it), but on the phone layouts its `selection` background and
+selection bar are drawn only under `@media (pointer: fine)` (a mouse is the primary
+pointer). On a touch phone no row ever looks highlighted, whatever the typing, the view
+switch or the start-up position did. A narrowed desktop window keeps DESIGN.md 7.2.
 
 Behaviour: a tap on a row sends that patch and marks it current; the overlay **stays
 open** (auditioning several patches in a row is the point). A tap on the star toggles
 the favourite without sending. A long press on a user-slot row (the browser's
 `contextmenu` event, so no timer of our own) opens the inline editor DESIGN.md 7.4 at
-`(80, 14, Wl - 180, 24)` of the row; Enter on the soft keyboard commits. `DONE`, the
+`(80, 14, Wl - 224, 24)` of the row, so it ends at `Wl - 144`, 8 px before the count
+column where `n/18` shows while editing (the desktop's `Wl - 180` would run 4 px into
+it); Enter on the soft keyboard commits. Its text selection is `matchBack` with
+`labelPrimary` text (`.nameEditor::selection`, as the search field 9.4 and the desktop's
+QSS), on every layout. `DONE`, the
 Android back gesture (the overlay pushes one history entry when it opens and closes on
 `popstate`) and `Esc` close it. The query is kept when it closes and shows on the search
 button; display line 2 shows the count only while the overlay is open (5.3). Empty
@@ -656,6 +684,22 @@ states: DESIGN.md 7.5 in the list area, line 2 texts `Clear the search to see al
 | Overlay open | 7.8, mockup `portrait-search` |
 | No MIDI access | 6, mockup `portrait-access` |
 | Pressed pad | DESIGN.md 6.2 pressed (`buttonPressed`, no highlight, legend and LED 1 px down) for as long as the finger is down (`:active`) |
+| Storage blocked | `NOT SAVED` in the status bar (7.7); the Settings sheet carries the reason |
+
+### 7.10 Message card (portrait only)
+
+Portrait has no status message slot, so the results the desktop reports there and that
+the user must see appear as a centred card (the confirmation card of 11.2: `min(360, W -
+24)` wide, title strip 36, text `type.body` `labelPrimary` with 20 px margins, one `OK`
+button 44 tall, default style, at the right). It opens for:
+
+| Event | Title | Text |
+|---|---|---|
+| Import done | `IMPORT LIBRARY` | the result line of 11.6, `labelPrimary` |
+| Import refused | `IMPORT LIBRARY` | `Not a library file: <reason>`, `labelRed` |
+
+`Library exported` gets no card (the browser's own download notice is the feedback);
+it is dropped in portrait. `OK`, `CLOSE`, `Esc` and the back gesture close the card.
 
 ---
 
@@ -717,8 +761,16 @@ from y 0 to the status bar, with a 1 px `bandEdge` line at x = L running its ful
 
 List rows are 44 tall (touch), the 28 px DESIGN.md row centred in them (+8), with the
 7.8 touch changes (key-mode box at `Wl - 88`, star at `Wl - 26` radius 7 / 3, 44 x 44 star
-target). Tap sends, as 7.8. Keyboard highlight and the styled scrollbar (9.6) apply when
-a mouse or keyboard is used. AUTO SEND is not shown (Settings has it).
+target, recents count `(Wl - 136, 0, 40, 44)`, inline editor `(80, 10, Wl - 224, 24)`,
+highlight drawn only under `(pointer: fine)`). Tap sends, as 7.8. The styled scrollbar
+(9.6) applies. AUTO SEND is not shown (Settings has it).
+
+**Where the current row lands.** When the list scrolls to put the current patch in view
+with context above it (start-up, view change, a send from the panel), the desktop puts
+it 3 rows below the top. The phone layouts use `k = min(3, floor((listH - rowH) / (2 *
+rowH)))` rows instead, so the current row is never pushed to the bottom edge of a short
+list: 844 x 390 (`listH` 252) gives 2; 800 x 300 compact (162) gives 1; portrait overlay
+at 390 x 844 gives 3. The desktop keeps 3.
 
 ### 8.3 Status bar and states
 
@@ -883,7 +935,10 @@ Firefox's thin scrollbar is narrower than 10 px; accepted.
 Tab order on desktop: DESIGN.md 9 (search field, list, ALL, FAVOURITES, RECENTS, AUTO
 SEND, SYSTEM, group bar, grid, PREV, NEXT). Use DOM order, never positive `tabindex`.
 Initial focus: the search field when access is granted, else the access panel button.
-Phone layouts: no initial focus (it would open the soft keyboard).
+Phone layouts (portrait and landscape): no initial focus (a focused field opens the soft
+keyboard), at start and after a layout switch; the only exception is the landscape
+access panel button (6.3). A phone sheet or card focuses the `<dialog>` element itself
+(`tabindex="-1"`), never a field or combo inside it, so no ring shows when it opens.
 
 ---
 
@@ -897,15 +952,17 @@ Cancel). Geometry:
 | Part | Spec |
 |---|---|
 | Width | the DESIGN.md width: Settings 520, Shortcuts 680, About 440, Clear Recents 360, Import confirmation 360 |
-| Height | `36` (title strip) + the DESIGN.md client height; at most `H - 16`, then the content area scrolls |
+| Height | `36` (title strip) + the DESIGN.md client height + 2 (the border); at most `H - 16`, then the content area scrolls |
 | Position | centred: `x = floor((W - w) / 2)`, `y = max(8, floor((H - h) / 2))` |
-| Frame | `panel` fill, 1 px `fieldBorder` border, no radius, no shadow |
+| Frame | `panel` fill, 1 px `fieldBorder` border inside the width above (Settings is 520 including it), no radius, no shadow |
 | Backdrop | `::backdrop { background: var(--scrim) }` |
 | Title strip | `(0, 0, w, 36)`, `panel`, 1 px `bandEdge` line on its bottom row. Title at x 20, `type.dialogTitle`, `labelPrimary`, vertically centred in the 35 px above the line: `SETTINGS`, `KEYBOARD SHORTCUTS`, `ABOUT`, `CLEAR RECENTS`, `IMPORT LIBRARY`. At the right, `CLOSE` (`type.panelLabel`, `labelSecondary`, hover `labelPrimary`, right edge at w - 20), a `<button>` whose hit area is 64 x 36; same as Cancel / Esc. Not in the tab order (Esc does the same) |
-| Content | starts at y 36 + 20, margins 20 as DESIGN.md 10 |
+| Content | margins 20 as DESIGN.md 10, measured inside the border: content x = dialog x + 21, first content row at title strip bottom + 20 |
 
-Landscape uses the same dialogs when they fit (`W >= w + 16`); otherwise the phone sheet
-(11.2).
+Landscape uses the same dialogs when they fit in both directions (`W >= w + 16` and
+`H >= h + 16`); otherwise the phone sheet (11.2), whose button bar stays on screen. At
+844 x 390 this makes Settings (472 tall) and About sheets; the confirmations are cards
+(11.2) and fit.
 
 ### 11.2 Phone sheets (portrait, and landscape when narrower than the dialog)
 
@@ -919,7 +976,8 @@ Cancel.
 | Content | from y 48 to the button bar, scrolls vertically, padding 16 |
 | Button bar | `(0, H - 68, W, 68)`, `panel`, 1 px `bandEdge` top line; buttons 44 tall at y + 12, from x 16 to W - 16, equal widths, 8 px apart; `type.padLabel` |
 
-**Settings sheet** (content x 16, width `W - 32`, y from the content top):
+**Settings sheet** (content x 16, width `W - 32`, y from the content top; every row at
+exactly this y, whatever the gaps in the desktop dialog's CSS are):
 
 | y | Element |
 |---|---|
@@ -932,7 +990,7 @@ Cancel.
 | 212 | Rule `MIDI INPUT` |
 | 232 | Label `PORT` |
 | 252 | Input combo, full width x 44 |
-| 300 | Input problem line, 20 tall, `type.body` `labelRed`, elided right (DESIGN.md 10.1 texts); empty when there is nothing to say |
+| 300 | Input problem line, 20 tall, `type.body` `labelRed`, elided right (DESIGN.md 10.1 texts); empty when there is nothing to say, and the 20 px stay reserved (the rows below never move) |
 | 324 | Checkbox row `Follow the panel`, 44 tall (indicator at y + 19) |
 | 388 | Rule `BEHAVIOUR` |
 | 408 | Checkbox row `Auto-send on highlight`, 44 |
@@ -943,11 +1001,12 @@ Cancel.
 Button bar: `TEST`, `CANCEL`, `OK` (default style). `CLOSE` = `CANCEL`.
 
 **About sheet**: content as 11.5 at width `W - 32`; the wordmark wraps `FOR ROLAND D-05`
-under `PATCH SWITCHER` (8 px below, no divider) when `W - 32 < 310`. Button bar: `OK`
-only.
+under `PATCH SWITCHER` (8 px below, no divider) when `W - 32 < 310`. The support matrix
+uses its stacked form (6.3) whenever `W - 32 < 380`. Button bar: `OK` only.
 
 **Clear Recents and Import confirmations** are not sheets on phones: centred cards
-`min(360, W - 24)` wide, as 11.1 but with 44 px buttons.
+`min(360, W - 24)` wide, as 11.1 but with 44 px buttons (`type.padLabel`), in portrait
+and landscape alike. The portrait message card (7.10) is the same card with one button.
 
 **Shortcuts** is not offered in the phone layouts (no keyboard).
 
@@ -973,6 +1032,12 @@ is either rebound (designer to approve the new cap text) or dropped from the she
 never shown if it does not work. Rows keep 26 px; the right column loses one row, so
 the client height becomes 386 (`340 - 26 = 314`, `+ 16 + 16`, `+ 40` margins).
 
+Decided at W3: on macOS `Cmd+,` stays with the browser, so the `Settings` row is dropped
+from the sheet there (the `APP` section then holds only `F1`; the sheet's height follows
+its taller column, so it shrinks only if the right column was the taller one); the SYSTEM menu shows no shortcut text for `Settings...` on macOS. The
+sheet is offered in the desktop layout only (`F1` and the menu item are absent on the
+phone layouts, 11.2).
+
 ### 11.5 About, web
 
 DESIGN.md 10.4, with paragraph 2 `Selects patches on a Roland Boutique D-05 over MIDI, in the browser.`
@@ -986,9 +1051,17 @@ above). `OK` as DESIGN.md.
 DESIGN.md 8.2 styling (`panel`, 1 px `fieldBorder`, 4 px padding, items 28 tall with
 `type.body`, hover / keyboard-current `selection`, shortcut text right aligned in
 `labelSecondary`, separators). A `role="menu"` element positioned under the SYSTEM button
-with its right edge on the button's right edge; on phones items are 44 tall, width 240,
-and the menu opens **upward** (bottom edge 4 px above the button). Arrow keys move,
-Enter activates, Esc or a click / tap outside closes. Items:
+with its right edge on the button's right edge; on phones items are 44 tall and the
+width is `min(240, W - 8)`. Direction on phones: **upward** (bottom edge 4 px above the
+button) when the menu fits above the button, which is always the case in portrait;
+otherwise **downward** (top edge 4 px below the button), which is the landscape case,
+where SYSTEM sits at y 56. Desktop: directly under the button, as Qt. Arrow keys move,
+Enter activates, Esc or a click / tap outside closes.
+
+Current item: opened with the keyboard (Enter or Space on SYSTEM), the first item is
+current and shows `selection`; opened by mouse or touch, no item is current until the
+pointer hovers or an arrow key is pressed. In CSS: `.mi:hover, .mi:focus-visible`, not
+`.mi:focus` (the menu still moves focus to its first item so the arrows work). Items:
 
 `Settings...` (`Ctrl+,`), `Keyboard Shortcuts` (`F1`, desktop layout only),
 `Clear Recents...`, separator, `Import Library...`, `Export Library`, separator,
@@ -1000,8 +1073,11 @@ Enter activates, Esc or a click / tap outside closes. Items:
   the Import confirmation: a 360 px dialog built as DESIGN.md 10.5 with title
   `IMPORT LIBRARY`, text `Replace favourites, recents and user names with the ones in <file name>?`
   (wraps to two lines), buttons `IMPORT` (red text, object role as `CLEAR`) and `CANCEL`
-  (default). The result goes to the status bar message: `Imported <n> favourites, <m> names`
-  or, in `labelRed` through the `statusError` role, `Not a library file: <reason>`. If
+  (default). The result goes to the status bar message (portrait: the card 7.10):
+  `Imported <n> favourites, <m> names`, plus ` (<k> entries skipped)` when the import
+  dropped entries it could not read; singular forms `1 favourite`, `1 name`,
+  `1 entry skipped`; `0` stays plural (`0 favourites`). Or, in `labelRed` through the
+  `statusError` role, `Not a library file: <reason>`. If
   W1 makes import a merge instead of a replace, the text becomes `Add the favourites,
   recents and user names in <file name>?` and the button `ADD`.
 
@@ -1032,11 +1108,27 @@ Enter activates, Esc or a click / tap outside closes. Items:
   `"theme_color": "#202326"`, `"background_color": "#202326"`, `"display": "standalone"`,
   `"orientation": "any"`, `"name": "D-05 Patch Switcher"`, `"short_name": "D-05 Switcher"`.
 - Icons: the desktop icon renders (`assets/icons/d05-patch-switcher.svg` at 192 and 512
-  with `inkscape --export-type=png --export-width=<n>`), `"purpose": "any"`. A maskable
-  icon (Android adaptive icons crop to a circle or squircle) needs a full-bleed variant
-  with the display inside the central 80 % safe zone; it does not exist yet (15 item 8).
-  Until then, declare no maskable icon (Android then shows the rounded tile on a white
-  plate).
+  with `inkscape --export-type=png --export-width=<n>`), `"purpose": "any"`, as
+  `web/public/icons/icon-192.png` and `icon-512.png`.
+- **Maskable icon** (Android adaptive icons crop to a circle, squircle or rounded
+  square): `assets/icons/d05-patch-switcher-maskable.svg`, a full-bleed opaque 512
+  square (`panel`, the band from y 310 to the bottom edge with a 3 px `bandEdge` line),
+  the application icon's display and buttons scaled by 1.5 around their centre (dot
+  pitch 12, dot 9). Everything drawn lies inside the central 80 % circle (radius 204.8
+  around 256, 256; the farthest point, a display rim corner, is at radius 191). Rendered
+  as `assets/icons/d05-patch-switcher-maskable-192.png` and `-512.png` (Inkscape, command
+  in `assets/icons/README.md`). The builder copies them unchanged to
+  `web/public/icons/icon-maskable-192.png` and `icon-maskable-512.png`, adds both to the
+  service worker precache, and appends to the manifest's `icons` array, after the two
+  `any` entries:
+
+  ```json
+  { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+  { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ```
+
+  Separate entries, never `"purpose": "any maskable"` (the full-bleed square would then
+  also be used unmasked, where the rounded tile is meant).
 
 ---
 
@@ -1087,8 +1179,9 @@ For the foreman to confirm (behaviour readings the visuals depend on):
 
 For the owner:
 
-8. **Maskable PWA icon** (13): a designer follow-up in `assets/icons/` when the PWA is
-   built (W3). Small.
+8. **Maskable PWA icon** (13): done at the W3 design review
+   (`assets/icons/d05-patch-switcher-maskable.svg` and its 192 / 512 renders). The owner
+   may want to see it on the Redmi's launcher at GW2.
 9. **Portrait pads 2 x 4** instead of the panel's 1 x 8 (7.3): bigger targets at the cost
    of a slightly less literal panel. Landscape and desktop keep 1 x 8.
 10. **Viewport of the Redmi 10A** is inferred (720 x 1600 panel, so 360 x 800 at dpr 2),
