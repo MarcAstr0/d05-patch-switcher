@@ -222,7 +222,13 @@ MainWindow::MainWindow(PatchCatalog &catalog, Library &library, MidiLink &link, 
     , m_link(link)
 {
     setWindowTitle(QStringLiteral("D-05 Patch Switcher"));
-    setWindowIcon(QIcon(QStringLiteral(":/icons/d05-patch-switcher.png")));
+    {
+        QIcon icon;
+        for (const int sz : {16, 24, 32, 48, 64, 128})
+            icon.addFile(QStringLiteral(":/icons/d05-patch-switcher-%1.png").arg(sz), QSize(sz, sz));
+        icon.addFile(QStringLiteral(":/icons/d05-patch-switcher.png"), QSize(256, 256));
+        setWindowIcon(icon);
+    }
     setMinimumSize(800, 480);
     if (m_link.status().startsWith(QStringLiteral("Error")))
         m_startupError = m_link.status();  // the port was opened before the window existed

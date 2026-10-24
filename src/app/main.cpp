@@ -143,6 +143,7 @@ int main(int argc, char *argv[])
     // long as the window is active (SPEC section 5: no timer under 2 s). Draw it steady.
     QApplication::setCursorFlashTime(0);
     QGuiApplication::setApplicationDisplayName(QStringLiteral("D-05 Patch Switcher"));
+    QGuiApplication::setDesktopFileName(QStringLiteral("d05-patch-switcher"));
     const bool themeOk = d05::Theme::install(app);
     if (!themeOk)
         QTextStream(stderr) << "warning: a font or the style sheet could not be loaded from the resources\n";

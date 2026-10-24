@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.marcastr0.d05_patch_switcher</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>D-05 Patch Switcher</name>
+  <summary>Find and select patches on a synthesizer over MIDI</summary>
+  <description>
+    <p>A small desktop app that finds patches by name or address and selects them on a Roland Boutique D-05 with MIDI Bank Select and Program Change.</p>
+    <p>It is not affiliated with or endorsed by Roland Corporation.</p>
+  </description>
+  <url type="homepage">https://github.com/MarcAstr0/d05-patch-switcher</url>
+  <developer id="com.marcastr0"><name>Mario Castro Squella</name></developer>
+  <launchable type="desktop-id">d05-patch-switcher.desktop</launchable>
+  <provides><binary>d05-patch-switcher</binary></provides>
+  <categories><category>Audio</category><category>Midi</category></categories>
+  <content_rating type="oars-1.1"/>
+</component>

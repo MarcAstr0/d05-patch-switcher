@@ -8,6 +8,7 @@ panel buttons with the middle LED lit. No trademarked artwork, no text objects.
 |---|---|---|
 | `d05-patch-switcher.svg` | Source, 256 x 256 viewBox | 2,138 bytes |
 | `d05-patch-switcher.png` | 256 x 256 RGBA, for the AppImage and the Linux desktop file | 3,519 bytes |
+| `d05-patch-switcher-{16,24,32,48,64,128}.png` | Same SVG at each size: window icon (Qt resource) and `share/icons/hicolor/<n>x<n>/apps/` on install | 496 to 1,949 bytes |
 | `d05-patch-switcher.ico` | Windows: 16, 24, 32, 48, 64, 128, 256 px, each stored as PNG | 9,751 bytes |
 | `d05-patch-switcher.icns` | macOS: `ic07`..`ic14` (16@2x to 512@2x), PNG entries | 42,317 bytes |
 
@@ -25,7 +26,8 @@ inkscape d05-patch-switcher.svg --export-type=png --export-width=256 \
   --export-filename=d05-patch-switcher.png
 ```
 
-Intermediate sizes, used by both `.ico` and `.icns`:
+The `-16` to `-128` PNGs are the first six sizes of this loop, copied as
+`d05-patch-switcher-<size>.png`. Intermediate sizes, used by both `.ico` and `.icns`:
 
 ```sh
 for s in 16 24 32 48 64 128 256 512 1024; do

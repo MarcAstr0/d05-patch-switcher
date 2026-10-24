@@ -173,11 +173,14 @@ jobs:
           grep -q "Fake D-05 Out" fake-ports.txt
           "$img" --appimage-extract-and-run --fake-midi --config-dir "$cfg" --channel 1 --send P3-45 2>&1 | tee fake-send.txt
           grep -q "C0 1C" fake-send.txt
-          # Contents: desktop file and the 256 px icon.
+          # Contents: desktop file, icons at every size, metainfo.
           mkdir verify && cd verify
           "$img" --appimage-extract >/dev/null
           test -f squashfs-root/usr/share/applications/d05-patch-switcher.desktop
-          test -f squashfs-root/usr/share/icons/hicolor/256x256/apps/d05-patch-switcher.png
+          for sz in 16 24 32 48 64 128 256; do
+            test -f squashfs-root/usr/share/icons/hicolor/${sz}x${sz}/apps/d05-patch-switcher.png
+          done
+          test -f squashfs-root/usr/share/metainfo/com.marcastr0.d05_patch_switcher.metainfo.xml
           # Size of the app binary alone (linuxdeploy strips it; Qt is separate files).
           bin=squashfs-root/usr/bin/d05-patch-switcher
           size=$(stat -c %s "$bin")

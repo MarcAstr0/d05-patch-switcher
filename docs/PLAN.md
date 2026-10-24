@@ -67,7 +67,7 @@ the D-05 display showed. Fixes go back to the builder.
 ## M4 · Packaging and CI (builder) ◐
 
 - ☑ **T4.1 CI green** on all three runners including the packaging steps; artifacts downloadable from the Actions run. Fix the workflow, not the symptom (pin runner images and action versions when a step is flaky).
-- ☐ **T4.2 Linux AppImage** launches on the dev box from `~/Downloads` with no extra packages; desktop file and icon integrated.
+- ☑ **T4.2 Linux AppImage** launches on the dev box from `~/Downloads` with no extra packages; desktop file and icon integrated.
 - ☐ **T4.3 macOS .dmg** universal (`lipo -info` shows x86_64 and arm64), ad-hoc signed, opens after right-click → Open. The README documents the Gatekeeper step.
 - ☑ **T4.4 Windows zip** runs on a clean Windows 10/11 (CI-only proof: the exe starts with `--list-ports` on the runner).
 - ☐ **T4.5 Pre-release** `v0.9.0` tag → GitHub release with the three files and generated notes.

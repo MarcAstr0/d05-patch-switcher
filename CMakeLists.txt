@@ -81,6 +81,12 @@ qt_add_resources(d05ui "ui"
         assets/theme/arrow-down.png
         assets/theme/arrow-down@2x.png
         assets/icons/d05-patch-switcher.png
+        assets/icons/d05-patch-switcher-16.png
+        assets/icons/d05-patch-switcher-24.png
+        assets/icons/d05-patch-switcher-32.png
+        assets/icons/d05-patch-switcher-48.png
+        assets/icons/d05-patch-switcher-64.png
+        assets/icons/d05-patch-switcher-128.png
 )
 target_link_libraries(d05ui PUBLIC Qt6::Widgets d05core)
 
@@ -102,6 +108,15 @@ install(TARGETS d05-patch-switcher
     RUNTIME DESTINATION bin)
 if(UNIX AND NOT APPLE)
     install(FILES packaging/d05-patch-switcher.desktop DESTINATION share/applications)
+    install(FILES packaging/com.marcastr0.d05_patch_switcher.metainfo.xml DESTINATION share/metainfo)
+    # Hicolor theme icons: 256 px is the unsuffixed master, the rest are -<size>.
+    foreach(sz 16 24 32 48 64 128)
+        install(FILES assets/icons/d05-patch-switcher-${sz}.png
+                DESTINATION share/icons/hicolor/${sz}x${sz}/apps
+                RENAME d05-patch-switcher.png)
+    endforeach()
+    install(FILES assets/icons/d05-patch-switcher.png
+            DESTINATION share/icons/hicolor/256x256/apps)
 endif()
 
 # --- Tests ---
