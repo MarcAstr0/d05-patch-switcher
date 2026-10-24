@@ -58,6 +58,9 @@ public:
     static QString matchPort(const QStringList &ports, const QString &wanted);
     QString status() const { return m_status; }
     QString inputStatus() const { return m_inputStatus; }
+    // The input port that is wanted (as given), and whether it is open now (never while follow is off).
+    QString inputPortName() const { return m_inName; }
+    bool inputConnected() const { return !m_connectedInName.isEmpty(); }
     std::optional<PatchAddress> current() const { return m_current; }
     // Sets the current patch without sending anything (e.g. restored from settings).
     void setCurrent(const PatchAddress &a);
@@ -89,6 +92,8 @@ public:
 
 signals:
     void statusChanged(const QString &status);
+    // The input side's status text changed ("Connected to ...", "Port not found", "Error: ...", or empty).
+    void inputStatusChanged(const QString &status);
     void connectedChanged(bool connected);
     void sent(const d05::PatchAddress &address);
     void currentChanged(const d05::PatchAddress &address);
@@ -103,6 +108,7 @@ private:
     bool applyInput();
     void updatePolling();
     void setStatus(const QString &s);
+    void setInputStatus(const QString &s);
     void dropInput(const QString &status);
     void pruneSent(qint64 now);
     void dropOutput(const QString &status);

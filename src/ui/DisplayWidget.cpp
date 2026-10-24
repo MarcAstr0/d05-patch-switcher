@@ -159,9 +159,15 @@ void DisplayWidget::setEntry(const QString &text)
 
 void DisplayWidget::flashActivity()
 {
+    // A followed patch is not a send: it ends a SENT flash at once (line 2 goes back to the
+    // group name) while the activity LED stays lit, for 400 ms from this message.
     const bool wasOn = m_sent || m_activity;
+    const bool hadSent = m_sent;
+    m_sent = false;
     m_activity = true;
     m_sentTimer.start();
+    if (hadSent)
+        recompute();
     if (!wasOn)
         emit sentChanged(true);
 }
@@ -392,7 +398,11 @@ void DisplayWidget::ensureResources()
     }
     m_frame.setDevicePixelRatio(dpr);
 
-    setFixedSize(fieldLogW + 2 * kMarginX, fieldLogH + 2 * kMarginY);
+    const QSize newSize(fieldLogW + 2 * kMarginX, fieldLogH + 2 * kMarginY);
+    const bool resized = newSize != size();
+    setFixedSize(newSize);
+    if (resized)
+        emit sizeChanged();
 }
 
 void DisplayWidget::buildAtlas()

@@ -109,6 +109,9 @@ signals:
     // Emitted when the SENT flash or an activity flash starts (true) and ends (false);
     // the status bar activity LED follows it.
     void sentChanged(bool on);
+    // The widget's fixed size changed (a DPR or screen change, a new pitch): the window
+    // must lay out again even though it was not resized.
+    void sizeChanged();
 
 protected:
     void paintEvent(QPaintEvent *event) override;

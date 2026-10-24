@@ -58,6 +58,8 @@ public:
     // "ok" or "error": the connection line's state.
     QString connectionState() const;
     QString connectionText() const { return m_fullStatus; }
+    // The input row's problem text ("Port not found", "Error: ..."), empty when none.
+    QString inputProblem() const { return m_inputFullStatus; }
 
 signals:
     // TEST: send the current patch with these (pending) values.
@@ -68,6 +70,7 @@ private:
     void refreshPorts();
     void fillCombo(QComboBox *combo, const QStringList &names, const QString &wanted, bool withNone);
     void updateStatus();
+    void updateInputStatus();
     void updateEnabled();
 
     const MidiLink &m_link;
@@ -75,6 +78,9 @@ private:
     bool m_testPressed = false;
     QString m_listError;
     QStringList m_outNames;
+    QStringList m_inNames;
+    QString m_inListError;
+    QString m_inputFullStatus;
     QString m_fullStatus;
 
     QComboBox *m_outCombo = nullptr;
@@ -88,6 +94,7 @@ private:
     QPushButton *m_ok = nullptr;
     QPushButton *m_cancel = nullptr;
     QLabel *m_connectionText = nullptr;
+    QLabel *m_inputStatus = nullptr;
     QWidget *m_led = nullptr;
 };
 

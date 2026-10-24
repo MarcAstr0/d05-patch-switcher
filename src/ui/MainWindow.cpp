@@ -32,6 +32,7 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QPainter>
+#include <QScopedValueRollback>
 #include <QScrollBar>
 #include <QSignalBlocker>
 #include <QStatusBar>
@@ -136,9 +137,11 @@ public:
         chValue = makeLabel(QStringLiteral("1"), "statusValue", Theme::Role::StatusValue);
         in = makeLabel(QStringLiteral("IN"), "statusLabel", Theme::Role::StatusLabel);
         inValue = makeLabel(QString(), "statusValue", Theme::Role::StatusValue);
+        inNotFound = makeLabel(QStringLiteral("NOT FOUND"), "statusError", Theme::Role::StatusLabel);
         follow = makeLabel(QStringLiteral("FOLLOW"), "statusFollow", Theme::Role::StatusLabel);
         message = makeLabel(QString(), "statusMessage", Theme::Role::StatusValue);
         notFound->hide();
+        inNotFound->hide();
         follow->hide();
     }
 
@@ -175,7 +178,9 @@ public:
         place(ch, 6);
         place(chValue, 16);
         place(in, 6);
-        place(inValue, follow->isHidden() ? 0 : 16);
+        place(inValue, !inNotFound->isHidden() ? 6 : (follow->isHidden() ? 0 : 16));
+        if (!inNotFound->isHidden())
+            place(inNotFound, follow->isHidden() ? 0 : 16);
         if (!follow->isHidden())
             place(follow, 0);
         const int right = width() - kMargin;
@@ -201,7 +206,7 @@ public:
     }
 
     ActivityLed *led;
-    QLabel *out, *port, *notFound, *ch, *chValue, *in, *inValue, *follow, *message;
+    QLabel *out, *port, *notFound, *ch, *chValue, *in, *inValue, *inNotFound, *follow, *message;
     QString fullMessage;
 
 protected:
@@ -377,6 +382,15 @@ void MainWindow::buildWidgets()
     connect(&m_link, &MidiLink::sent, this, &MainWindow::onSent);
     connect(&m_link, &MidiLink::currentChanged, this, &MainWindow::onFollowed);
     connect(&m_link, &MidiLink::connectedChanged, this, &MainWindow::onConnectedChanged);
+    connect(&m_link, &MidiLink::inputStatusChanged, this, [this](const QString &status) {
+        if (status.startsWith(QStringLiteral("Error")))
+            showMessage(QStringLiteral("Input: ") + status);
+        refreshConnection();
+    });
+    connect(m_display, &DisplayWidget::sizeChanged, this, [this] {
+        if (!m_inLayout)
+            layoutAll();  // a DPR or screen change moved the band without a window resize
+    });
     connect(&m_link, &MidiLink::statusChanged, this, [this](const QString &status) {
         if (status.startsWith(QStringLiteral("Error")))
             showMessage(status);
@@ -482,6 +496,7 @@ PanelButton *MainWindow::viewButton(PatchListModel::View view) const
 
 void MainWindow::layoutAll()
 {
+    const QScopedValueRollback<bool> guard(m_inLayout, true);
     const int W = width();
     const int H = height();
 
@@ -960,7 +975,11 @@ void MainWindow::refreshConnection()
     StatusStrip::setValue(s->inValue,
                           m_inputLabel.isEmpty() ? QStringLiteral("None") : fm.elidedText(m_inputLabel, Qt::ElideMiddle, 280),
                           m_inputLabel.isEmpty());
-    s->follow->setVisible(m_link.followEnabled() && !m_inputLabel.isEmpty());
+    // FOLLOW only while the input is really open; follow on with an input that is missing or
+    // failed shows NOT FOUND after it, as the output does.
+    const bool wantsInput = m_link.followEnabled() && !m_inputLabel.isEmpty();
+    s->follow->setVisible(wantsInput && m_link.inputConnected());
+    s->inNotFound->setVisible(wantsInput && !m_link.inputConnected());
     updateDisplayConnection();
     relayoutStatus();
 }

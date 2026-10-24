@@ -66,6 +66,42 @@ private slots:
 #endif
     }
 
+    void inputProblemsAreSignalled()
+    {
+        FakeMidiBackend f;
+        MidiLink link(&f);
+        QSignalSpy st(&link, &MidiLink::inputStatusChanged);
+        link.setInputPort(QStringLiteral("Fake D-05 Out"));
+        QVERIFY(st.isEmpty());  // follow off: nothing wanted, no status
+        QVERIFY(!link.inputConnected());
+        link.setFollowEnabled(true);
+        QVERIFY(link.inputConnected());
+        QCOMPARE(st.last().at(0).toString(), QStringLiteral("Connected to Fake D-05 Out"));
+        // The port vanishes.
+        f.setInputPorts({});
+        QVERIFY(!link.inputConnected());
+        QCOMPARE(st.last().at(0).toString(), QStringLiteral("Port not found"));
+        QCOMPARE(link.inputStatus(), QStringLiteral("Port not found"));
+        // Back again: the poll reconnects it.
+        f.setInputPorts({QStringLiteral("Fake D-05 Out")});
+        link.pollNow();
+        QVERIFY(link.inputConnected());
+        QCOMPARE(st.last().at(0).toString(), QStringLiteral("Connected to Fake D-05 Out"));
+        // An open failure.
+        link.setFollowEnabled(false);
+        QVERIFY(st.last().at(0).toString().isEmpty());
+        f.setFailOpen(true);
+        link.setFollowEnabled(true);
+        QVERIFY(!link.inputConnected());
+        QCOMPARE(st.last().at(0).toString(), QStringLiteral("Error: open failed"));
+        // A listing failure.
+        f.setFailOpen(false);
+        f.setListError(QStringLiteral("boom"));
+        link.setFollowEnabled(false);
+        link.setFollowEnabled(true);
+        QCOMPARE(st.last().at(0).toString(), QStringLiteral("Error: boom"));
+    }
+
     void listsPortsThroughTheLink()
     {
         FakeMidiBackend f;

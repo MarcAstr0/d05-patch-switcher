@@ -148,6 +148,25 @@ private slots:
         QVERIFY(r.w->searchField()->hasFocus());  // DESIGN 9: initial focus
     }
 
+    // A screen or DPR change resizes the display without resizing the window: the band
+    // must follow it.
+    void bandFollowsADisplaySizeChangeWithoutAResize()
+    {
+        Rig r;
+        r.w->resize(800, 480);
+        QVERIFY(r.show());
+        const int heightBefore = r.w->display()->height();
+        QCOMPARE(r.w->bandTop(), 46 + heightBefore + 14);
+        r.w->display()->rebuildForDprForTest(1.25);  // as if moved to a 1.25x screen
+        const int heightAfter = r.w->display()->height();
+        QVERIFY(heightAfter != heightBefore);
+        QCOMPARE(r.w->size(), QSize(800, 480));
+        QCOMPARE(r.w->bandTop(), 46 + heightAfter + 14);
+        QCOMPARE(r.w->list()->geometry().y(), r.w->bandTop() + 104);
+        r.w->display()->rebuildForDprForTest(1.0);
+        QCOMPARE(r.w->bandTop(), 46 + heightBefore + 14);
+    }
+
     void minimumSizeKeepsListUsable()
     {
         Rig r;

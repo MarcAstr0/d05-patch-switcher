@@ -180,6 +180,7 @@ private:
     QString m_inputLabel;
     QString m_inputName;  // the input port as last applied (raw, for change detection)
     bool m_firstShow = true;
+    bool m_inLayout = false;  // layoutAll() is running (its own resize of the display must not recurse)
 
     AppSettings *m_settings = nullptr;
     bool m_autoSendOn = false;

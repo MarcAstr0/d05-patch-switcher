@@ -131,6 +131,13 @@ void SettingsDialog::buildUi()
     m_inCombo->setObjectName(QStringLiteral("inputCombo"));
     itemDelegate(m_inCombo);
     m_inCombo->setGeometry(QRect(at(kControlX, 144), QSize(260, 26)));
+    // DESIGN 10.1 has no slot for an input error; this small red line sits right of the combo,
+    // where the output row has REFRESH.
+    m_inputStatus = new QLabel(this);
+    m_inputStatus->setObjectName(QStringLiteral("inputStatusText"));
+    m_inputStatus->setFont(Theme::font(Theme::Role::Note));
+    m_inputStatus->setStyleSheet(QStringLiteral("QLabel { color: %1; }").arg(Theme::labelRed.name()));
+    m_inputStatus->setGeometry(QRect(at(380, 144), QSize(100, 26)));
     m_follow = new QCheckBox(QStringLiteral("Follow the panel"), this);
     m_follow->setObjectName(QStringLiteral("followCheck"));
     m_follow->setGeometry(QRect(at(kControlX, 178), QSize(kContentW - kControlX, 20)));
@@ -180,7 +187,8 @@ void SettingsDialog::buildUi()
     connect(m_cancel, &QPushButton::clicked, this, &QDialog::reject);
     connect(m_refresh, &QPushButton::clicked, this, &SettingsDialog::refreshPorts);
     connect(m_outCombo, &QComboBox::currentIndexChanged, this, [this] { updateStatus(); });
-    connect(m_inCombo, &QComboBox::currentIndexChanged, this, [this] { updateEnabled(); });
+    connect(m_inCombo, &QComboBox::currentIndexChanged, this, [this] { updateEnabled(); updateInputStatus(); });
+    connect(&m_link, &MidiLink::inputStatusChanged, this, [this] { updateInputStatus(); });
     connect(&m_link, &MidiLink::statusChanged, this, [this] { updateStatus(); });
     connect(&m_link, &MidiLink::connectedChanged, this, [this] { updateStatus(); });
     connect(m_test, &QPushButton::clicked, this, [this] {
@@ -226,10 +234,33 @@ void SettingsDialog::refreshPorts()
     const QStringList ins = m_link.inputPortNames(&inErr);
     m_listError = outErr;
     m_outNames = outs;
+    m_inListError = inErr;
+    m_inNames = ins;
     fillCombo(m_outCombo, outs, wantOut, false);
     fillCombo(m_inCombo, ins, wantIn, true);
     updateStatus();
+    updateInputStatus();
     updateEnabled();
+}
+
+// The input row's problem, if any: a listing error, a port that is not listed, or the link's own
+// open error for the port that is wanted. Empty when the input is None or fine.
+void SettingsDialog::updateInputStatus()
+{
+    const QString selected = m_inCombo->currentData().toString();
+    QString text;
+    if (!m_inListError.isEmpty()) {
+        text = QStringLiteral("Error: ") + m_inListError;
+    } else if (!selected.isEmpty() && MidiLink::matchPort(m_inNames, selected).isEmpty()) {
+        text = QStringLiteral("Port not found");
+    } else if (!selected.isEmpty() && !m_link.inputConnected() && m_link.inputStatus().startsWith(QStringLiteral("Error"))
+               && !MidiLink::matchPort({selected}, m_link.inputPortName()).isEmpty()) {
+        text = m_link.inputStatus();
+    }
+    m_inputFullStatus = text;
+    const QFontMetrics fm(Theme::font(Theme::Role::Note));
+    m_inputStatus->setText(fm.elidedText(text, Qt::ElideRight, 100));
+    m_inputStatus->setToolTip(text);
 }
 
 void SettingsDialog::updateEnabled()

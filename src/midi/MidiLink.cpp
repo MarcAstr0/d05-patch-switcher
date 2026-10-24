@@ -102,6 +102,14 @@ void MidiLink::setStatus(const QString &s)
     emit statusChanged(m_status);
 }
 
+void MidiLink::setInputStatus(const QString &s)
+{
+    if (s == m_inputStatus)
+        return;
+    m_inputStatus = s;
+    emit inputStatusChanged(m_inputStatus);
+}
+
 void MidiLink::setPollIntervalMs(int ms)
 {
     m_timer.setInterval(ms);  // restarts a running timer
@@ -180,27 +188,27 @@ bool MidiLink::applyInput()
     m_connectedInName.clear();
     m_rxMsb = m_rxLsb = -1;
     if (!inputWanted()) {
-        m_inputStatus.clear();
+        setInputStatus(QString());
         return false;
     }
     QString listErr;
     const QStringList ports = m_backend->inputPortNames(&listErr);
     if (!listErr.isEmpty()) {
-        m_inputStatus = QStringLiteral("Error: ") + listErr;
+        setInputStatus(QStringLiteral("Error: ") + listErr);
         return false;
     }
     const QString port = matchPort(ports, m_inName);
     if (port.isEmpty()) {
-        m_inputStatus = QStringLiteral("Port not found");
+        setInputStatus(QStringLiteral("Port not found"));
         return false;
     }
     QString err;
     if (!m_backend->openInput(port, &err)) {
-        m_inputStatus = QStringLiteral("Error: ") + err;
+        setInputStatus(QStringLiteral("Error: ") + err);
         return false;
     }
     m_connectedInName = port;
-    m_inputStatus = QStringLiteral("Connected to ") + portKey(port);
+    setInputStatus(QStringLiteral("Connected to ") + portKey(port));
     return true;
 }
 
@@ -245,7 +253,7 @@ void MidiLink::dropInput(const QString &status)
     m_backend->closeInput();
     m_connectedInName.clear();
     m_rxMsb = m_rxLsb = -1;
-    m_inputStatus = status;
+    setInputStatus(status);
     updatePolling();
 }
 

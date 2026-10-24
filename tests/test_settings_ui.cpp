@@ -25,6 +25,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QStatusBar>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -1359,6 +1360,73 @@ private slots:
         e->setText(QStringLiteral("Quit Name"));
         r.w->action(QStringLiteral("actionQuit"))->trigger();
         QCOMPARE(r.catalog.name(addr("U2-23")), QStringLiteral("Quit Name"));
+    }
+
+    static QStringList visibleStatusTexts(Rig &r)
+    {
+        QStringList texts;
+        for (const QLabel *l : r.w->statusBar()->findChildren<QLabel *>())
+            if (l->isVisibleTo(r.w.get()))
+                texts << l->text();
+        return texts;
+    }
+
+    void statusBarShowsFollowOnlyWhileTheInputIsOpen()
+    {
+        Rig r(followValues());
+        QVERIFY(r.show());
+        QVERIFY(visibleStatusTexts(r).contains(QStringLiteral("FOLLOW")));
+        QVERIFY(!visibleStatusTexts(r).contains(QStringLiteral("NOT FOUND")));
+        r.backend.setInputPorts({});  // the input vanishes
+        QVERIFY(!visibleStatusTexts(r).contains(QStringLiteral("FOLLOW")));
+        QVERIFY(visibleStatusTexts(r).contains(QStringLiteral("NOT FOUND")));
+        r.backend.setInputPorts({kIn});
+        r.link->pollNow();
+        QVERIFY(visibleStatusTexts(r).contains(QStringLiteral("FOLLOW")));
+        QVERIFY(!visibleStatusTexts(r).contains(QStringLiteral("NOT FOUND")));
+        // An input that fails to open is reported as well.
+        r.backend.setFailOpen(true);
+        r.w->applySettings(values(kOut));  // follow off, input None
+        r.w->applySettings(followValues());
+        QVERIFY(!visibleStatusTexts(r).contains(QStringLiteral("FOLLOW")));
+        QVERIFY(visibleStatusTexts(r).contains(QStringLiteral("NOT FOUND")));
+        QVERIFY(r.w->message().startsWith(QStringLiteral("Input: Error")));
+    }
+
+    void dialogShowsInputProblems()
+    {
+        Rig r;
+        AppSettings::Values v = followValues();
+        r.persist(v);
+        SettingsDialog *d = r.openDialog();
+        QCOMPARE(d->inputProblem(), QString());
+        // Listing fails: the error shows on the input row.
+        r.backend.setListError(QStringLiteral("boom"));
+        QTest::mouseClick(d->refreshButton(), Qt::LeftButton);
+        QCOMPARE(d->inputProblem(), QStringLiteral("Error: boom"));
+        r.backend.setListError(QString());
+        QTest::mouseClick(d->refreshButton(), Qt::LeftButton);
+        QCOMPARE(d->inputProblem(), QString());
+        // The saved input is not listed any more.
+        r.backend.setInputPorts({QStringLiteral("Other In")}, false);
+        QTest::mouseClick(d->refreshButton(), Qt::LeftButton);
+        QCOMPARE(d->inputProblem(), QStringLiteral("Port not found"));
+        d->inputCombo()->setCurrentIndex(0);  // None: nothing to report
+        QCOMPARE(d->inputProblem(), QString());
+        d->reject();
+    }
+
+    void dialogShowsAnInputOpenErrorFromTheLink()
+    {
+        Rig r;
+        r.persist(followValues());
+        r.backend.setFailOpen(true);
+        r.w->applySettings(followValues());  // the input is wanted and fails to open
+        QVERIFY(!r.link->inputConnected());
+        SettingsDialog *d = r.openDialog();
+        QCOMPARE(d->inputProblem(), QStringLiteral("Error: open failed"));
+        r.backend.setFailOpen(false);
+        d->reject();
     }
 
     void followIsOffInTheValuesWhenTheInputIsNone()

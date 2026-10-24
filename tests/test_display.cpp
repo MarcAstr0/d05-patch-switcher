@@ -504,6 +504,32 @@ private slots:
         QCOMPARE(f.deviceDot(), last);
     }
 
+    // A followed patch is not a send: it ends a SENT flash at once, the LED goes on for its
+    // own 400 ms, and line 2 never says SENT for it.
+    void followMoveEndsASentFlash()
+    {
+        DisplayWidget d;
+        d.setConnected(true);
+        d.setPatch(addr("P1-11"), QStringLiteral("Fantasia"), QLatin1Char('D'));
+        QSignalSpy led(&d, &DisplayWidget::sentChanged);
+        d.flashSent();
+        QVERIFY(d.line2().startsWith(QStringLiteral("SENT")));
+        QCOMPARE(led.count(), 1);
+        QTest::qWait(200);
+        d.setPatch(addr("P3-45"), QStringLiteral("Some Patch"), QLatin1Char('W'));
+        d.flashActivity();  // the follow move, +200 ms into the SENT flash
+        QVERIFY(!d.line2().startsWith(QStringLiteral("SENT")));
+        QVERIFY(d.line2().startsWith(QStringLiteral("PRESET 3")));
+        QVERIFY(!d.sentActive());
+        QVERIFY(d.activityActive());  // the LED stays lit
+        QCOMPARE(led.count(), 1);     // without a blink in between
+        QTest::qWait(250);            // past the original SENT expiry: still lit, restarted by the follow
+        QVERIFY(d.activityActive());
+        QTRY_VERIFY_WITH_TIMEOUT(!d.activityActive(), 1000);
+        QCOMPARE(led.count(), 2);
+        QVERIFY(!d.line2().startsWith(QStringLiteral("SENT")));
+    }
+
     void screenshotProcessExitCodes()
     {
         QTemporaryDir out;
