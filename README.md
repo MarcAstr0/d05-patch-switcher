@@ -73,6 +73,14 @@ real RtMidi backend against the ALSA `Midi Through` port and checks the bytes wi
 scripts/midi-smoke.sh [path/to/d05-patch-switcher]   # default: build/d05-patch-switcher
 ```
 
+### Developer: CI and packaging
+
+`.github/workflows/build.yml` builds, tests, packages and verifies on Linux, macOS and
+Windows. Qt, linuxdeploy, its Qt plugin and every action are pinned to exact versions
+(actions by commit SHA); bump a version and its sha256 together. Each package step is
+followed by a step that runs the packaged binary (`--version`, `--list-ports`) and
+checks the 2 MB binary limit. Packages are downloadable from each run's Artifacts.
+
 ## Trademarks
 
 Roland, Boutique, D-05 and D-50 are trademarks of Roland Corporation. This project is

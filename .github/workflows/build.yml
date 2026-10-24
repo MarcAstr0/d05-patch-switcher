@@ -4,8 +4,11 @@
 # Public repository: GitHub-hosted runners are free, including macOS and Windows.
 # Qt comes from aqtinstall (jurplel/install-qt-action) and is cached per runner.
 #
-# Milestone 4 of docs/PLAN.md owns making every step here green. Until then, failures
-# in the "package" steps are expected; the build-and-test steps must pass from day one.
+# Everything that could float is pinned: actions to a full commit SHA (tag in the
+# comment), Qt to one exact release, linuxdeploy and its Qt plugin to a release tag plus
+# sha256. To bump one, change the version and its checksum together.
+# Packaging steps are required, and each is followed by a verification step that runs the
+# packaged binary and checks SPEC section 5 (binary size) and section 8 (packaging).
 
 name: build
 
@@ -16,7 +19,13 @@ on:
   pull_request:
 
 env:
-  QT_VERSION: '6.8.*'
+  QT_VERSION: '6.8.3'
+  # SPEC section 5: the app binary (Qt not included) must stay at or under 2 MB.
+  MAX_BINARY_BYTES: '2097152'
+  LINUXDEPLOY_TAG: '1-alpha-20251107-1'
+  LINUXDEPLOY_SHA256: 'c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d'
+  LINUXDEPLOY_QT_TAG: '1-alpha-20250213-1'
+  LINUXDEPLOY_QT_SHA256: '15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1c92724'
 
 jobs:
   build:
@@ -40,10 +49,10 @@ jobs:
             qt_arch: win64_msvc2022_64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install Qt
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
           version: ${{ env.QT_VERSION }}
           host: ${{ matrix.qt_host }}
@@ -85,15 +94,45 @@ jobs:
         run: |
           set -eux
           cmake --install build --prefix AppDir/usr
-          curl -sSL -o linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          curl -sSL -o linuxdeploy-plugin-qt https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          base=https://github.com/linuxdeploy
+          curl -fsSL --retry 3 -o linuxdeploy \
+            "$base/linuxdeploy/releases/download/$LINUXDEPLOY_TAG/linuxdeploy-x86_64.AppImage"
+          curl -fsSL --retry 3 -o linuxdeploy-plugin-qt \
+            "$base/linuxdeploy-plugin-qt/releases/download/$LINUXDEPLOY_QT_TAG/linuxdeploy-plugin-qt-x86_64.AppImage"
+          echo "$LINUXDEPLOY_SHA256  linuxdeploy" | sha256sum -c -
+          echo "$LINUXDEPLOY_QT_SHA256  linuxdeploy-plugin-qt" | sha256sum -c -
           chmod +x linuxdeploy linuxdeploy-plugin-qt
+          export PATH="$PWD:$PATH"
+          export APPIMAGE_EXTRACT_AND_RUN=1
           export QMAKE="$(command -v qmake6 || command -v qmake)"
           export OUTPUT="d05-patch-switcher-x86_64.AppImage"
           ./linuxdeploy --appdir AppDir --plugin qt --output appimage \
             --desktop-file packaging/d05-patch-switcher.desktop \
             --icon-file assets/icons/d05-patch-switcher.png
           mkdir -p dist && mv "$OUTPUT" dist/
+
+      - name: Verify (Linux AppImage)
+        if: matrix.name == 'linux'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          set -eux
+          img="$PWD/dist/d05-patch-switcher-x86_64.AppImage"
+          ls -l "$img"
+          # --appimage-extract-and-run needs no FUSE.
+          "$img" --appimage-extract-and-run --version | tee version.txt
+          grep -q "d05-patch-switcher" version.txt
+          "$img" --appimage-extract-and-run --list-ports
+          # Contents: desktop file and the 256 px icon.
+          mkdir verify && cd verify
+          "$img" --appimage-extract >/dev/null
+          test -f squashfs-root/usr/share/applications/d05-patch-switcher.desktop
+          test -f squashfs-root/usr/share/icons/hicolor/256x256/apps/d05-patch-switcher.png
+          # Size of the app binary alone (linuxdeploy strips it; Qt is separate files).
+          bin=squashfs-root/usr/bin/d05-patch-switcher
+          size=$(stat -c %s "$bin")
+          echo "app binary: $size bytes (limit $MAX_BINARY_BYTES)"
+          test "$size" -le "$MAX_BINARY_BYTES"
 
       - name: Package (macOS .dmg)
         if: matrix.name == 'macos'
@@ -106,6 +145,39 @@ jobs:
           hdiutil create -volname "D-05 Patch Switcher" -srcfolder "$APP" -ov -format UDZO \
             dist/d05-patch-switcher-macos-universal.dmg
 
+      - name: Verify (macOS .dmg)
+        if: matrix.name == 'macos'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          set -eux
+          dmg="$PWD/dist/d05-patch-switcher-macos-universal.dmg"
+          ls -l "$dmg"
+          mnt="$RUNNER_TEMP/d05-dmg"
+          mkdir -p "$mnt"
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mnt"
+          trap 'hdiutil detach "$mnt" -force || true' EXIT
+          app="$mnt/d05-patch-switcher.app"
+          bin="$app/Contents/MacOS/d05-patch-switcher"
+          # Universal: both slices must be present.
+          info="$(lipo -info "$bin")"
+          echo "$info"
+          echo "$info" | grep -q x86_64
+          echo "$info" | grep -q arm64
+          codesign --verify --deep --strict --verbose=2 "$app"
+          "$bin" --version | tee version.txt
+          grep -q "d05-patch-switcher" version.txt
+          "$bin" --list-ports
+          # Size: each architecture slice must fit SPEC section 5 (Qt not included).
+          echo "universal binary: $(stat -f %z "$bin") bytes"
+          for arch in x86_64 arm64; do
+            lipo -thin "$arch" "$bin" -output "$RUNNER_TEMP/slice-$arch"
+            strip -x "$RUNNER_TEMP/slice-$arch"
+            size=$(stat -f %z "$RUNNER_TEMP/slice-$arch")
+            echo "$arch slice, stripped: $size bytes (limit $MAX_BINARY_BYTES)"
+            test "$size" -le "$MAX_BINARY_BYTES"
+          done
+
       - name: Package (Windows zip)
         if: matrix.name == 'windows'
         shell: pwsh
@@ -117,13 +189,46 @@ jobs:
             dist/d05-patch-switcher/d05-patch-switcher.exe
           Compress-Archive -Path dist/d05-patch-switcher/* -DestinationPath dist/d05-patch-switcher-windows-x64.zip
 
+      - name: Verify (Windows zip)
+        if: matrix.name == 'windows'
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Resolve-Path dist/d05-patch-switcher-windows-x64.zip
+          $dir = Join-Path $env:RUNNER_TEMP 'd05-unzipped'
+          if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+          Expand-Archive -Path $zip -DestinationPath $dir
+          $exe = Join-Path $dir 'd05-patch-switcher.exe'
+          if (-not (Test-Path $exe)) { throw "exe missing from zip" }
+          # The exe is GUI-subsystem. Redirecting stdout/stderr to files gives it usable
+          # handles, so main.cpp does not need to attach to a console. Exit codes are
+          # read from the process object.
+          foreach ($args_ in @('--version', '--list-ports')) {
+            $out = Join-Path $env:RUNNER_TEMP ("out" + $args_.TrimStart('-') + ".txt")
+            $err = Join-Path $env:RUNNER_TEMP ("err" + $args_.TrimStart('-') + ".txt")
+            $p = Start-Process -FilePath $exe -ArgumentList $args_ -WorkingDirectory $dir `
+              -Wait -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+            Write-Host "== d05-patch-switcher.exe $args_ (exit $($p.ExitCode))"
+            Get-Content $out, $err | Write-Host
+            if ($p.ExitCode -ne 0) { throw "$args_ exited with $($p.ExitCode)" }
+          }
+          $ver = Get-Content (Join-Path $env:RUNNER_TEMP 'outversion.txt') -Raw
+          if ($ver -notmatch 'd05-patch-switcher') { throw "--version printed nothing useful: '$ver'" }
+          # Size of the app exe alone (Qt DLLs are separate files in the zip).
+          $size = (Get-Item $exe).Length
+          Write-Host "app exe: $size bytes (limit $env:MAX_BINARY_BYTES)"
+          if ($size -gt [int64]$env:MAX_BINARY_BYTES) { throw "binary too large" }
+
+      # Artifact names are the matrix names (linux, macos, windows); the release job
+      # merges them and publishes dist/*, so the file names above are the release assets.
       - name: Upload package
-        if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ matrix.name }}
           path: dist/*
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   release:
     name: release
@@ -133,12 +238,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist
           merge-multiple: true
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: dist/*
           generate_release_notes: true
