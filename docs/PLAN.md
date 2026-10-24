@@ -91,7 +91,7 @@ Started 2026-10-24 after v1.0.0, in the main tree (desktop work is finished).
 - ☑ **W1 Core** (web-builder): `address`, `catalog`, `search`, `library` passing the shared vectors and the spec's own cases; import/export round-trip with a `library.json` written by the desktop app.
 - ☑ **W2 Design addendum** (designer): `docs/design/DESIGN-WEB.md` with the phone layouts; token generation into `theme.css` (from a `docs/design/tokens.json`); fonts served from `web/public`.
 - ☑ **W3 UI** (web-builder): display on canvas, grid, list, settings, keyboard map, views, PWA. Playwright screenshots at desktop and phone sizes reviewed by the designer.
-- ☐ **W4 MIDI and deploy** (web-builder): Web MIDI layer, permission flow, hot-plug, follow mode; GitHub Pages deployment live; size budget check in CI.
+- ☑ **W4 MIDI and deploy** (web-builder): Web MIDI layer, permission flow, hot-plug, follow mode; GitHub Pages deployment live; size budget check in CI.
 - ☐ **RW Review** (reviewer + Codex): all of `web/`.
 
 **Gates (owner).** GW1 Chrome on the MacBook against the rig; GW2 Chrome on the Redmi 10A
@@ -145,3 +145,4 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-24, foreman (W3 readings): Settings opens by itself only on the transition to MIDI granted with no saved port (a page that loads already granted shows `CHOOSE A PORT IN SETTINGS`); portrait gets a message card and a red NOT SAVED marker for storage problems; the import result reads `Imported <n> favourites, <m> names` plus skipped entries; on macOS `Cmd+,` stays with the browser, so it is hidden from the web Shortcuts sheet. Keyboard collisions with browser shortcuts are expectations recorded in `web/src/logic/keymap.ts`, confirmed at GW1/GW3. Rejected: "held PgUp/PgDn sends on every repeat, as on the desktop": the desktop does not (T3.2), so the web must not either.
 - 2026-10-24, foreman (W3 design): portrait message cards are shown for import results and refusals (§7.10) and once per distinct storage/library warning; no card for "Not sent" (the display's line 2 already says NO MIDI OUTPUT when a send cannot go out) or for "Only user slots can be renamed". Supersedes the W3 review fix that carded every message.
 - 2026-10-24, owner: GitHub Pages enabled (source: GitHub Actions) for the web version at https://marcastr0.github.io/d05-patch-switcher/; the web workflow deploys `web/dist` on pushes to main after the tests pass.
+- 2026-10-24, foreman (W4): web 0.9.0 deployed to https://marcastr0.github.io/d05-patch-switcher/ by web.yml run 40134204838 (configure-pages v6.0.0, upload-pages-artifact v5.0.0, deploy-pages v5.0.1, pinned by SHA). The web layer never requests SysEx; realtime bytes are dropped before any allocation.
