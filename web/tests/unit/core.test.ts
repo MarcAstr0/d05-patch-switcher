@@ -405,6 +405,35 @@ describe('library', () => {
     expect(cat.name(A('U1-11'))).toBe('');
   });
 
+  test('reload while dirty: corrupt stored text is set aside before the save; an unreadable store blocks saving', () => {
+    lib.setFavorite(A('P1-11'), true);
+    st.text = '{nope';
+    expect(lib.reload()).toBe('recovered');
+    expect(st.broken).toEqual(['{nope']);
+    vi.advanceTimersByTime(500);
+    expect(JSON.parse(st.text!).favorites).toEqual(['P1-11']);
+
+    lib.setFavorite(A('P2-11'), true);
+    st.text = '{nope again';
+    st.failQuarantine = true;
+    expect(lib.reload()).toBe('sidelineFailed');
+    const writes = st.writes;
+    vi.advanceTimersByTime(5000);
+    expect(st.writes).toBe(writes);
+    expect(st.text).toBe('{nope again');
+    expect(lib.saveError).toMatch(/not overwriting/);
+
+    st.failQuarantine = false;
+    expect(lib.load()).toBe('recovered');
+    lib.setFavorite(A('P3-11'), true);
+    st.failReads = true;
+    expect(lib.reload()).toBe('unreadable');
+    const w2 = st.writes;
+    vi.advanceTimersByTime(5000);
+    expect(st.writes).toBe(w2);
+    expect(lib.saveError).toMatch(/not overwriting/);
+  });
+
   test('userNames: two spellings of one address apply in sorted key order (u111 after U1-11)', () => {
     for (const names of ['{"u111":"A","U1-11":"B"}', '{"U1-11":"B","u111":"A"}']) {
       const c = new Catalog();

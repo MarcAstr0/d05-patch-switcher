@@ -92,7 +92,7 @@ Started 2026-10-24 after v1.0.0, in the main tree (desktop work is finished).
 - ☑ **W2 Design addendum** (designer): `docs/design/DESIGN-WEB.md` with the phone layouts; token generation into `theme.css` (from a `docs/design/tokens.json`); fonts served from `web/public`.
 - ☑ **W3 UI** (web-builder): display on canvas, grid, list, settings, keyboard map, views, PWA. Playwright screenshots at desktop and phone sizes reviewed by the designer.
 - ☑ **W4 MIDI and deploy** (web-builder): Web MIDI layer, permission flow, hot-plug, follow mode; GitHub Pages deployment live; size budget check in CI.
-- ☐ **RW Review** (reviewer + Codex): all of `web/`.
+- ☑ **RW Review** (reviewer + Codex): all of `web/`.
 
 **Gates (owner).** GW1 Chrome on the MacBook against the rig; GW2 Chrome on the Redmi 10A
 over OTG, straight into the D-05 or through a forwarding device; GW3 one pass in Firefox
@@ -149,3 +149,4 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-24, GW1 passed (owner): web 0.9.0 (f8b932e, live on Pages) works in Chrome on the MacBook against the rig. Tested before the RW review fixes; a quick re-check after they deploy is enough.
 - 2026-10-24, GW2 first attempt (owner): on the Redmi 10A in Chrome, with the D-05 directly on USB OTG, Android does not enumerate the D-05 as a MIDI device (MIDI Scope sees nothing; Chrome listed only MIDI Scope's virtual `Scope` port), so no patch changed. Not an app defect. README and docs/MIDI.md now say Android needs a class-compliant interface or a forwarding device. GW2 to be completed through one of those.
 - 2026-10-24, GW3 passed (owner): the web version works in Firefox against the rig.
+- 2026-10-24, RW Codex review (re-run after the usage limit, against f8b932e): six findings, all still present on main and all fixed in web 0.9.2: no name-only port match across manufacturers, open-port identity includes the manufacturer, no connect resend after a TEST of the same target, Settings opens by itself only after an explicit CONNECT, follow state resets on port/channel changes, corrupt library text is set aside (or saving blocked) during a dirty reload.

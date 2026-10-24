@@ -10,7 +10,7 @@ import { Entry } from '../../src/logic/entry';
 import { BINDINGS, capText, matchKey, sheetSections, type KeyLike } from '../../src/logic/keymap';
 import { chooseLayout, computeMetrics, desktopDisplay, phoneDisplay, portraitMetrics, portraitRows } from '../../src/logic/layout';
 import { lcdLines, type LcdInput } from '../../src/logic/lcd';
-import { parseSettings } from '../../src/logic/settings';
+import { findPort, parseSettings } from '../../src/logic/settings';
 import { buildRows, emptyText, rowOf } from '../../src/logic/views';
 import { FakeMidi } from '../../src/midi/fake';
 import { FollowParser } from '../../src/midi/follow';
@@ -305,4 +305,19 @@ describe('web rules', () => {
     for (const f of walk(src)) expect(readFileSync(f, 'utf8'), f).not.toContain('—');
   });
   test('catalog loads 384 presets', () => expect(new Catalog().presetCount()).toBe(384));
+});
+
+describe('findPort', () => {
+  const a = { name: 'USB MIDI', manufacturer: 'Acme' };
+  const b = { name: 'USB MIDI', manufacturer: 'Other' };
+  const bare = { name: 'USB MIDI' };
+  test('exact match wins; a different maker is never a fallback', () => {
+    expect(findPort([a, b], b)).toBe(b);
+    expect(findPort([b], a)).toBeUndefined();
+  });
+  test('name alone matches when either side has no manufacturer', () => {
+    expect(findPort([a], bare)).toBe(a);
+    expect(findPort([bare], a)).toBe(bare);
+    expect(findPort([], a)).toBeUndefined();
+  });
 });

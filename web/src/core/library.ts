@@ -340,6 +340,11 @@ export class Library {
       this.apply(p);
       return 'loaded';
     }
+    return this.sideline(text);
+  }
+
+  /** Sets a corrupt stored text aside. If that fails, writes are blocked so the text is never overwritten. */
+  private sideline(text: string): LoadResult {
     try {
       if (!this.storage.quarantine) throw new Error('no way to set it aside');
       this.storage.quarantine(text);
@@ -348,6 +353,14 @@ export class Library {
       return 'sidelineFailed';
     }
     return 'recovered';
+  }
+
+  private block(result: LoadResult): LoadResult {
+    if (this.blockedReason) {
+      this.cancelTimer();
+      this.setSaveError(this.blockedReason);
+    }
+    return result;
   }
 
   /**
@@ -359,9 +372,14 @@ export class Library {
   reload(): LoadResult {
     if (!this.dirty) return this.load();
     const { text, failed } = this.readStored();
-    if (failed || text === null) return failed ? 'unreadable' : 'fresh';
+    if (failed) {
+      this.blockedReason = 'Stored library could not be read; not overwriting it.';
+      return this.block('unreadable');
+    }
+    if (text === null) return 'fresh';
     const p = parseLibraryJson(text);
-    if (!p) return 'recovered'; // keep the local edits; the next save replaces the corrupt value
+    // Keep the local edits, but set the corrupt value aside first (or block saving if that fails).
+    if (!p) return this.block(this.sideline(text));
     const fav = new Map(this.favs.map((a) => [a.index, a] as const));
     for (const a of p.favorites) fav.set(a.index, a);
     this.favs = [...fav.values()].sort((x, y) => x.index - y.index);

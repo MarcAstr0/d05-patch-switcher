@@ -7,10 +7,10 @@ import { accessContent, detectEnv, type Env } from './logic/access';
 import { isMac, matchKey, capText, comboOf, type Action, type KeyContext } from './logic/keymap';
 import { computeMetrics, type Metrics } from './logic/layout';
 import { lcdLines } from './logic/lcd';
-import { SettingsStore, localStore } from './logic/settings';
+import { SettingsStore, findPort, localStore } from './logic/settings';
 import { buildRows, emptyText, emptyTextPhone, rowOf, searchActive, type Row, type View } from './logic/views';
 import { FollowParser } from './midi/follow';
-import type { MidiPort } from './midi/port';
+import type { MidiPort, PortInfo } from './midi/port';
 import { aboutDialog, confirmDialog, modalOpen, settingsDialog, shortcutsDialog } from './ui/dialogs';
 import { SEPARATOR, openMenu, type MenuItem } from './ui/menu';
 import { Panel } from './ui/panel';
@@ -57,6 +57,10 @@ export class Controller {
   private openName: string | null = null;
   private resendBlocked = false;
   private connectPending = false;
+  /** The user pressed CONNECT MIDI / TRY AGAIN: only then does a new grant open Settings (DESIGN-WEB 6.1). */
+  private userConnect = false;
+  /** The port and channel last tried with TEST in this Settings session. */
+  private tested: { key: string; channel: number } | null = null;
   private settingsOpen = false;
   private menu: { close(): void } | null = null;
   private repeatKey: string | null = null;
@@ -90,7 +94,10 @@ export class Controller {
       query: (t) => this.setQuery(t),
       openSearch: () => this.openOverlay(true),
       closeSearch: () => this.closeOverlay(),
-      connect: () => port.requestAccess(),
+      connect: () => {
+        this.userConnect = true;
+        port.requestAccess();
+      },
       onRowClick: (row) => {
         this.highlightAddr = row.address;
         this.send(row.address);
@@ -574,12 +581,14 @@ export class Controller {
     const before = key();
     this.settings.reload();
     this.channel = this.settings.value.channel;
+    this.follow.reset();
     if (key() !== before) this.applyPorts();
     this.render();
   }
 
   private applyPorts(): void {
     const s = this.settings.value;
+    this.follow.reset();
     this.port.setOutput(s.output);
     this.port.setInput(s.follow ? s.input : null);
   }
@@ -589,21 +598,30 @@ export class Controller {
     const was = this.lastAccess;
     this.lastAccess = access;
     if (access === 'granted' && was !== 'granted') {
+      const asked = this.userConnect;
+      this.userConnect = false;
       this.applyPorts();
-      // First change to granted with no port ever saved: Settings opens by itself (DESIGN-WEB 6.1).
-      if (this.settings.value.output === null && !this.settingsOpen) {
+      // The user's own grant with no port ever saved: Settings opens by itself (DESIGN-WEB 6.1).
+      // An existing grant found at start-up only shows CHOOSE A PORT IN SETTINGS.
+      if (asked && this.settings.value.output === null && !this.settingsOpen) {
         this.render();
         this.openSettings();
         return;
       }
     }
-    const open = this.outputOpen() ? (this.settings.value.output?.name ?? null) : null;
+    const open = this.outputOpen() ? this.openKey(this.settings.value.output) : null;
     if (open !== null && open !== this.openName) {
       this.openName = open;
       if (this.settingsOpen) this.connectPending = true;
       else if (this.settings.value.resendOnConnect) this.resendCurrent();
     } else if (open === null) this.openName = null;
     this.render();
+  }
+
+  /** Identity of the open output: name plus manufacturer, so same-named ports differ. */
+  private openKey(want: PortInfo | null): string | null {
+    const p = findPort(this.port.outputs(), want);
+    return p ? `${p.name}\u0000${p.manufacturer ?? ''}` : want ? `${want.name}\u0000${want.manufacturer ?? ''}` : null;
   }
 
   private setAutoSend(on: boolean): void {
@@ -616,6 +634,7 @@ export class Controller {
     if (this.settingsOpen) return;
     this.settingsOpen = true;
     const before = { output: this.settings.value.output, channel: this.channel };
+    this.tested = null;
     const sheet = this.useSheet(520, SETTINGS_H);
     settingsDialog(document.body, {
       port: this.port,
@@ -625,18 +644,22 @@ export class Controller {
       onTest: (p) => {
         this.port.setOutput(p.output);
         this.channel = p.channel;
+        this.follow.reset();
+        this.tested = { key: this.openKey(p.output) ?? '', channel: p.channel };
         this.resendQuietly();
       },
       onOk: (next) => {
         next.lastPatch = this.settings.value.lastPatch;
         this.settings.value = next;
         this.channel = next.channel;
+        this.follow.reset();
         this.settings.save();
         this.resendBlocked = false;
         this.applyPorts();
       },
       onCancel: () => {
         this.channel = before.channel;
+        this.follow.reset();
         this.port.setOutput(before.output);
         this.connectPending = false; // the restored port is the one that was open before: nothing to resend
       },
@@ -648,7 +671,10 @@ export class Controller {
         }
         if (this.connectPending) {
           this.connectPending = false;
-          if (this.settings.value.resendOnConnect) this.resendCurrent();
+          // TEST already sent to this port on this channel, and it is still open: no second send.
+          const t = this.tested;
+          const done = t !== null && this.outputOpen() && t.channel === this.channel && t.key === this.openKey(this.settings.value.output);
+          if (this.settings.value.resendOnConnect && !done) this.resendCurrent();
         }
         this.render();
       },

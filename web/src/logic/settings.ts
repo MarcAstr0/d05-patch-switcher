@@ -4,7 +4,11 @@ import type { PortInfo } from '../midi/port';
 /** The port in `list` that is `want`: name and manufacturer first, then the name alone. */
 export function findPort<T extends PortInfo>(list: readonly T[], want: PortInfo | null): T | undefined {
   if (!want) return undefined;
-  return list.find((p) => p.name === want.name && p.manufacturer === want.manufacturer) ?? list.find((p) => p.name === want.name);
+  const exact = list.find((p) => p.name === want.name && p.manufacturer === want.manufacturer);
+  if (exact) return exact;
+  // Name alone matches only when one side does not know its manufacturer; a same-named port from
+  // another maker is a different device.
+  return list.find((p) => p.name === want.name && (!want.manufacturer || !p.manufacturer));
 }
 
 export interface Settings {
