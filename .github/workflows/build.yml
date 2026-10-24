@@ -235,6 +235,9 @@ jobs:
           hires="$(/usr/libexec/PlistBuddy -c 'Print NSHighResolutionCapable' "$plist")"
           echo "NSHighResolutionCapable: $hires"
           echo "$hires" | grep -qi true
+          minos="$(/usr/libexec/PlistBuddy -c 'Print LSMinimumSystemVersion' "$plist")"
+          echo "LSMinimumSystemVersion: $minos"
+          test "$minos" = "12.0"
           "$bin" --version | tee version.txt
           grep -q "d05-patch-switcher" version.txt
           "$bin" --list-ports
