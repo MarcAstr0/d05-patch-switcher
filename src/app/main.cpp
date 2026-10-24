@@ -17,6 +17,8 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QEvent>
 #include <QTextStream>
 
 #include <cstdio>
@@ -75,6 +77,24 @@ void attachConsole()
 #endif
 }
 
+// Measurement aid for scripts/measure-footprint.sh: when D05_FIRST_PAINT_STAMP is set, prints
+// the wall-clock time of the window's first paint to stderr, once. Not installed otherwise.
+class FirstPaintStamp : public QObject
+{
+public:
+    using QObject::QObject;
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() == QEvent::Paint) {
+            QTextStream(stderr) << "first-paint-ms " << QDateTime::currentMSecsSinceEpoch() << "\n";
+            watched->removeEventFilter(this);
+        }
+        return false;
+    }
+};
+
 }  // namespace
 
 int main(int argc, char *argv[])
@@ -119,6 +139,9 @@ int main(int argc, char *argv[])
     if (opts.wantsScreenshot() && !qEnvironmentVariableIsSet("QT_QPA_PLATFORM"))
         qputenv("QT_QPA_PLATFORM", "offscreen");
     QApplication app(argc, argv);
+    // A blinking text caret in the focused search box wakes the event loop twice a second for as
+    // long as the window is active (SPEC section 5: no timer under 2 s). Draw it steady.
+    QApplication::setCursorFlashTime(0);
     QGuiApplication::setApplicationDisplayName(QStringLiteral("D-05 Patch Switcher"));
     const bool themeOk = d05::Theme::install(app);
     if (!themeOk)
@@ -157,6 +180,9 @@ int main(int argc, char *argv[])
         window.showMessage(QStringLiteral("Library file was damaged; started a fresh one"));
     else if (loaded == d05::Library::LoadResult::Unreadable || loaded == d05::Library::LoadResult::SidelineFailed)
         window.showMessage(QStringLiteral("Library file could not be read; changes will not be saved"));
+    FirstPaintStamp paintStamp;
+    if (qEnvironmentVariableIsSet("D05_FIRST_PAINT_STAMP"))
+        window.installEventFilter(&paintStamp);
     window.show();
     return app.exec();
 }
