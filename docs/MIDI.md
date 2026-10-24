@@ -78,12 +78,28 @@ The reverse direction (D-05 DIN out → Hapax DIN in → USB) only exists if tha
 is connected and the Hapax forwards it; follow-the-panel is therefore optional and off
 by default.
 
-The Hapax is a class-compliant USB MIDI device, so the same path works on Linux with
-no driver. That is how the builder tests against real hardware on the Linux machine:
-move the Hapax's USB cable from the Mac to the Linux box.
+### Hardware tests on the Linux box
 
-The D-05's own micro-USB port needs Roland's driver on macOS and Windows for
-"vendor" mode and has no Linux driver at all; the app does not depend on it.
+The Hapax is fixed in the synth room, so the owner's plan (2026-10-24) is to bring the
+**D-05 module to the Linux box and plug it in over USB directly**. Whether that works
+is **unverified**:
+
+- Roland's D-05 manual says the USB driver must be installed and documents no
+  GENERIC / class-compliant mode for this unit (other Roland products have a `USB
+  Driver: VENDOR / GENERIC` setting; the D-05's documented power-on combinations are
+  `FUNCTION` = USB-drive backup mode, `PATCH BANK [2]` = factory reset, `PATCH NUMBER
+  [1]` = fixed battery operation).
+- Forum users report the D-05 enumerating on Linux with no driver, which would be the
+  kernel's Roland quirk tables doing the work. Anecdotal.
+
+So the first step of any Linux hardware test is `aconnect -l` (or
+`./build/d05-patch-switcher --list-ports`) with the D-05 on and plugged in. If a D-05
+client appears, use its port and the port name in the app will be the D-05's own. If
+nothing appears, fall back to the Hapax: it is a class-compliant USB MIDI device and
+the path above works on Linux with no driver when its USB cable is moved to the box.
+
+On macOS and Windows the D-05's own USB port needs Roland's driver; the app does not
+depend on it because the owner's Mac talks to the Hapax.
 
 ## Testing without hardware (Linux)
 
@@ -104,7 +120,7 @@ the bytes without opening any port, which is what the unit tests use.
 ## Hardware checklist (the owner runs this)
 
 1. D-05 on, `SYSTEM` → `MIDI`: `CH` matches the app, `Prog.C` ON (and `Bank.S` ON if the menu has it).
-2. Hapax on, thru routing from USB device in to the D-05's DIN out enabled.
+2. Through the Hapax: Hapax on, thru routing from USB device in to the D-05's DIN out enabled. D-05 on USB directly: confirm it appears in `--list-ports` first (see "Hardware tests on the Linux box").
 3. App: Settings → output port = the Hapax; channel as above; "Test" sends the current
    patch. The D-05 display must change to it.
 4. From the app select `P1-11` *Fantasia*, then `P2-11` *Neo Horizon*, then `P6-88`
