@@ -12,6 +12,7 @@ class QFrame;
 class QLabel;
 class QLineEdit;
 class QMenu;
+class QMenuBar;
 class QButtonGroup;
 
 namespace d05 {
@@ -86,7 +87,7 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
-    enum class Restore { Keep, First, Current };
+    enum class Restore { Keep, First, Current, BeforeSearch };
 
     void buildWidgets();
     void buildActions();
@@ -116,6 +117,8 @@ private:
     int m_bandTop = 0;
     Restore m_restore = Restore::Keep;
     std::optional<PatchAddress> m_savedHighlight;
+    std::optional<PatchAddress> m_preSearch;
+    QString m_startupError;
     QString m_inputLabel;
     bool m_firstShow = true;
 
@@ -139,6 +142,7 @@ private:
     PatchDelegate *m_delegate = nullptr;
     QMenu *m_systemMenu = nullptr;
     QWidget *m_statusStrip = nullptr;
+    QMenuBar *m_nativeMenuBar = nullptr;  // macOS only
 };
 
 }  // namespace d05

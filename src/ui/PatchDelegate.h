@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ui/PatchListModel.h"
+
 #include <QBrush>
 #include <QFont>
 #include <QFontMetrics>
@@ -7,6 +9,7 @@
 #include <QPen>
 #include <QStaticText>
 #include <QStyledItemDelegate>
+#include <QVector>
 
 namespace d05 {
 
@@ -29,7 +32,21 @@ public:
     // delegate, never per paint (tests).
     static int resourceBuildCount();
 
+    // Computes, outside any paint, each row's elided name and the x offsets and widths of
+    // its search highlights for a row `width` px wide (DESIGN 7.3). PatchListView calls it
+    // when the model resets and when the view is resized. A paint finding the cache stale
+    // (wrong row count or width) falls back to computing the same values inline.
+    void prepare(const PatchListModel &model, int width);
+
 private:
+    struct RowLayout {
+        QString elided;     // empty when the name fits
+        int visibleW = 0;   // px of name text actually visible (without the ellipsis)
+        QVector<QPair<int, int>> highlights;  // x relative to the name start, width; clipped
+    };
+    void layoutRow(const PatchListModel::Row &, int width, RowLayout *out) const;
+    QVector<RowLayout> m_layouts;
+    int m_layoutWidth = -1;
     QFont m_nameFont;
     QFont m_addressFont;
     QFont m_metaFont;

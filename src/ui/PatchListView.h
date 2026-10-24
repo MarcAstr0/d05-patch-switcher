@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QFont>
+#include <QFontMetricsF>
 #include <QListView>
 #include <QString>
 
@@ -12,6 +14,8 @@ class PatchListView : public QListView {
 public:
     explicit PatchListView(QWidget *parent = nullptr);
 
+    void setModel(QAbstractItemModel *model) override;
+
     // The two lines drawn when the model has no rows; both empty = nothing drawn.
     void setEmptyText(const QString &title, const QString &note);
     QString emptyTitle() const { return m_title; }
@@ -20,12 +24,26 @@ public:
 signals:
     // Enter or Return on the highlighted row (a click is the view's own clicked()).
     void sendRequested(const QModelIndex &index);
+    // A single left click released on a row. A double-click yields exactly one of these
+    // (its second release is swallowed), so a double-click sends once and stays free
+    // for the rename gesture on user rows.
+    void rowClicked(const QModelIndex &index);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
 
 private:
+    void prepareDelegate();
+
+    QFont m_titleFont;
+    QFont m_noteFont;
+    QFontMetricsF m_titleMetrics;
+    QFontMetricsF m_noteMetrics;
+    bool m_afterDoubleClick = false;
     QString m_title;
     QString m_note;
 };

@@ -3,6 +3,7 @@
 #include "app/Paths.h"
 #include "core/Library.h"
 #include "core/PatchCatalog.h"
+#include "core/SearchQuery.h"
 #include "midi/MidiLink.h"
 #include "ui/BankGrid.h"
 #include "ui/DisplayWidget.h"
@@ -25,6 +26,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMenuBar>
 #include <QPainter>
 #include <QScrollBar>
 #include <QStatusBar>
@@ -48,17 +50,22 @@ public:
         int centreX;
         int baseline;  // band-local
         QColor colour;
+        int left = 0;  // filled in by setLabels
     };
 
     explicit Band(QWidget *parent)
         : QFrame(parent)
     {
         setObjectName(QStringLiteral("band"));
+        m_font = Theme::font(Theme::Role::PanelLabel);
+        m_metrics = QFontMetricsF(m_font);
     }
 
     void setLabels(const QVector<Label> &labels)
     {
         m_labels = labels;
+        for (Label &l : m_labels)
+            l.left = qRound(l.centreX - m_metrics.horizontalAdvance(l.text) / 2);
         update();
     }
 
@@ -67,16 +74,16 @@ protected:
     {
         QFrame::paintEvent(event);
         QPainter p(this);
-        const QFont font = Theme::font(Theme::Role::PanelLabel);
-        const QFontMetricsF fm(font);
-        p.setFont(font);
+        p.setFont(m_font);
         for (const Label &l : m_labels) {
             p.setPen(l.colour);
-            p.drawText(QPoint(qRound(l.centreX - fm.horizontalAdvance(l.text) / 2), l.baseline), l.text);
+            p.drawText(QPoint(l.left, l.baseline), l.text);
         }
     }
 
 private:
+    QFont m_font;
+    QFontMetricsF m_metrics{QFont()};
     QVector<Label> m_labels;
 };
 
@@ -212,6 +219,8 @@ MainWindow::MainWindow(PatchCatalog &catalog, Library &library, MidiLink &link, 
     setWindowTitle(QStringLiteral("D-05 Patch Switcher"));
     setWindowIcon(QIcon(QStringLiteral(":/icons/d05-patch-switcher.png")));
     setMinimumSize(800, 480);
+    if (m_link.status().startsWith(QStringLiteral("Error")))
+        m_startupError = m_link.status();  // the port was opened before the window existed
     if (m_link.current())
         m_current = *m_link.current();
     else
@@ -225,6 +234,8 @@ MainWindow::MainWindow(PatchCatalog &catalog, Library &library, MidiLink &link, 
     applyCurrent(m_current);
     updateDisplayConnection();
     refreshConnection();
+    if (!m_startupError.isEmpty())
+        showMessage(m_startupError);
     onModelReset();
     highlightCurrent(true);
     m_search->setFocus();
@@ -236,10 +247,8 @@ void MainWindow::buildWidgets()
 {
     m_central = new QWidget(this);
     setCentralWidget(m_central);
-    m_central->installEventFilter(this);
 
     m_band = new Band(m_central);
-    m_band->installEventFilter(this);
 
     m_nameplate = new Nameplate(Paths::logoPath(), m_central);
     m_display = new DisplayWidget(m_central);
@@ -280,9 +289,9 @@ void MainWindow::buildWidgets()
 
     m_model = new PatchListModel(m_catalog, m_library, this);
     m_list = new PatchListView(m_central);
-    m_list->setModel(m_model);
     m_delegate = new PatchDelegate(m_list);
-    m_list->setItemDelegate(m_delegate);
+    m_list->setItemDelegate(m_delegate);  // before the model: the list measures rows for it
+    m_list->setModel(m_model);
 
     // Tooltips name the action and its key (DESIGN 6.2).
     m_prev->setToolTip(QStringLiteral("Previous patch (%1)").arg(shortcutText(QKeySequence(Qt::Key_PageUp))));
@@ -315,7 +324,7 @@ void MainWindow::buildWidgets()
     connect(m_search, &QLineEdit::textChanged, this, &MainWindow::onQueryChanged);
     connect(m_search, &QLineEdit::returnPressed, this, &MainWindow::sendHighlighted);
     connect(m_list, &PatchListView::sendRequested, this, [this](const QModelIndex &) { sendHighlighted(); });
-    connect(m_list, &QAbstractItemView::clicked, this, [this](const QModelIndex &index) {
+    connect(m_list, &PatchListView::rowClicked, this, [this](const QModelIndex &index) {
         sendAddress(m_model->addressAt(index));
     });
     connect(m_model, &QAbstractItemModel::modelAboutToBeReset, this, &MainWindow::onModelAboutToReset);
@@ -372,8 +381,11 @@ void MainWindow::buildActions()
     make(QStringLiteral("actionFocusSearchCtrlF"), QStringLiteral("Find"), QKeySequence(Qt::CTRL | Qt::Key_F),
          [this] { focusSearch(); });
     make(QStringLiteral("actionEscape"), QStringLiteral("Clear search"), QKeySequence(Qt::Key_Escape), [this] { onEscape(); });
-    make(QStringLiteral("actionPrev"), QStringLiteral("Previous patch"), QKeySequence(Qt::Key_PageUp), [this] { step(-1); });
-    make(QStringLiteral("actionNext"), QStringLiteral("Next patch"), QKeySequence(Qt::Key_PageDown), [this] { step(1); });
+    // Every trigger sends MIDI: holding the key must not stream patches at the synth.
+    make(QStringLiteral("actionPrev"), QStringLiteral("Previous patch"), QKeySequence(Qt::Key_PageUp), [this] { step(-1); })
+        ->setAutoRepeat(false);
+    make(QStringLiteral("actionNext"), QStringLiteral("Next patch"), QKeySequence(Qt::Key_PageDown), [this] { step(1); })
+        ->setAutoRepeat(false);
     make(QStringLiteral("actionGridEntry"), QStringLiteral("Enter bank and number"), QKeySequence(Qt::CTRL | Qt::Key_G),
          [this] { beginGridEntry(); });
     make(QStringLiteral("actionViewAll"), QStringLiteral("All"), QKeySequence(Qt::CTRL | Qt::Key_1),
@@ -406,6 +418,18 @@ void MainWindow::buildActions()
     m_systemMenu->addAction(about);
     m_systemMenu->addSeparator();
     m_systemMenu->addAction(quit);
+
+#ifdef Q_OS_MACOS
+    // DESIGN 8.2: on macOS the same actions also live in the native menu bar (a parentless
+    // QMenuBar); there is no in-window menu bar on any platform.
+    settings->setMenuRole(QAction::PreferencesRole);
+    about->setMenuRole(QAction::AboutRole);
+    quit->setMenuRole(QAction::QuitRole);
+    auto *nativeBar = new QMenuBar(nullptr);
+    QMenu *appMenu = nativeBar->addMenu(QStringLiteral("D-05 Patch Switcher"));
+    appMenu->addActions({settings, sheet, clear, about, quit});
+    m_nativeMenuBar = nativeBar;
+#endif
 }
 
 QAction *MainWindow::action(const QString &name) const
@@ -505,8 +529,12 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *e)
 {
     if (e->type() == QEvent::Resize && watched == statusBar()) {
         m_statusStrip->setGeometry(0, 1, statusBar()->width(), statusBar()->height() - 1);
-    } else if (e->type() == QEvent::MouseButtonPress && (watched == m_central || watched == m_band)) {
-        m_grid->cancelEntry();  // a click outside the grid cancels a pending entry
+    } else if (e->type() == QEvent::MouseButtonPress && m_grid->stage() != BankGrid::Stage::Idle) {
+        // Application-wide filter, installed only while an entry is pending (DESIGN 6.4):
+        // a press on anything in this window but the grid cancels the entry.
+        const auto *w = qobject_cast<QWidget *>(watched);
+        if (w && w->window() == this && w != m_grid && !m_grid->isAncestorOf(w))
+            m_grid->cancelEntry();
     } else if (watched == m_search && e->type() == QEvent::KeyPress) {
         const int key = static_cast<QKeyEvent *>(e)->key();
         if (key == Qt::Key_Up || key == Qt::Key_Down) {
@@ -583,7 +611,14 @@ std::optional<PatchAddress> MainWindow::highlighted() const
 
 void MainWindow::onQueryChanged(const QString &text)
 {
-    m_restore = Restore::First;
+    const bool wasSearching = m_model->searchActive();
+    if (!SearchQuery(text).isEmpty()) {
+        if (!wasSearching)
+            m_preSearch = highlighted();  // where the user was before searching
+        m_restore = Restore::First;
+    } else {
+        m_restore = Restore::BeforeSearch;
+    }
     m_model->setQuery(text);
     m_restore = Restore::Keep;
 }
@@ -618,6 +653,15 @@ void MainWindow::onModelReset()
         break;
     case Restore::Current:
         if (m_model->rowOf(m_current) >= 0)
+            highlightCurrent(true);
+        else
+            highlightRow(0, false);
+        break;
+    case Restore::BeforeSearch:
+        // The search was cleared: back to the row the user had, else the current patch.
+        if (m_preSearch && m_model->rowOf(*m_preSearch) >= 0)
+            highlightRow(m_model->rowOf(*m_preSearch), true);
+        else if (m_model->rowOf(m_current) >= 0)
             highlightCurrent(true);
         else
             highlightRow(0, false);
@@ -684,6 +728,10 @@ void MainWindow::onEscape()
 void MainWindow::onEntryChanged()
 {
     const bool idle = m_grid->stage() == BankGrid::Stage::Idle;
+    if (idle)
+        qApp->removeEventFilter(this);
+    else
+        qApp->installEventFilter(this);  // Qt ignores a second install of the same filter
     m_display->setEntry(m_grid->entryText());
     m_groupBar->setLitGroup(idle ? m_current.group() : m_grid->entryGroup(), idle);
     if (!idle && !m_grid->hasFocus())

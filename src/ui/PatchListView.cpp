@@ -1,5 +1,7 @@
 #include "ui/PatchListView.h"
 
+#include "ui/PatchDelegate.h"
+#include "ui/PatchListModel.h"
 #include "ui/Theme.h"
 
 #include <QFontMetricsF>
@@ -12,6 +14,10 @@ namespace d05 {
 
 PatchListView::PatchListView(QWidget *parent)
     : QListView(parent)
+    , m_titleFont(Theme::font(Theme::Role::EmptyTitle))
+    , m_noteFont(Theme::font(Theme::Role::Note))
+    , m_titleMetrics(m_titleFont)
+    , m_noteMetrics(m_noteFont)
 {
     setObjectName(QStringLiteral("patchList"));
     setUniformItemSizes(true);
@@ -46,20 +52,60 @@ void PatchListView::paintEvent(QPaintEvent *event)
     if ((m_title.isEmpty() && m_note.isEmpty()) || (model() && model()->rowCount() > 0))
         return;
     QPainter p(viewport());
-    const QFont titleFont = Theme::font(Theme::Role::EmptyTitle);
-    const QFont noteFont = Theme::font(Theme::Role::Note);
-    const QFontMetricsF tfm(titleFont);
-    const QFontMetricsF nfm(noteFont);
+    const QFontMetricsF &tfm = m_titleMetrics;
+    const QFontMetricsF &nfm = m_noteMetrics;
     const int w = viewport()->width();
     const int top = viewport()->height() * 38 / 100;
     const int titleBase = top + qRound(tfm.ascent());
-    p.setFont(titleFont);
+    p.setFont(m_titleFont);
     p.setPen(Theme::labelSecondary);
     p.drawText(QPoint(qRound((w - tfm.horizontalAdvance(m_title)) / 2), titleBase), m_title);
     const int noteTop = top + qRound(tfm.ascent() + tfm.descent()) + 8;
-    p.setFont(noteFont);
+    p.setFont(m_noteFont);
     p.setPen(Theme::labelDim);
     p.drawText(QPoint(qRound((w - nfm.horizontalAdvance(m_note)) / 2), noteTop + qRound(nfm.ascent())), m_note);
+}
+
+void PatchListView::setModel(QAbstractItemModel *m)
+{
+    QListView::setModel(m);
+    if (m) {
+        connect(m, &QAbstractItemModel::modelReset, this, &PatchListView::prepareDelegate);
+        prepareDelegate();
+    }
+}
+
+// Row layouts (elision, highlight offsets) are measured here, never in paint.
+void PatchListView::prepareDelegate()
+{
+    auto *delegate = qobject_cast<PatchDelegate *>(itemDelegate());
+    auto *list = qobject_cast<PatchListModel *>(model());
+    if (delegate && list)
+        delegate->prepare(*list, viewport()->width());
+}
+
+void PatchListView::resizeEvent(QResizeEvent *event)
+{
+    QListView::resizeEvent(event);
+    prepareDelegate();
+}
+
+void PatchListView::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    m_afterDoubleClick = true;
+    QListView::mouseDoubleClickEvent(event);
+}
+
+void PatchListView::mouseReleaseEvent(QMouseEvent *event)
+{
+    const bool swallow = m_afterDoubleClick;
+    m_afterDoubleClick = false;
+    QListView::mouseReleaseEvent(event);
+    if (event->button() == Qt::LeftButton && !swallow) {
+        const QModelIndex i = indexAt(event->position().toPoint());
+        if (i.isValid())
+            emit rowClicked(i);
+    }
 }
 
 void PatchListView::keyPressEvent(QKeyEvent *event)

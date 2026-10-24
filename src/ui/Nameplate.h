@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QImage>
 #include <QPixmap>
 #include <QWidget>
 
@@ -17,7 +16,10 @@ public:
 
     explicit Nameplate(const QString &logoPath, QWidget *parent = nullptr);
 
-    bool hasLogo() const { return !m_logo.isNull(); }
+    // Largest side accepted for logo.png; anything bigger falls back to the wordmark.
+    static constexpr int MaxLogoSide = 4096;
+
+    bool hasLogo() const { return !m_sourceSize.isEmpty(); }
     // Logical size the logo is drawn at (empty without a logo).
     QSize logoSize() const;
     // Width of the wordmark as drawn (tests, About box).
@@ -27,14 +29,19 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+    bool event(QEvent *event) override;
 
 private:
     void rescale();
 
-    QImage m_logo;
+    QString m_path;
+    QSize m_sourceSize;  // from the header; empty when there is no usable logo
     QPixmap m_scaled;
     qreal m_scaledDpr = 0;
     QSize m_scaledFor;
+    QFont m_wordFont;
+    QFont m_subFont;
     int m_wordmarkAdvance = 0;
 };
 

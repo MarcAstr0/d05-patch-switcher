@@ -129,14 +129,18 @@ int main(int argc, char *argv[])
     // Backend, link and library outlive the window (declared first, destroyed last);
     // the library flushes pending changes in its destructor.
     std::unique_ptr<d05::MidiBackend> backend;
-    if (opts.fakeMidi)
-        backend = std::make_unique<d05::FakeMidiBackend>();
-    else
+    if (opts.fakeMidi) {
+        auto fake = std::make_unique<d05::FakeMidiBackend>();
+        fake->setPrintSent(true);  // FR-15: bytes to stderr
+        backend = std::move(fake);
+    } else
         backend = std::make_unique<d05::RtMidiBackend>();
     d05::PatchCatalog catalog;
     d05::Library library(catalog, d05::Paths::libraryPath());
     const d05::Library::LoadResult loaded = library.load();
     d05::MidiLink link(backend.get());
+    // The window connects to the link first, so a port error at startup shows its text.
+    d05::MainWindow window(catalog, library, link);
     // AppSettings arrives with the Settings dialog; until then the port and channel come
     // from the command line (no port by default, channel 1).
     link.setChannel(opts.channel > 0 ? opts.channel : 1);
@@ -146,8 +150,6 @@ int main(int argc, char *argv[])
         link.setOutputPort(QStringLiteral("Fake D-05 In"));
     if (!opts.inPort.isEmpty())
         link.setInputPort(opts.inPort);
-
-    d05::MainWindow window(catalog, library, link);
     window.setInputPortLabel(opts.inPort);
     if (loaded == d05::Library::LoadResult::Recovered)
         window.showMessage(QStringLiteral("Library file was damaged; started a fresh one"));

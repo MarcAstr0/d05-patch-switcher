@@ -80,6 +80,33 @@ PatchDelegate::PatchDelegate(QObject *parent)
     m_meta = QPen(Theme::labelSecondary);
 }
 
+void PatchDelegate::layoutRow(const PatchListModel::Row &row, int width, RowLayout *out) const
+{
+    const int nameW = width - 100 - kNameX;
+    out->elided.clear();
+    out->highlights.clear();
+    out->visibleW = nameW;
+    if (m_nameMetrics.horizontalAdvance(row.shown) > nameW) {
+        out->elided = m_nameMetrics.elidedText(row.shown, Qt::ElideRight, nameW);
+        // The ellipsis is the last character; highlights stop where the real text does.
+        out->visibleW = m_nameMetrics.horizontalAdvance(row.shown, qMax(0, out->elided.size() - 1));
+    }
+    for (const SearchQuery::Range &rg : row.ranges) {
+        const int x0 = m_nameMetrics.horizontalAdvance(row.name, rg.start);
+        const int x1 = qMin(m_nameMetrics.horizontalAdvance(row.name, rg.start + rg.length), out->visibleW);
+        if (x1 > x0)
+            out->highlights.append({x0, x1 - x0});
+    }
+}
+
+void PatchDelegate::prepare(const PatchListModel &model, int width)
+{
+    m_layoutWidth = width;
+    m_layouts.resize(model.rowCount());
+    for (int i = 0; i < m_layouts.size(); ++i)
+        layoutRow(model.row(i), width, &m_layouts[i]);
+}
+
 int PatchDelegate::resourceBuildCount()
 {
     return g_buildCount;
@@ -128,26 +155,20 @@ void PatchDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const
     for (int i = 0; i < 5; ++i)
         p->drawStaticText(QPointF(kAddressX + kCharCell * i + m_charX[cells[i]], m_charY), m_chars[cells[i]]);
 
-    // Name, with the search ranges drawn first.
-    const int nameW = Wl - 100 - kNameX;
-    const bool elide = m_nameMetrics.horizontalAdvance(row.shown) > nameW;
-    int visibleW = nameW;
-    QString elided;
-    if (elide) {
-        elided = m_nameMetrics.elidedText(row.shown, Qt::ElideRight, nameW);
-        visibleW = m_nameMetrics.horizontalAdvance(elided);
+    // Name, with the search ranges drawn first (all measured in prepare()).
+    RowLayout local;
+    const RowLayout *rl;
+    if (m_layoutWidth == Wl && index.row() < m_layouts.size()) {
+        rl = &m_layouts[index.row()];
+    } else {
+        layoutRow(row, Wl, &local);  // stale cache: same values, computed here
+        rl = &local;
     }
-    for (const SearchQuery::Range &rg : row.ranges) {
-        const int x0 = m_nameMetrics.horizontalAdvance(row.name, rg.start);
-        const int x1 = m_nameMetrics.horizontalAdvance(row.name, rg.start + rg.length);
-        const int hx = kNameX + x0;
-        const int hw = qMin(x1, visibleW) - x0;
-        if (hw > 0 && x0 < visibleW)
-            p->fillRect(QRect(hx, 4, hw, 20), m_match);
-    }
+    for (const QPair<int, int> &h : rl->highlights)
+        p->fillRect(QRect(kNameX + h.first, 4, h.second, 20), m_match);
     p->setFont(m_nameFont);
     p->setPen(row.name.isEmpty() ? m_nameDim : m_namePrimary);
-    p->drawText(QPoint(kNameX, kBaseline), elide ? elided : row.shown);
+    p->drawText(QPoint(kNameX, kBaseline), rl->elided.isEmpty() ? row.shown : rl->elided);
 
     if (!row.countText.isEmpty()) {
         p->setFont(m_metaFont);
