@@ -1,6 +1,12 @@
 // App settings in localStorage (ports by name, never by id). Falls back to memory when storage is blocked.
 import type { PortInfo } from '../midi/port';
 
+/** The port in `list` that is `want`: name and manufacturer first, then the name alone. */
+export function findPort<T extends PortInfo>(list: readonly T[], want: PortInfo | null): T | undefined {
+  if (!want) return undefined;
+  return list.find((p) => p.name === want.name && p.manufacturer === want.manufacturer) ?? list.find((p) => p.name === want.name);
+}
+
 export interface Settings {
   output: PortInfo | null;
   input: PortInfo | null;
@@ -60,6 +66,28 @@ export class SettingsStore {
       this.persistent = false;
     }
     this.value = parseSettings(text);
+  }
+
+  /** Re-reads storage (another tab changed it). */
+  reload(): void {
+    try {
+      this.value = parseSettings(this.store ? this.store.getItem(SETTINGS_KEY) : null);
+    } catch {
+      /* keep what we have */
+    }
+  }
+
+  /** Writes only `lastPatch`, merged into what is stored now, so a stale tab cannot overwrite newer settings. */
+  saveLastPatch(index: number): void {
+    this.value.lastPatch = index;
+    try {
+      if (!this.store) return;
+      const stored = parseSettings(this.store.getItem(SETTINGS_KEY));
+      stored.lastPatch = index;
+      this.store.setItem(SETTINGS_KEY, JSON.stringify(stored));
+    } catch {
+      this.persistent = false;
+    }
   }
 
   save(): void {

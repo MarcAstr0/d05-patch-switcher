@@ -3,8 +3,8 @@
 import { SUPPORT_MATRIX } from '../logic/access';
 import { sheetSections } from '../logic/keymap';
 import type { MidiPort, PortInfo } from '../midi/port';
+import { findPort, type Settings } from '../logic/settings';
 import { samePort } from '../midi/port';
-import type { Settings } from '../logic/settings';
 import { el, esc } from './dom';
 
 export interface DialogOptions {
@@ -263,16 +263,22 @@ export function settingsDialog(host: HTMLElement, o: SettingsOptions): OpenDialo
   add(el('p', 'type-note note', 'The D-05 changes patch only when SYSTEM > MIDI > Prog.C is ON. If your unit also has a Bank.S switch, turn it ON too.'));
   if (o.storageNote) add(el('p', 'type-note note red', o.storageNote));
 
+  // Options carry the list index (or `missing`), so two ports with the same name stay distinct.
   const fill = (sel: HTMLSelectElement, list: readonly PortInfo[], want: PortInfo | null, none: boolean): void => {
     sel.textContent = '';
     if (none) sel.appendChild(Object.assign(el('option'), { value: '', textContent: 'None' }));
-    for (const p of list) sel.appendChild(Object.assign(el('option'), { value: p.name, textContent: p.name }));
-    if (want && !list.some((p) => samePort(p, want))) sel.appendChild(Object.assign(el('option'), { value: want.name, textContent: `${want.name} (not found)` }));
-    sel.value = want ? want.name : '';
+    list.forEach((p, i) => {
+      const dup = list.some((q, j) => j !== i && q.name === p.name);
+      sel.appendChild(Object.assign(el('option'), { value: String(i), textContent: dup && p.manufacturer ? `${p.name} (${p.manufacturer})` : p.name }));
+    });
+    const found = findPort(list, want);
+    if (want && !found) sel.appendChild(Object.assign(el('option'), { value: 'missing', textContent: `${want.name} (not found)` }));
+    sel.value = found ? String(list.indexOf(found)) : want ? 'missing' : '';
   };
   const pick = (sel: HTMLSelectElement, list: readonly PortInfo[], prev: PortInfo | null): PortInfo | null => {
     if (sel.value === '') return null;
-    return list.find((p) => p.name === sel.value) ?? (prev && prev.name === sel.value ? prev : { name: sel.value });
+    if (sel.value === 'missing') return prev;
+    return list[Number(sel.value)] ?? null;
   };
   const refresh = (): void => {
     const outs = o.port.outputs();
@@ -280,12 +286,12 @@ export function settingsDialog(host: HTMLElement, o: SettingsOptions): OpenDialo
     fill(outSel, outs, pend.output, false);
     fill(inSel, ins, pend.input, true);
     const connText = conn.querySelector<HTMLElement>('span')!;
-    const found = pend.output !== null && outs.some((p) => samePort(p, pend.output));
+    const found = findPort(outs, pend.output) !== undefined;
     const err = found && o.port.output.state === 'error' && pend.output && samePort(pend.output, o.settings.output) ? o.port.output.text : undefined;
     conn.dataset['state'] = found && !err ? 'ok' : 'error';
     connText.textContent = err ? `Error: ${err}` : found ? `Connected to ${pend.output!.name}` : 'Port not found';
     conn.querySelector('.led')!.classList.toggle('lit', found && !err);
-    const inFound = pend.input !== null && ins.some((p) => samePort(p, pend.input));
+    const inFound = findPort(ins, pend.input) !== undefined;
     inProb.textContent = pend.input && !inFound ? 'Port not found' : pend.input && o.port.input.state === 'error' && o.port.input.text ? `Error: ${o.port.input.text}` : '';
     inProb.title = inProb.textContent;
     follow.box.disabled = pend.input === null;

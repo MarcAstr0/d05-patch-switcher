@@ -224,7 +224,7 @@ test('settings: port, channel, auto-send, follow, resend on connect, Test', asyn
   await page.keyboard.press('Control+,');
   const dlg = page.locator('dialog.settings');
   await expect(dlg).toBeVisible();
-  await expect(dlg.locator('#s-out')).toHaveValue('Fake D-05 Out'); // first port preselected
+  await expect(dlg.locator('#s-out')).toHaveValue('0'); // first port preselected
   await expect(dlg.locator('.conn span')).toHaveText('Connected to Fake D-05 Out');
   await dlg.locator('#s-ch').selectOption('3');
   await dlg.locator('#s-in').selectOption('Fake D-05 In');

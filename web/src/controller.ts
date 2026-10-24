@@ -149,6 +149,13 @@ export class Controller {
       if (w.document.visibilityState === 'hidden') this.flushAll();
     });
     w.addEventListener('storage', (e) => {
+      if (e.key === 'd05.settings' || e.key === null) {
+        // Another tab changed the settings: take them over (never write them back from here).
+        this.settings.reload();
+        this.channel = this.settings.value.channel;
+        this.applyPorts();
+        this.render();
+      }
       if (e.key === null || e.key === 'd05.library') {
         this.library.reload();
         this.rebuild('keep');
@@ -196,6 +203,10 @@ export class Controller {
     this.panel.applyLayout(this.metrics);
     if (this.metrics.choice.kind !== 'portrait' && this.overlay) {
       this.overlay = false;
+      if (this.overlayPushed) {
+        this.overlayPushed = false;
+        history.back(); // pop the entry the overlay pushed, so Back does not hit a dead one
+      }
     }
     this.rebuild('keep');
     this.render();
@@ -273,6 +284,7 @@ export class Controller {
       kind !== 'portrait' || (this.metrics?.W ?? 0) >= 480,
     );
     this.panel.access.update(accessContent(this.port.access, this.env));
+    this.showNoteCard();
   }
 
   private notSavedText(): string | null {
@@ -283,6 +295,18 @@ export class Controller {
 
   private say(text: string, error = false): void {
     this.message = { text, error };
+    this.noteCard = { text, error };
+  }
+
+  private noteCard: { text: string; error: boolean } | null = null;
+
+  /** Portrait has no message slot in the status bar (DESIGN-WEB 7.7): messages come as a small card. */
+  private showNoteCard(): void {
+    const n = this.noteCard;
+    if (!n || this.kind !== 'portrait' || !this.metrics) return;
+    this.noteCard = null;
+    if (document.querySelector('dialog.note')) return;
+    confirmDialog(document.body, { title: n.error ? 'WARNING' : 'MESSAGE', text: n.text, confirm: '', sheet: true }, () => {}).dlg.classList.add('note');
   }
 
   // ------------------------------------------------------------------ list model
@@ -582,6 +606,7 @@ export class Controller {
       onCancel: () => {
         this.channel = before.channel;
         this.port.setOutput(before.output);
+        this.connectPending = false; // the restored port is the one that was open before: nothing to resend
       },
     }).dlg.addEventListener('close', () => {
       this.settingsOpen = false;
@@ -699,10 +724,10 @@ export class Controller {
     }
     confirmDialog(document.body, { title: 'IMPORT LIBRARY', text: `Replace favourites, recents and user names with the ones in ${file.name}?`, confirm: 'IMPORT', sheet: this.kind !== 'desktop' }, () => {
       this.panel.list.finishEdit(true);
+      this.recentsOrder = null; // the imported order is most-recent-first
       const r = this.library.importJson(text);
       if (r.ok) {
         this.library.flush();
-        this.recentsOrder = null;
         this.announce(`Imported ${r.favorites} favourites, ${r.userNames} names${r.skipped > 0 ? ` (${r.skipped} entries skipped)` : ''}`);
       } else this.announce(`Not a library file: ${r.error}`, true);
     });
@@ -712,7 +737,6 @@ export class Controller {
   private announce(text: string, error = false): void {
     this.say(text, error);
     this.render();
-    if (this.kind === 'portrait') confirmDialog(document.body, { title: error ? 'NOT IMPORTED' : 'DONE', text, confirm: '', sheet: true }, () => {});
   }
 
   // ------------------------------------------------------------------ MIDI input (follow)
@@ -740,6 +764,11 @@ export class Controller {
     if (e.isComposing || e.defaultPrevented) return;
     if (modalOpen()) return;
     const t = e.target as HTMLElement | null;
+    // A held Enter or Space on a native button would click it on every repeat.
+    if (e.repeat && (e.key === 'Enter' || e.key === ' ') && t instanceof HTMLButtonElement) {
+      e.preventDefault();
+      return;
+    }
     if (t && t.classList.contains('nameEditor')) return;
     const isField = t instanceof HTMLInputElement || t instanceof HTMLSelectElement || t instanceof HTMLTextAreaElement;
     const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
@@ -748,6 +777,7 @@ export class Controller {
     // Digits: grid entry (DESIGN.md 6.4), in the group strip and the grid or while an entry is pending.
     if (plain && !e.shiftKey && e.key >= '1' && e.key <= '8' && !isField && (this.entry.pending || this.panel.inEntryArea(t))) {
       e.preventDefault();
+      if (e.repeat) return;
       const d = Number(e.key);
       const phase = this.entry.phase;
       this.panel.setGridCursor(phase === 'number' ? 1 : 0, d);
@@ -778,9 +808,11 @@ export class Controller {
         this.onEscape();
         break;
       case 'up':
-      case 'down': {
+      case 'down':
+      case 'home':
+      case 'end': {
         const before = this.highlightIndex();
-        const moved = this.moveHighlight(action === 'up' ? -1 : 1);
+        const moved = this.moveHighlight(action === 'up' ? -1 : action === 'down' ? 1 : action);
         if (moved && this.settings.value.autoSend && this.highlightIndex() !== before) {
           // As on the desktop: a held key reports its first step and, on release, its last.
           if (e.repeat) this.repeatKey = e.key;
@@ -788,12 +820,6 @@ export class Controller {
         }
         break;
       }
-      case 'home':
-        this.moveHighlight('home');
-        break;
-      case 'end':
-        this.moveHighlight('end');
-        break;
       case 'send':
         if (!e.repeat) this.sendHighlighted();
         break;
@@ -802,10 +828,10 @@ export class Controller {
         if (!e.repeat) this.toggleHighlightedFavorite();
         break;
       case 'prev':
-        this.send(prevAddr(this.current));
+        if (!e.repeat) this.send(prevAddr(this.current));
         break;
       case 'next':
-        this.send(nextAddr(this.current));
+        if (!e.repeat) this.send(nextAddr(this.current));
         break;
       case 'gridEntry':
         this.panel.grid.focus({ preventScroll: true });
@@ -856,7 +882,6 @@ export class Controller {
 
   private flushAll(): void {
     this.library.flush();
-    this.settings.value.lastPatch = this.current.index;
-    this.settings.save();
+    this.settings.saveLastPatch(this.current.index); // only this field: settings are saved when they change
   }
 }

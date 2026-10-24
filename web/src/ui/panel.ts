@@ -325,6 +325,7 @@ export class Panel {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
+      if (e.repeat) return;
       this.groupBtns[this.groupCursor]?.click();
       return;
     }
@@ -351,6 +352,7 @@ export class Panel {
     const cur = this.gridCursor;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
+      if (e.repeat) return;
       (cur.row === 0 ? this.bankBtns : this.numBtns)[cur.col]?.click();
       return;
     }

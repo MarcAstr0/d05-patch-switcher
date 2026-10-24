@@ -2,6 +2,7 @@
 // `?fake=1&access=prompt|denied|unsupported|insecure|waiting` starts in that access state;
 // `&ports=none` starts with no ports; `&grant=deny` makes CONNECT MIDI end in `denied`.
 import type { PatchAddress } from '../core/address';
+import { findPort } from '../logic/settings';
 import { BasePort, patchMessages, samePort, type AccessState, type LinkStatus, type MidiPort, type PortInfo } from './port';
 
 export interface FakeOptions {
@@ -135,7 +136,7 @@ export class FakeMidi extends BasePort implements MidiPort {
   private link(want: PortInfo | null, list: readonly PortInfo[], prev: LinkStatus): LinkStatus {
     if (!want) return { state: 'none' };
     if (this.access !== 'granted') return { state: 'none' };
-    if (!list.some((p) => samePort(p, want))) return { state: 'missing' };
+    if (!findPort(list, want)) return { state: 'missing' };
     return prev.state === 'error' && prev.text ? prev : { state: 'open' };
   }
 }

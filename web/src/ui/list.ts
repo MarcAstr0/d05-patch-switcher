@@ -203,7 +203,7 @@ export class PatchList {
     const hit = this.hit(e);
     if (!hit) return;
     if (hit.star) this.h.onStar(hit.row.address);
-    else this.h.onRowClick(hit.row, hit.index);
+    else if (e.detail <= 1) this.h.onRowClick(hit.row, hit.index); // a double-click renames, it does not send twice
   }
 
   private updateCounter(): void {

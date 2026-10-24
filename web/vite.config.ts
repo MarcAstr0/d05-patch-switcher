@@ -27,10 +27,10 @@ function serviceWorker(): Plugin {
         .map((f) => relative(out, f).split('\\').join('/'))
         .filter((f) => f !== 'sw.js' && !f.endsWith('.map') && !f.endsWith('OFL.txt') && !f.endsWith('README.md'))
         .sort();
-      const hash = createHash('sha256');
+      const template = readFileSync(fileURLToPath(new URL('./sw-template.js', import.meta.url)), 'utf8');
+      const hash = createHash('sha256').update(template);
       for (const f of files) hash.update(f).update(readFileSync(join(out, f)));
       const list = ['./', ...files.map((f) => `./${f}`)];
-      const template = readFileSync(fileURLToPath(new URL('./sw-template.js', import.meta.url)), 'utf8');
       writeFileSync(join(out, 'sw.js'), template.replace('__VERSION__', hash.digest('hex').slice(0, 12)).replace('__FILES__', JSON.stringify(list)));
     },
   };
