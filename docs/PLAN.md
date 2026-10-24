@@ -48,7 +48,7 @@ Touches only `docs/design/`, `assets/`. No C++.
 when the Artifact tool is available, otherwise give the paths) and asks for approval or
 changes. One round of changes is budgeted. M3 starts only after approval.
 
-## M3 · GUI (builder, designer reviews) ◐ — after G1 answered and G2 approved
+## M3 · GUI (builder, designer reviews) ☑ — after G1 answered and G2 approved
 
 - ☑ **T3.1 Theme and DisplayWidget.** `Theme` loads the QSS and tokens; `DisplayWidget` per DESIGN.md with a pre-rendered glyph atlas per size, repaint only on text change, `flashSent()`. `--screenshot` implemented (fake backend, canned library, every `--screenshot-state`). Test: construction + screenshot of three states under `offscreen`.
 - ☑ **T3.2 Main window.** Layout per DESIGN.md: display, group bar, bank/number grid, search, list with delegate, status bar, toolbar actions, every shortcut in FR-13. Highlight does not send; Enter and clicks do; prev/next works across groups.
@@ -110,3 +110,4 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-24, foreman (T3.4 review): resend-on-connect and TEST do not count as sends in Recents (they still flash `SENT`); they are not patch choices. A resend that fails disables resend-on-connect until a send succeeds or Settings change. `lastPatch` is written on quit, not on every send or follow step. The Settings dialog lists ports through `MidiLink`, not the backend (SPEC §6).
 - 2026-10-24, foreman (T3.5): the text caret does not blink (`QApplication::setCursorFlashTime(0)`); Qt's 500 ms caret timer broke the "no timer under 2 s" rule while the window was active. Footprint measured on the real X11 display, all within SPEC §5 (numbers in the T3.5 commit message).
 - 2026-10-24, foreman (R3): supersedes the T3.3 reading "in the Recents view a send reorders the list". While the Recents view is shown, sends update counts in place; the order refreshes when the view is entered again. Reordering under the cursor made auto-send in Recents bounce between two rows. Codex's R3 run hit the account's usage limit and returned no findings; it is re-run over the M3 range after the limit resets.
+- 2026-10-24, G3 passed (owner): D-05 on USB directly (`Boutique`, channel 3), preview build of f2ccb92. Checklist steps 1, 3 (TEST), 4 (P1-11, P2-11, P6-88, U1-11), 5 (P1-88 NEXT lands on P2-11) and 6 (follow the panel, no re-select) all passed. The Hapax (thru) path is untested; it is covered at G4 on the MacBook, where the app talks to the Hapax.
