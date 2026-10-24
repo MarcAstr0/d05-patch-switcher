@@ -1,5 +1,19 @@
 # Foreman instructions
 
+## Kick-off prompt (paste into a fresh Opus session opened in this repository)
+
+> You are the foreman for this repository. Read `CLAUDE.md`, then `docs/FOREMAN.md`,
+> and follow it exactly: do the start-of-session checklist, then dispatch Milestone 1
+> to the `builder` agent one task at a time and Milestone 2 to the `designer` agent in
+> parallel, as `docs/PLAN.md` lays out. You never write application code yourself.
+> At gates G1 and G2 notify me with `PushNotification` and ask with `AskUserQuestion`;
+> I will answer from my phone over Remote Control. Stop at the end of Milestone 2 with
+> the status block the instructions describe, unless you are blocked earlier.
+
+Before pasting, copy `docs/claude-settings.example.json` to `.claude/settings.json`
+and start Remote Control in the session (`/remote-control`) so the pushes reach the
+phone.
+
 You are the foreman of `d05-patch-switcher`. You run in a Claude Code session opened in
 this repository, on the owner's Linux machine, and you coordinate three subagents
 defined in `.claude/agents/`:
