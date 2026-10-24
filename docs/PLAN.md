@@ -16,7 +16,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ⛔ blocked (say why i
 - ☑ Agents: builder (Sonnet), designer (Opus), reviewer (Sonnet).
 - ☑ `.github/workflows/build.yml` (untested until first push; M4 owns it).
 
-## M1 · Core and command line (builder) ◐
+## M1 · Core and command line (builder) ☑
 
 No GUI beyond the scaffold window. Everything here is testable headless.
 
@@ -28,14 +28,14 @@ No GUI beyond the scaffold window. Everything here is testable headless.
 - ☑ **T1.6 MIDI layer.** `MidiBackend`, `FakeMidiBackend`, `RtMidiBackend`, `MidiLink` (connect by name, substring match, 2 s poll while disconnected, `sendPatch`, status text, follow-mode parsing with 300 ms echo suppression). Tests on the fake: exact bytes for channels 1, 10 and 16; a vanished port flips status and the poll reconnects when the fake port "reappears"; incoming CC0/CC32/PC updates `current` without a send; the echo of our own send is ignored.
 - ☑ **T1.7 CLI.** `--list-ports`, `--port`, `--in-port`, `--channel`, `--send`, `--fake-midi`, `--config-dir` with the exit codes from FR-15. `scripts/midi-smoke.sh` passes on the Linux box against `Midi Through` (install `alsa-utils` if `aseqdump` is missing). Record the test command in the README's developer section.
 - ☑ **R1 Review** (reviewer + Codex): all of M1, the agent on the commit range and `scripts/codex-review.sh --base origin/main` after the push; foreman reconciles per `docs/FOREMAN.md`. Builder fixes anything rated above style.
-- ☐ **Push and CI**: the build-and-test steps green on all three runners (packaging steps may still fail).
+- ☑ **Push and CI**: the build-and-test steps green on all three runners (packaging steps may still fail).
 
 **Gate G1 (owner, optional).** If the D-05 can be brought to the Linux box now, plug it
 in over USB, confirm it shows in `--list-ports` (see `docs/MIDI.md`, "Hardware tests on
 the Linux box"; if it does not, the Hapax is the fallback), then run checklist steps 1–4
 with `--send`. Otherwise defer to G3. Either answer unblocks M3.
 
-## M2 · Design (designer) ◐ — runs in parallel with M1
+## M2 · Design (designer) ☑ — runs in parallel with M1
 
 Touches only `docs/design/`, `assets/`. No C++.
 
@@ -101,3 +101,5 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-24, designer (T2.3), accepted by foreman: the combo-box arrow is an 8x4 PNG plus @2x instead of SVG, because QSS SVG needs the QtSvg plugin (a new dependency) and a border-drawn wedge renders flat in Qt 6.4. The only chrome raster; DESIGN.md §10.2, §11.4, §14.1.
 - 2026-10-24, foreman: verified on the Linux box: the D-05 over USB is class-compliant with no driver (USB `0582:01ff`), ALSA client `Boutique`, port `Boutique:Boutique MIDI 1 24:0`. The port name is "Boutique", not "D-05"; `--port Boutique` matches it. `docs/MIDI.md` "Hardware tests on the Linux box" can drop "unverified" (owner's file).
 - 2026-10-24, G1 passed (owner, foreman ran the sends): D-05 on USB as `Boutique`, unit on MIDI channel 3. Checklist steps 1, 3 (via `--send`) and 4: `P1-11`, `P2-11`, `P6-88`, `U1-11` each shown on the unit in order. A first run on channel 1 changed nothing, as expected. The D-05 transmits MIDI clock continuously on its USB port; the input path must keep ignoring timing messages.
+- 2026-10-24, G2 approved (owner): mockups approved without changes. Switches: `lcdShowGhost` on (faint unlit dots), `keyModeOnLine2` off (key mode at the right of line 1, per FR-12), LCD colours kept as sampled. "Hapax MIDI 1" in the mockups is sample text; the port combo lists whatever the OS reports and nothing is hard-coded.
+- 2026-10-24, foreman: M1 and M2 closed. CI run 40101413905 green on Linux, macOS and Windows including the packaging steps. T1.1 to T1.4 had no per-task Codex pass (Codex joined the process at T1.5); R1's Codex run over `b0fb2a5..HEAD` covers them.
