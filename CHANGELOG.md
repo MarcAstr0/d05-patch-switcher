@@ -4,7 +4,7 @@ All notable changes to D-05 Patch Switcher. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.0] - 2026-10-24
 
 ### Added
 
@@ -15,6 +15,8 @@ All notable changes to D-05 Patch Switcher. The format follows
   `OPEN SETTINGS: CTRL+,` (`CMD+,` on macOS).
 - Input port problems now show: an error next to the input port in Settings, and
   `NOT FOUND` after the input name in the status bar while follow-the-panel is on.
+- Every package includes `LICENSE` and `THIRD-PARTY-NOTICES.md` (Qt, RtMidi, Inter).
+- The Windows `.exe` carries the app icon and version details.
 
 ### Changed
 
@@ -22,6 +24,9 @@ All notable changes to D-05 Patch Switcher. The format follows
   the port lists, so follow-the-panel cannot be pointed at the app's own output. On
   Linux the app now shows up in `aconnect -l` as "D-05 Patch Switcher".
 - Sharper icon at 16, 24 and 32 px; the macOS icon now includes every size.
+- Two identical MIDI devices are listed by their full names, so you can pick either.
+- The README documents the Squarp Hapax path, where the data files live on each
+  system, and the Windows SmartScreen step.
 
 ### Fixed
 
@@ -29,6 +34,9 @@ All notable changes to D-05 Patch Switcher. The format follows
   the display.
 - Moving the window to a screen with a different scale factor now re-lays out the
   panel instead of leaving a gap under the display.
+- Holding Enter, Space or a digit key no longer sends the patch over and over.
+- A patch sent for the first time shows up at once in an open Recents view.
+- `--fake-midi` no longer saves its fake ports to your settings.
 
 ## [0.9.0] - 2026-10-24
 
@@ -56,5 +64,5 @@ First pre-release.
   follow-the-panel.
 - macOS through a Squarp Hapax (port `HAPAX Puerto 3`): sending and prev/next.
 
-[Unreleased]: https://github.com/MarcAstr0/d05-patch-switcher/compare/v0.9.0...HEAD
+[1.0.0]: https://github.com/MarcAstr0/d05-patch-switcher/releases/tag/v1.0.0
 [0.9.0]: https://github.com/MarcAstr0/d05-patch-switcher/releases/tag/v0.9.0

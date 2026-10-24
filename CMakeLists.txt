@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(d05-patch-switcher VERSION 0.9.0 LANGUAGES CXX)
+project(d05-patch-switcher VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

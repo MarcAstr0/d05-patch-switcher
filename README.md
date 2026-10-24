@@ -13,7 +13,7 @@ like it belongs next to the synth.
        alt="D-05 Patch Switcher on macOS: a green two-line display reading P1-21 DigitalNativeDance, the patch group, bank and number buttons with the current patch lit, a search field, and the patch list.">
 </p>
 
-**Status: pre-release ([v0.9.0](https://github.com/MarcAstr0/d05-patch-switcher/releases/tag/v0.9.0)).** See `docs/PLAN.md` for where it stands.
+**Status: [v1.0.0](https://github.com/MarcAstr0/d05-patch-switcher/releases/tag/v1.0.0).** See `CHANGELOG.md` for what changed.
 
 ## What you need
 
