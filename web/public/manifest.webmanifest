@@ -1,0 +1,15 @@
+{
+  "name": "D-05 Patch Switcher",
+  "short_name": "D-05 Switcher",
+  "description": "Selects patches on a Roland Boutique D-05 over MIDI, in the browser.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#202326",
+  "background_color": "#202326",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
