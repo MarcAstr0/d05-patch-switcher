@@ -372,6 +372,13 @@ QLabel#connectionText[state="error"] {
     font-weight: 400;
 }
 
+/* Settings input problem line, DESIGN 10.1: right of the input combo. */
+QLabel#inputStatusText {
+    color: #E8565C;
+    font-size: 13px;
+    font-weight: 400;
+}
+
 /* Shortcuts sheet key caps, DESIGN 10.3: 18 px tall overall, min 18 px wide. */
 QLabel#keycap {
     color: #E2E0D4;

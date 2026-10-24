@@ -458,11 +458,20 @@ Line 2, left aligned from column 1, always capitals, first matching rule wins (F
 
 | Priority | Condition | Text |
 |---|---|---|
-| 1 | No output port open | `NO MIDI OUTPUT` |
+| 1a | No output port configured (the saved output port is empty: first run, until Settings is confirmed with a port) | First-run hint: `OPEN SETTINGS: CTRL+,` on Linux and Windows, `OPEN SETTINGS: CMD+,` on macOS |
+| 1b | An output port is configured but not open | `NO MIDI OUTPUT` |
 | 2 | Within 400 ms after a send | `SENT` |
 | 3 | Search field non-empty | `NO MATCHES`, `1 MATCH`, or `<n> MATCHES` (`23 MATCHES`) |
 | 4 | Otherwise | Group long name of the current patch, table below |
-| (M5) | No port configured yet, instead of 1 | `OPEN SETTINGS: CTRL+,` (`CMD+,` on macOS) |
+
+The first-run hint takes the place of `NO MIDI OUTPUT` and therefore outranks `SENT` and
+the match count, exactly as that text does: without a port nothing can be sent, and
+while searching on first run the list itself shows the matches. The glyph table has no
+`⌘` (Appendix A covers 0x20 to 0x7E only), so macOS spells it `CMD`; no other glyph is
+added. The text is chosen at compile time (`Q_OS_MACOS`), 21 characters on Linux and
+Windows, 20 on macOS, left aligned from column 1 like every line-2 text. Once a port is
+saved the hint never returns, even if that port later goes missing (`NO MIDI OUTPUT`
+then). The status bar on first run shows `OUT None` in `labelDim` and no `NOT FOUND` (8.1).
 
 | Group | Long name | Group | Long name |
 |---|---|---|---|
@@ -483,6 +492,7 @@ commit or cancel line 1 returns to the current patch. Line 2 is unaffected.
 | State | Line 1 | Line 2 | Other |
 |---|---|---|---|
 | Normal, connected | current patch | group long name | |
+| First run, no port configured | current patch | `OPEN SETTINGS: CTRL+,` (`CMD+,` on macOS) | Status bar `OUT None`, no `NOT FOUND` |
 | Disconnected | current patch | `NO MIDI OUTPUT` | Status bar 8.1 shows `NOT FOUND` |
 | Sent flash | new current patch | `SENT` for 400 ms | Status LED lit for the same 400 ms; one single-shot timer drives both |
 | Search active | current patch | `<n> MATCHES` | |
@@ -738,11 +748,13 @@ vertically centred, from x 16:
 | Port name | 6 px after `OUT`, max 280 px, elided in the middle | `type.statusValue`; `None` in `labelDim` when no port is set |
 | `NOT FOUND` | 6 px after the name, only when disconnected | `type.statusLabel` in `labelRed` |
 | `CH` + number | 16 px after the previous item | `CH` label, 6 px, value `type.statusValue` |
-| `IN` + port | 16 px after | as `OUT` (label, 6 px, value); `None` in `labelDim` |
-| `FOLLOW` | 16 px after, only when follow-the-panel is on and an input is set | `type.statusLabel` in `labelPrimary` |
+| `IN` + port | 16 px after | as `OUT` (label, 6 px, value, max 280 px elided in the middle); `None` in `labelDim` |
+| Input `NOT FOUND` | 6 px after the input name, only when follow-the-panel is on, an input is set and that input is not open (missing from the port list, failed to open, or lost) | `type.statusLabel` in `labelRed` (QSS role `statusError`, the same label style as the output's `NOT FOUND`) |
+| `FOLLOW` | 16 px after the input name, only when follow-the-panel is on and the input is open; never shown together with the input `NOT FOUND` | `type.statusLabel` in `labelPrimary` |
 | Message | right aligned, ending at `W - 16` | `type.statusValue` in `labelSecondary`, e.g. the broken-library notice; stays until replaced |
 
-Gaps are measured from the end of the previous text's advance. Every status text,
+With follow off, the input name shows alone whatever its state (the input is not
+opened while follow is off, so there is nothing to report). Gaps are measured from the end of the previous text's advance. Every status text,
 10 px and 11 px alike, is vertically centred in the 22 px bar, which puts all baselines
 on the bar's `y + 15` (ascent + descent are 10 + 2 and 11 + 3 px). No size grip.
 
@@ -806,7 +818,7 @@ control), control column from x 112.
 | 54 | `CHANNEL` · spin box `(112, y, 72, 26)`, range 1..16 |
 | 88 | Connection line at x 112, height 20: LED `(112, y+8, 10, 4)` + text at x 130, `type.body`: `Connected to <port>` (`labelPrimary`, LED lit, no core) / `Port not found` (`labelRed`, LED off) / `Error: <text>` (`labelRed`, LED off, elided right at 350 px) |
 | 124 | Rule `MIDI INPUT` |
-| 144 | `PORT` · combo `(112, y, 260, 26)`, first item `None` |
+| 144 | `PORT` · combo `(112, y, 260, 26)`, first item `None` · input problem line `(380, y, 100, 26)` (below) |
 | 178 | checkbox `Follow the panel` at x 112; disabled while the input is `None` |
 | 214 | Rule `BEHAVIOUR` |
 | 234 | checkbox `Auto-send on highlight` |
@@ -814,6 +826,23 @@ control), control column from x 112.
 | 298 | Rule `ON THE D-05` |
 | 318 | Note (`type.note`, `labelSecondary`, wrapped at 480 px, from x 0): `The D-05 changes patch only when SYSTEM > MIDI > Prog.C is ON. If your unit also has a Bank.S switch, turn it ON too.` |
 | after note + 20 | Button row, height 28: `TEST` at x 0; `CANCEL` and `OK` right aligned, 8 px apart, `OK` rightmost |
+
+**Input problem line** (object name `inputStatusText`), in the slot the output row gives
+to `REFRESH`: a `QLabel`, `type.body`, `labelRed`, left aligned and vertically centred
+in `(380, 144, 100, 26)`, no LED. Text, first that applies: `Error: <text>` when listing
+the inputs failed; `Port not found` when the chosen input is not in the list; the link's
+own `Error: <text>` when that input failed to open; otherwise empty (the label shows
+nothing; there is no "connected" text for the input). Elided right at 100 px with
+`type.body` metrics; the full text is the tooltip. `Port not found` (about 88 px) always
+fits; an error text usually elides, which is accepted: the tooltip
+carries it. Colour and size come from the `QLabel#inputStatusText` rule in `app.qss`,
+not from a per-widget style sheet.
+
+Fix for the builder (seen in a HEAD render with a failing input): the label is created
+with `type.note` (12 px) and elided with note metrics, but the `QDialog QLabel` QSS rule
+sets 13 px, so `Error: open failed` is clipped mid-letter at the dialog edge instead of
+elided. Set `Theme::font(Body)`, elide with `QFontMetrics(Theme::font(Body))` at 100,
+and drop the `setStyleSheet` call (the QSS rule now exists).
 
 Checkbox rows are 20 px tall: indicator at row `y + 7`, text vertically centred
 (baseline `y + 15`). The note sets on two lines at 480 px (line height 15), so the button
@@ -835,24 +864,72 @@ The checkbox indicator is an LED: the panel vocabulary for "on" (S2).
 
 ### 10.3 Shortcuts sheet (`ui/ShortcutsDialog`, F1)
 
-Width 600 (content 560), window title `Keyboard Shortcuts`, modal, closed by `Esc` or
-`F1`. Two columns 270 px wide, 20 px apart. Each section: secondary rule, then rows of
-height 26: key caps in a 120 px column, action text after it in `type.body`.
+Width **680** (content 640), window title `Keyboard Shortcuts`, modal, closed by `Esc` or
+`F1`, fixed size. Two columns **310** px wide, 20 px apart (left at content x 0, right at
+x 330). Revised in M5: the T5.1 build at 600 / 270 / 120 wrapped three action texts and
+pushed two rows' text past the key column; the numbers below are measured with the
+shipped Inter files and fit every row on one line.
 
 | Column | Section | Rows (keys · action) |
 |---|---|---|
-| Left | `FIND` | `/` or `Ctrl+F` · Focus the search field; `Esc` · Clear the search, then back to the list |
-| Left | `LIST` | `Up` `Down` · Move the highlight; `Home` `End` · First or last row; `Enter` · Send the highlighted patch; `Space` or `Ctrl+D` · Toggle favourite; `F2` · Rename a user slot |
-| Left | `VIEW` | `Ctrl+1` · All; `Ctrl+2` · Favourites; `Ctrl+3` · Recents |
+| Left | `FIND` | `/` or `Ctrl+F` · Focus the search field; `Esc` · Clear the search; `Esc` again · Back to the list |
+| Left | `LIST` | `Up` `Down` · Move the highlight; `Home` `End` · First or last row; `Enter` · Send highlighted patch; `Space` or `Ctrl+D` · Toggle favourite; `F2` · Rename a user slot |
 | Right | `PLAY` | `PgUp` · Previous patch; `PgDn` · Next patch; `Ctrl+G` then `1-8` `1-8` · Enter bank and number; `Ctrl+Shift+A` · Auto-send on or off |
+| Right | `VIEW` | `Ctrl+1` · All; `Ctrl+2` · Favourites; `Ctrl+3` · Recents |
 | Right | `APP` | `Ctrl+,` · Settings; `F1` · This sheet; `Ctrl+Q` · Quit |
+
+`VIEW` moves to the right column (between `PLAY` and `APP`) to balance the columns. The
+`Esc` row is split in two so FR-13's "clear the search; second press returns focus to
+the list" fits without wrapping; `again` is a joining word like `or` and `then`.
+
+Vertical rhythm, per column from the content top (y 0):
+
+| Part | Height | Notes |
+|---|---|---|
+| Section rule (6.1, secondary) | 12 | full column width 310 |
+| Gap rule to first row | 4 | |
+| Row | 26 each | no wrapping, ever |
+| Gap after a section's last row, before the next rule | 16 | |
+
+Left column: 12 + 4 + 3 x 26 + 16 + 12 + 4 + 5 x 26 = **256**. Right column:
+12 + 4 + 4 x 26 + 16 + 12 + 4 + 3 x 26 + 16 + 12 + 4 + 3 x 26 = **340**. Then 16 px gap
+and the footer line, height 16: `Esc or F1 closes`, `type.note`, `labelDim`, right
+aligned at content x 640. Content height 340 + 16 + 16 = 372; client area **680 x 412**
+at 1x (margins 20).
+
+Row layout (x relative to the column's left edge):
+
+| Part | Spec |
+|---|---|
+| Key group | from x 0: caps and joining words in order. Cap: 18 tall at row `y + 4`. Joining word (`or`, `then`, `again`): `type.note`, `labelDim`, 4 px before and after, vertically centred in the row |
+| Gap between two caps | 4 |
+| Action text | at **x 156** in every row (the key column is 156 wide), width 154, `type.body`, `labelPrimary`, one line, vertically centred, no word wrap. The widest key group is `Ctrl+G then 1-8 1-8` at 147 px, so text never starts later than 156; the longest action, `Focus the search field`, is 136 px |
+
+Measured widths at 1x (Inter 4.1 subset, cap = text advance + 0.5 px per character
++ 12 padding + 2 border): `/ or Ctrl+F` 85, `Space or Ctrl+D` 115, `Home End` 82,
+`Ctrl+G then 1-8 1-8` 147, `Ctrl+Shift+A` 79; actions: `Enter bank and number` 143,
+`Send highlighted patch` 142, `Auto-send on or off` 121. If a future row's key group is
+wider than 148 px or its action wider than 154 px, shorten the action text; do not let
+the column ragged-edge.
 
 Key cap: `QLabel` with object name `keycap`: `type.keycap`, `labelPrimary`, background
 `buttonFace`, 1 px `buttonSlot` border with a 2 px bottom border `buttonSlot`, radius 2,
 padding 1 px 6 px, height 18, min width 18, text centred. Combined keys are one cap
-(`Ctrl+G`). Joining words `or` and `then` are `type.note` in `labelDim`, 4 px each side.
-Footer, right aligned under the columns: `Esc or F1 closes` in `type.note` `labelDim`.
-Key text from `QKeySequence::toString(NativeText)` (macOS shows its symbols).
+(`Ctrl+G`).
+
+Cap text. Literal caps (`Up`, `Down`, `Home`, `End`, `Enter`, `Space`, `1-8`) are the
+same words on every platform. Bound caps come from
+`QKeySequence::toString(NativeText)`, with these replacements:
+
+| Key | Linux and Windows | macOS |
+|---|---|---|
+| Modifier combos (`Ctrl+F`, `Ctrl+Shift+A`, `Ctrl+,` ...) | as Qt gives (`Ctrl+F`) | as Qt gives (`⌘F`, `⇧⌘A`, `⌘,`): `⌘` U+2318 and `⇧` U+21E7 are in the font subset (3.1) |
+| `Esc` | `Esc` | `Esc` (Qt gives `⎋` U+238B, not in the subset) |
+| `PgUp` / `PgDn` | `PgUp` / `PgDn` (Qt gives `PgDown`: replace) | `fn ↑` / `fn ↓` (Qt gives `⇞` `⇟`, U+21DE and U+21DF, not in the subset; Mac laptop keyboards reach Page Up and Page Down with fn and the arrows) |
+| `F1`, `F2`, `/` | as Qt gives | as Qt gives |
+
+No cap may contain a character outside the 3.1 subset; a fallback-font glyph in a cap
+is a defect.
 
 ### 10.4 About box
 
@@ -861,9 +938,17 @@ size. 16 px gap. Then, each a `type.body` or `type.note` paragraph with 8 px bet
 
 1. `Version <x.y.z>` (`type.body`)
 2. `Selects patches on a Roland Boutique D-05 over MIDI.` (`type.body`)
-3. `MIT licence. Copyright 2026 Mario Castro Squella.` (`type.note`)
-4. `Roland, Boutique, D-05 and D-50 are trademarks of Roland Corporation. This app is not affiliated with or endorsed by Roland.` (`type.note`)
-5. `Inter typeface, SIL Open Font License 1.1.` (`type.note`)
+3. Project link (`type.note`): shown text `github.com/MarcAstr0/d05-patch-switcher` in
+   `labelAccent`, no underline, linking to `https://github.com/MarcAstr0/d05-patch-switcher`.
+   A `QLabel` with rich text
+   `<a href="https://github.com/MarcAstr0/d05-patch-switcher" style="color:#86A6D4; text-decoration:none">github.com/MarcAstr0/d05-patch-switcher</a>`,
+   `setOpenExternalLinks(true)`, `setTextInteractionFlags(Qt::LinksAccessibleByMouse)`
+   (mouse only: `OK` keeps the only focus, so no Qt dotted focus frame appears on the
+   link); Qt shows the pointing-hand cursor over it. Clicking hands the URL to the
+   system browser; the app itself makes no network request.
+4. `MIT licence. Copyright 2026 Mario Castro Squella.` (`type.note`)
+5. `Roland, Boutique, D-05 and D-50 are trademarks of Roland Corporation. This app is not affiliated with or endorsed by Roland.` (`type.note`)
+6. `Inter typeface, SIL Open Font License 1.1.` (`type.note`)
 
 20 px gap, `OK` dialog button right aligned (default).
 
@@ -1031,6 +1116,16 @@ nothing else is time based; no allocation in `paintEvent`s or `PatchDelegate::pa
     one `ledOn` `#F0383F`, the others `ledOff` `#2A1A1A`.
 - `assets/icons/d05-patch-switcher.png` from the SVG with
   `inkscape --export-type=png --export-width=256`; `.ico` and `.icns` (or the commands).
+- M5: the 16, 24 and 32 px icons are hand placed, not rendered from the SVG (the SVG's
+  dot matrix blurred into a green block at 16 and was soft at 24 and 32).
+  `assets/icons/make-small-icons.py` draws them on whole pixels with the same tokens:
+  full-bleed tile with radius 3 / 4 / 6 px corners (the only partial alpha), display
+  window in `bezelRim` with an `lcdBack` field, `P11` in `lcdOn` (a 3 x 5 cut of the
+  Appendix A letters at 16 px, the Appendix A 5 x 7 glyphs at pitch 1 at 24 and 32),
+  a `bandEdge` line and `band`, three `buttonFace` buttons with the middle LED `ledOn`.
+  48 px and up stay SVG renders. The `.icns` carries the full PNG set (`icp4`, `icp5`,
+  `ic07` to `ic14`), written by `assets/icons/make-icns.py`; commands in
+  `assets/icons/README.md`.
 
 ### 14.2 T2.4 mockups
 

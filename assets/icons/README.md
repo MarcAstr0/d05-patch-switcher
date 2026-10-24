@@ -8,36 +8,57 @@ panel buttons with the middle LED lit. No trademarked artwork, no text objects.
 |---|---|---|
 | `d05-patch-switcher.svg` | Source, 256 x 256 viewBox | 2,138 bytes |
 | `d05-patch-switcher.png` | 256 x 256 RGBA, for the AppImage and the Linux desktop file | 3,519 bytes |
-| `d05-patch-switcher-{16,24,32,48,64,128}.png` | Same SVG at each size: window icon (Qt resource) and `share/icons/hicolor/<n>x<n>/apps/` on install | 496 to 1,949 bytes |
-| `d05-patch-switcher.ico` | Windows: 16, 24, 32, 48, 64, 128, 256 px, each stored as PNG | 9,751 bytes |
-| `d05-patch-switcher.icns` | macOS: `ic07`..`ic14` (16@2x to 512@2x), PNG entries | 42,317 bytes |
+| `d05-patch-switcher-{16,24,32}.png` | Hand placed on whole pixels by `make-small-icons.py` (not from the SVG) | 280 to 430 bytes |
+| `d05-patch-switcher-{48,64,128}.png` | The SVG rendered at each size | 1,051 to 1,949 bytes |
+| `d05-patch-switcher.ico` | Windows: 16, 24, 32, 48, 64, 128, 256 px, each stored as PNG | 8,893 bytes |
+| `d05-patch-switcher.icns` | macOS: `icp4` 16, `icp5` 32, `ic07` 128, `ic08` 256, `ic09` 512, `ic11` 16@2x, `ic12` 32@2x, `ic13` 128@2x, `ic14` 256@2x, `ic10` 512@2x; PNG entries | 43,184 bytes |
+| `make-small-icons.py` | Writes the 16, 24 and 32 px PNGs (Pillow) | |
+| `make-icns.py` | Writes the `.icns` from a directory of PNGs (standard library only) | |
 
-`P11` stays legible from 24 px up. At 16 px the dots merge into a green block, which
-still reads as the display.
+The PNG sets (`-16` to `-128`) are the window icon (Qt resource) and
+`share/icons/hicolor/<n>x<n>/apps/` on install.
+
+Why the small ones are hand placed: rendered from the SVG, the 16 px icon's dots merged
+into a green block and the 24 and 32 px ones were soft. `make-small-icons.py` draws
+`P11` on whole pixels (a 3 x 5 cut of the letters at 16 px, the Appendix A 5 x 7 glyphs
+at 24 and 32 px) with the same colour tokens; only the rounded tile corners carry
+partial alpha. The 32 px file is also the `.icns` 16@2x entry and the `.ico` 32 px entry.
 
 ## Regenerating
 
-Run from this directory; `$T` is any empty temporary directory.
+Run from this directory; `$T` is any empty temporary directory. Tools: Inkscape 1.2,
+Pillow 12.2 (for the small icons), `icotool` (Debian/Ubuntu package `icoutils`).
 
-256 px PNG (Inkscape 1.2):
+Small icons (writes `d05-patch-switcher-16.png`, `-24`, `-32` here):
+
+```sh
+python3 -I make-small-icons.py
+```
+
+256 px PNG and the SVG-rendered sizes:
 
 ```sh
 inkscape d05-patch-switcher.svg --export-type=png --export-width=256 \
   --export-filename=d05-patch-switcher.png
+for s in 48 64 128; do
+  inkscape d05-patch-switcher.svg --export-type=png --export-width=$s \
+    --export-filename=d05-patch-switcher-$s.png
+done
 ```
 
-The `-16` to `-128` PNGs are the first six sizes of this loop, copied as
-`d05-patch-switcher-<size>.png`. Intermediate sizes, used by both `.ico` and `.icns`:
+Collect every size under the names the `.ico` and `.icns` commands use:
 
 ```sh
-for s in 16 24 32 48 64 128 256 512 1024; do
+for s in 16 24 32 48 64 128; do cp d05-patch-switcher-$s.png $T/icon-$s.png; done
+cp d05-patch-switcher.png $T/icon-256.png
+for s in 512 1024; do
   inkscape d05-patch-switcher.svg --export-type=png --export-width=$s \
     --export-filename=$T/icon-$s.png
 done
 ```
 
-`.ico` with `icotool` (Debian/Ubuntu package `icoutils`). `-r` stores each size as a
-PNG (Windows Vista and later), which keeps the file under 10 KB:
+`.ico` with `icotool`. `-r` stores each size as a PNG (Windows Vista and later), which
+keeps the file under 10 KB:
 
 ```sh
 icotool -c -o d05-patch-switcher.ico \
@@ -45,22 +66,19 @@ icotool -c -o d05-patch-switcher.ico \
   -r $T/icon-64.png -r $T/icon-128.png -r $T/icon-256.png
 ```
 
-`.icns` on Linux with Pillow (12.2 was used):
+`.icns` with the script (the same entry set Apple's `iconutil` writes; Pillow's writer
+omits `icp4` and `icp5`):
 
 ```sh
-python3 -I -c "
-from PIL import Image
-import sys
-t = sys.argv[1]
-Image.open(t + '/icon-1024.png').save('d05-patch-switcher.icns',
-    append_images=[Image.open('%s/icon-%d.png' % (t, s)) for s in (16, 32, 64, 128, 256, 512)])
-" $T
+python3 -I make-icns.py d05-patch-switcher.icns $T
 ```
 
-Pillow writes the retina and large entries (`ic07` 128, `ic08` 256, `ic09` 512, `ic10`
-1024, `ic11` 32, `ic12` 64, `ic13` 256, `ic14` 512) but not the 1x 16 and 32 px
-entries (`icp4`, `icp5`); macOS scales down from the 32 and 64 px images. The
-canonical alternative on a Mac, which writes the full set:
+Checks used (any one is enough): `icotool -l d05-patch-switcher.ico` lists 7 images;
+`icnsutil info -v d05-patch-switcher.icns` and `icnsutil test` (pip package
+`icnsutil`, installed in a throwaway venv) list the 10 entries above and report `OK`;
+Pillow opens the `.icns` with sizes 16, 32, 128, 256 and 512 at scale 1 and 2.
+
+On a Mac, the canonical alternative writes the same set:
 
 ```sh
 mkdir -p $T/d05.iconset
