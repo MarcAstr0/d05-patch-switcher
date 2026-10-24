@@ -9,6 +9,7 @@
 #include <QtMath>
 
 #include <atomic>
+#include <cmath>
 
 namespace d05 {
 
@@ -54,6 +55,17 @@ DisplayWidget::DisplayWidget(QWidget *parent)
 int DisplayWidget::atlasBuildCount()
 {
     return g_atlasBuilds.load();
+}
+
+void DisplayWidget::setStep(int p, int windowWidth)
+{
+    p = qBound(3, p, 5);
+    if (p == m_pitch && windowWidth == m_windowWidth)
+        return;
+    m_pitch = p;
+    m_windowWidth = windowWidth;
+    ensureResources();
+    update();
 }
 
 int DisplayWidget::pitchForWidth(int w)
@@ -255,12 +267,35 @@ qreal DisplayWidget::currentDpr() const
 bool DisplayWidget::resourcesStale() const
 {
     return m_P == 0 || !qFuzzyCompare(currentDpr(), m_dpr) || m_pitchBuilt != m_pitch
-           || m_builtGhost != m_showGhost;
+           || m_widthBuilt != m_windowWidth || m_builtGhost != m_showGhost;
 }
 
-int DisplayWidget::devicePitch(int logicalPitch, qreal dpr)
+namespace {
+int bezelWidthFor(int P, qreal dpr)
 {
-    return qMax(1, int(qFloor(logicalPitch * dpr)));
+    return int(std::ceil(243.0 * P / dpr - 1e-9)) + 38;
+}
+}  // namespace
+
+// DESIGN 5.1 "Choosing P": the integer pitch whose bezel is nearest the design width
+// T = 243 p + 38, taken only when the window is wide enough to hold it.
+int DisplayWidget::devicePitch(int p, qreal dpr, int windowWidth)
+{
+    const int pa = qMax(1, int(std::floor(p * dpr + 1e-9)));
+    if (p * dpr - pa < 1e-9)
+        return pa;  // integer DPR step: exact
+    const int pb = pa + 1;
+    const int T = 243 * p + 38;
+    const int wa = bezelWidthFor(pa, dpr);
+    const int wb = bezelWidthFor(pb, dpr);
+    if (wb + 32 <= windowWidth && qAbs(wb - T) < qAbs(wa - T))
+        return pb;
+    return pa;
+}
+
+int DisplayWidget::deviceGap(int P, qreal dpr)
+{
+    return qMax(1, qMin(int(qRound(dpr)), P / 3));
 }
 
 void DisplayWidget::overrideDprForTest(qreal dpr)
@@ -308,21 +343,28 @@ void DisplayWidget::ensureResources()
 
     m_dpr = dpr;
     m_pitchBuilt = m_pitch;
+    m_widthBuilt = m_windowWidth;
+    const bool ghostChanged = m_builtGhost != m_showGhost;
     m_builtGhost = m_showGhost;
-    m_P = devicePitch(m_pitch, dpr);
-    m_g = qMax(1, int(qRound(dpr)));
+    m_P = devicePitch(m_pitch, dpr, m_windowWidth);
+    m_g = deviceGap(m_P, dpr);
 
     // Lit field: dot area plus 2P padding all round, rounded up to whole logical px.
     const int fieldDevW = 243 * m_P;
     const int fieldDevH = 19 * m_P;
-    const int fieldLogW = int(qCeil(fieldDevW / dpr));
-    const int fieldLogH = int(qCeil(fieldDevH / dpr));
+    const int fieldLogW = int(std::ceil(fieldDevW / dpr - 1e-9));
+    const int fieldLogH = int(std::ceil(fieldDevH / dpr - 1e-9));
     const int pixW = int(qRound(fieldLogW * dpr));
     const int pixH = int(qRound(fieldLogH * dpr));
     m_dotOffX = (pixW - 239 * m_P) / 2;
     m_dotOffY = (pixH - 15 * m_P) / 2;
 
-    buildAtlas();
+    // The atlas depends only on (P, g, ghost): a DPR change that leaves them alone keeps it.
+    if (m_atlas.isNull() || m_P != m_atlasP || m_g != m_atlasG || ghostChanged) {
+        m_atlasP = m_P;
+        m_atlasG = m_g;
+        buildAtlas();
+    }
 
     m_frame = QPixmap(pixW, pixH);  // device pixels; the DPR is set after painting
     m_frame.fill(Theme::lcdBack);

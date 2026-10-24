@@ -34,7 +34,10 @@ public:
 
     // Dot pitch in logical px: 3, 4 or 5 (other values are clamped to that range).
     int pitch() const { return m_pitch; }
-    void setPitch(int p);
+    void setPitch(int p);  // step only; the window width is left as it was (default: unconstrained)
+    // Step and the window's width together (DESIGN 5.1); the widget's size follows
+    // (read sizeHint() or size() for bezelW x bezelH).
+    void setStep(int p, int windowWidth);
     // The pitch for a window width (DESIGN 4.3): 3 below 1042, 4 below 1285, else 5.
     static int pitchForWidth(int windowWidth);
 
@@ -76,7 +79,11 @@ public:
     int deviceDot() const { return m_P; }
     // The device-pixel dot pitch P for a logical pitch and a DPR. The single place
     // the rule lives (DESIGN 5.1); everything else derives from it.
-    static int devicePitch(int logicalPitch, qreal dpr);
+    // `windowWidth` is the main window's width (the rule only grows P when it fits).
+    static int devicePitch(int logicalPitch, qreal dpr, int windowWidth);
+    // The dot gap g: clamp(round(dpr), 1, P / 3).
+    static int deviceGap(int P, qreal dpr);
+    int deviceGap() const { return m_g; }
     // Test hooks: pretend the widget's DPR is `dpr` (0 = use the real one).
     // overrideDprForTest only records it (the next paint notices the mismatch);
     // rebuildForDprForTest also rebuilds at once.
@@ -138,6 +145,10 @@ private:
     int m_g = 0;
     bool m_builtGhost = false;
     int m_pitchBuilt = 0;
+    int m_widthBuilt = 0;
+    int m_windowWidth = 100000;
+    int m_atlasP = 0;
+    int m_atlasG = 0;
     int m_dotOffX = 0;  // device px from the frame's left to the dot area
     int m_dotOffY = 0;
     QImage m_atlas;

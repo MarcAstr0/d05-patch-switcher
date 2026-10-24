@@ -320,31 +320,51 @@ private slots:
         QTRY_COMPARE(DisplayWidget::atlasBuildCount(), builds + 1);  // queued rebuild
         QTest::qWait(50);
         QCOMPARE(DisplayWidget::atlasBuildCount(), builds + 1);      // exactly once
-        QCOMPARE(d.deviceDot(), DisplayWidget::devicePitch(3, 2.0));
-        QCOMPARE(d.atlas().height(), 7 * DisplayWidget::devicePitch(3, 2.0));
+        QCOMPARE(d.deviceDot(), DisplayWidget::devicePitch(3, 2.0, 960));
+        QCOMPARE(d.atlas().height(), 7 * DisplayWidget::devicePitch(3, 2.0, 960));
     }
 
     void fractionalDprGeometry()
     {
-        // The expected device pitch table is the rule in DESIGN 5.1. It is the same
-        // function the widget uses, so this also pins what the widget derives from it.
-        struct Row { qreal dpr; int p; int P; };
+        // DESIGN 5.1 table: (dpr, step p, window width W) -> device pitch P, gap g,
+        // logical bezel size.
+        struct Row { qreal dpr; int p; int W; int P; int g; int bw; int bh; };
         const Row table[] = {
-            {1.25, 3, 3}, {1.25, 4, 5}, {1.25, 5, 6},
-            {1.5, 3, 4}, {1.5, 4, 6}, {1.5, 5, 7},
+            {1.0, 3, 800, 3, 1, 767, 79},   {1.0, 4, 1042, 4, 1, 1010, 98},  {1.0, 5, 1285, 5, 1, 1253, 117},
+            {1.25, 3, 800, 3, 1, 622, 68},  {1.25, 3, 847, 3, 1, 622, 68},   {1.25, 3, 848, 4, 1, 816, 83},
+            {1.25, 3, 1041, 4, 1, 816, 83}, {1.25, 4, 1042, 5, 1, 1010, 98}, {1.25, 5, 1285, 6, 1, 1205, 114},
+            {1.5, 3, 800, 4, 1, 686, 73},   {1.5, 3, 1041, 4, 1, 686, 73},   {1.5, 4, 1042, 6, 2, 1010, 98},
+            {1.5, 5, 1285, 7, 2, 1172, 111}, {1.5, 5, 2000, 7, 2, 1172, 111},
+            {1.75, 3, 800, 5, 1, 733, 77},  {1.75, 4, 1042, 7, 2, 1010, 98},
+            {1.75, 5, 1285, 8, 2, 1149, 109}, {1.75, 5, 1319, 8, 2, 1149, 109}, {1.75, 5, 1320, 9, 2, 1288, 120},
+            {2.0, 3, 800, 6, 2, 767, 79},   {2.0, 4, 1042, 8, 2, 1010, 98},  {2.0, 5, 1285, 10, 2, 1253, 117},
         };
         for (const Row &r : table) {
-            QCOMPARE(DisplayWidget::devicePitch(r.p, r.dpr), r.P);
+            const QByteArray tag = QStringLiteral("dpr %1 p %2 W %3").arg(r.dpr).arg(r.p).arg(r.W).toLatin1();
+            QVERIFY2(DisplayWidget::devicePitch(r.p, r.dpr, r.W) == r.P, tag.constData());
+            QVERIFY2(DisplayWidget::deviceGap(r.P, r.dpr) == r.g, tag.constData());
             DisplayWidget d;
-            d.setPitch(r.p);
+            d.setStep(r.p, r.W);
             d.rebuildForDprForTest(r.dpr);
-            QCOMPARE(d.deviceDot(), r.P);
+            QVERIFY2(d.deviceDot() == r.P, tag.constData());
+            QVERIFY2(d.deviceGap() == r.g, tag.constData());
             QCOMPARE(d.atlas().width(), kGlyphCount * 5 * r.P);
             QCOMPARE(d.atlas().height(), 7 * r.P);
-            const int fieldW = int(std::ceil(243.0 * r.P / r.dpr));
-            const int fieldH = int(std::ceil(19.0 * r.P / r.dpr));
-            QCOMPARE(d.size(), QSize(fieldW + 38, fieldH + 22));
+            QVERIFY2(d.sizeHint() == QSize(r.bw, r.bh), tag.constData());
+            QVERIFY2(d.size() == QSize(r.bw, r.bh), tag.constData());
         }
+    }
+
+    void atlasKeptWhenOnlyDprChangesAndPGAreEqual()
+    {
+        DisplayWidget d;
+        d.setStep(4, 1100);
+        d.rebuildForDprForTest(1.0);
+        const int builds = DisplayWidget::atlasBuildCount();
+        d.rebuildForDprForTest(1.0);
+        QCOMPARE(DisplayWidget::atlasBuildCount(), builds);
+        d.rebuildForDprForTest(1.25);  // P 4 -> 5
+        QCOMPARE(DisplayWidget::atlasBuildCount(), builds + 1);
     }
 
     void sentFlash()

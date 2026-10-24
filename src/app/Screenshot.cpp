@@ -50,7 +50,7 @@ public:
         auto *central = new QWidget(this);
         setCentralWidget(central);
         auto *display = new DisplayWidget(central);
-        display->setPitch(DisplayWidget::pitchForWidth(kWidth));
+        display->setStep(DisplayWidget::pitchForWidth(kWidth), kWidth);
         display->move(16, 46);
         const int bandTop = 46 + display->height() + 14;
         auto *band = new QFrame(central);
