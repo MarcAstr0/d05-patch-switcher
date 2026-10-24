@@ -91,6 +91,11 @@ class-compliant mode; on Linux the kernel's USB audio driver handles the unit
 regardless. On macOS and Windows this path needs Roland's driver. Note the port is
 named **Boutique**, not D-05.
 
+Android does **not** recognise it (2026-10-24, gate GW2, Redmi 10A, Chrome, D-05
+directly on a USB OTG adapter): neither Chrome's Web MIDI nor the MIDI Scope app lists
+any device for it; the only port Chrome showed was MIDI Scope's own virtual `Scope`.
+On Android use path (2) or (3).
+
 **(2) A USB MIDI interface.** A class-compliant interface needs no driver on Linux,
 macOS or Windows. The port name is the interface's; the app's channel must match the
 D-05's `CH`.

@@ -30,7 +30,9 @@ The app sends Bank Select and Program Change to whichever MIDI output you pick i
 Settings. It never assumes a port name, so any of these works:
 
 - **The D-05's own USB port.** On Linux it works with no driver and shows up as
-  `Boutique`. On macOS and Windows it needs Roland's USB driver for the D-05.
+  `Boutique`. On macOS and Windows it needs Roland's USB driver for the D-05. On Android
+  (USB OTG) the D-05's own port is not recognised as a MIDI device; use one of the
+  options below.
 - **A USB MIDI interface** with its MIDI OUT cabled to the D-05's MIDI IN. Class-compliant
   interfaces need no driver on any of the three systems.
 - **A hardware sequencer, hub or other device that forwards MIDI** from its USB port to
