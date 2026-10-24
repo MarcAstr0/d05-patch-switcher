@@ -55,9 +55,9 @@ changes. One round of changes is budgeted. M3 starts only after approval.
 - ☑ **T3.3 Views and library.** All / Favourites / Recents; star toggle; recents counts; `F2` rename for U slots with the 18-character limit; clear-recents with confirmation.
 - ☑ **T3.4 Settings dialog and connection.** FR-9 and FR-10 wired to `MidiLink`; disconnected state on the display; auto-send; follow-the-panel; resend-on-connect; Test button.
 - ☑ **T3.5 Footprint.** `scripts/measure-footprint.sh`; numbers recorded in the PR/commit message; fix until within SPEC §5.
-- ☐ **D3 Design review** (designer): screenshots of every state at 1× and 2× (`QT_SCALE_FACTOR=2`) against DESIGN.md; numbered deviations; builder fixes; one more round at most.
-- ☐ **R3 Review** (reviewer + Codex): all of M3, with emphasis on threading, error paths and repaint discipline; both reviews, reconciled.
-- ☐ **Push and CI** green on build-and-test.
+- ☑ **D3 Design review** (designer): screenshots of every state at 1× and 2× (`QT_SCALE_FACTOR=2`) against DESIGN.md; numbered deviations; builder fixes; one more round at most.
+- ☑ **R3 Review** (reviewer + Codex): all of M3, with emphasis on threading, error paths and repaint discipline; both reviews, reconciled.
+- ☑ **Push and CI** green on build-and-test.
 
 **Gate G3 (owner).** Hardware test on the Linux box, D-05 on USB directly if it
 enumerates, otherwise through the Hapax: `docs/MIDI.md` checklist steps 1–6. Then, if convenient, build from source on the MacBook
