@@ -58,9 +58,18 @@ Linux box: Ubuntu 24.04, Qt 6.4.2 (`qt6-base-dev`), GCC 13, ALSA. `aseqdump` (fr
 - On the owner's MacBook the app talks to the **Hapax's** USB MIDI port; the Hapax forwards to the D-05 over DIN. During hardware tests on the Linux box the D-05 may be plugged in over USB directly, in which case the port is named after the D-05. Never hard-code a port name; always offer the picker.
 - A web version is specified in `docs/WEB.md` (Web MIDI, same repo under `web/`). It is not scheduled until desktop M3 is done.
 
-## Agents
+## Agents and reviewers
 
 `.claude/agents/builder.md` (Sonnet, code), `designer.md` (Opus, visuals),
 `reviewer.md` (Sonnet, read-only review). Dispatch one task at a time per the plan.
+
+Every task also gets an **independent review by OpenAI Codex** through
+`scripts/codex-review.sh` (`--commit <sha>`, `--base origin/main` or `--uncommitted`,
+`-o` to save the report). The foreman reconciles the two reviews; see `docs/FOREMAN.md`.
+Machine notes for the owner's Linux box: Codex lives under nvm's Node 22 and
+`~/.codex/config.toml` pins a model the account rejects, so the script sets `PATH` and
+passes the model explicitly (`CODEX_MODEL`, default `gpt-5.6-sol`; the accepted slugs are
+in `~/.codex/models_cache.json`). It also unsets `OPENAI_API_KEY` so the run bills to the
+ChatGPT login. Call the script, not the Claude Codex plugin's subagent.
 Copy `docs/claude-settings.example.json` to `.claude/settings.json` once so the routine
 build, test and git commands run without permission prompts.

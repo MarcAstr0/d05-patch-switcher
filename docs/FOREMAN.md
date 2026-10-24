@@ -49,9 +49,23 @@ deciding, verifying, committing and talking to the owner. Keep them short.
   builders at once, give the second `isolation: "worktree"`.
 - When a builder reports, do not take its word: run the build and the tests yourself,
   read the diff (`git diff --stat`, then the files that matter), run the smoke script
-  if the task touched MIDI. Then dispatch the `reviewer` with the commit range or file
-  list. Builder fixes anything above style. Two fix rounds maximum on the same finding;
-  after that bring it to the owner.
+  if the task touched MIDI. Then commit the task and get **two independent reviews**:
+  dispatch the `reviewer` agent with the commit, and in parallel run
+  `scripts/codex-review.sh --commit <sha> -o build/codex-review-<task>.md` (OpenAI
+  Codex, read-only, a different model family; it takes several minutes, so start it
+  first and read the agent's report while it runs). Do not show either reviewer the
+  other's findings. Reconcile yourself: a finding both raise is confirmed; a finding
+  only one raises you verify against the code or the spec before passing it on; a
+  finding you cannot confirm or refute goes to the builder as "verify with a test".
+  Builder fixes anything above style, in a follow-up commit. Two fix rounds maximum on
+  the same finding; after that bring it to the owner. For the milestone-end reviews
+  (R1, R3, R5) run Codex with `--base origin/main` after pushing, so it sees the whole
+  milestone at once.
+- If `scripts/codex-review.sh` fails to start, read its header comment and `CLAUDE.md`
+  for the two machine-specific traps (Node 22 under nvm, the model override). A
+  rejected model shows up as a `400 invalid_request_error` within seconds; pick another
+  slug from `~/.codex/models_cache.json` via `CODEX_MODEL=...`. Do not spend more than
+  one retry on it; note it in the status block and continue with the agent review.
 - Commit per task with a message like `M1.3: SearchQuery grammar and tests`, tick the
   box in `docs/PLAN.md` in the same commit, push at the end of each milestone (sooner if
   CI needs exercising), and watch CI with `gh run watch` / `gh run view --log-failed`.
