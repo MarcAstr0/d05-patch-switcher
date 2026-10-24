@@ -64,7 +64,7 @@ enumerates, otherwise through the Hapax: `docs/MIDI.md` checklist steps 1–6. T
 (`brew install qt cmake`, then the README commands) and repeat steps 3–5. Report what
 the D-05 display showed. Fixes go back to the builder.
 
-## M4 · Packaging and CI (builder) ◐
+## M4 · Packaging and CI (builder) ☑
 
 - ☑ **T4.1 CI green** on all three runners including the packaging steps; artifacts downloadable from the Actions run. Fix the workflow, not the symptom (pin runner images and action versions when a step is flaky).
 - ☑ **T4.2 Linux AppImage** launches on the dev box from `~/Downloads` with no extra packages; desktop file and icon integrated.
@@ -114,3 +114,4 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-24, foreman (M4): T4.1 and T4.4 proven by CI run 40113475789. Pinned Qt 6.8.3, linuxdeploy 1-alpha-20251107-1, plugin-qt 1-alpha-20250213-1, actions by SHA. Verify steps: macOS dmg universal (x86_64 arm64), codesign valid, slices 744 KB stripped; Windows zip runs from a fresh directory (`--version`, `--list-ports`), exe 601 KB; Linux AppImage runs; the runner has no ALSA sequencer (no snd-seq module), so the real backend is checked for exit 3 and the packaged binary is exercised with `--fake-midi`.
 - 2026-10-24, foreman (T4.3): proven in CI run 40114572432 (universal, ad-hoc signed, bundle `D-05 Patch Switcher.app` with icon, `NSHighResolutionCapable`, `LSMinimumSystemVersion` 12.0, dmg with an Applications link). "Opens after right-click → Open" is checked by the owner at G4; macOS 15 needs Privacy & Security → Open Anyway instead (README "macOS notes", SPEC §8).
 - 2026-10-24, foreman (T4.5): `v0.9.0` tagged at b4e813e; release run 40115379566 published https://github.com/MarcAstr0/d05-patch-switcher/releases/tag/v0.9.0 as a pre-release with the AppImage, the universal dmg, the Windows zip and SHA256SUMS.txt.
+- 2026-10-24, G4 passed (owner, MacBook via the Hapax): v0.9.0 dmg installed and opened after the Gatekeeper step; checklist steps 3 to 5 passed with output `HAPAX Puerto 3`. The Hapax exposes 16 USB virtual ports, routes incoming MIDI through the selected track (input ALL ACTIVE) and rewrites the channel to the track's output channel; Program Change and Bank Select pass. Recorded in `docs/MIDI.md`. First attempt failed only because a different Hapax port was chosen.

@@ -74,6 +74,16 @@ input is forwarded to the DIN output the D-05 hangs on. From the computer's poin
 view the port to open is the **Hapax's** USB MIDI port, not a D-05 port, which is why
 the app never hard-codes a port name and always offers a picker.
 
+Verified at gate G4 (2026-10-24, MacBook, hapaxOS 3.x): the Hapax is not a plain thru.
+Its USB device port shows up as 16 virtual ports (`HAPAX Puerto 1` … `16` on a
+Spanish-language macOS). Incoming MIDI goes into the selected track, whose input is set
+to ALL ACTIVE (so a controller on the Hapax also plays it), and leaves on that track's
+DIN output **on the track's own channel**. In the app:
+
+- choose **HAPAX Puerto 3**, the port the owner's unit responds on (which cable a track hears is not documented by Squarp; try the ports in turn on another setup);
+- the app's channel does not matter on this path, because the Hapax rewrites it;
+- the D-05 still needs `Prog.C` ON, and Bank Select and Program Change pass through.
+
 The reverse direction (D-05 DIN out → Hapax DIN in → USB) only exists if that cable
 is connected and the Hapax forwards it; follow-the-panel is therefore optional and off
 by default.
