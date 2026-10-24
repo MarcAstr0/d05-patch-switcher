@@ -80,23 +80,29 @@ by default.
 
 ### Hardware tests on the Linux box
 
-The Hapax is fixed in the synth room, so the owner's plan (2026-10-24) is to bring the
-**D-05 module to the Linux box and plug it in over USB directly**. Whether that works
-is **unverified**:
+The Hapax is fixed in the synth room, so hardware tests on the Linux box use the
+**D-05 module plugged in over USB directly**. This is **verified** (2026-10-24, gate
+G1, Ubuntu 24.04): the unit enumerates with no driver.
 
-- Roland's D-05 manual says the USB driver must be installed and documents no
-  GENERIC / class-compliant mode for this unit (other Roland products have a `USB
-  Driver: VENDOR / GENERIC` setting; the D-05's documented power-on combinations are
-  `FUNCTION` = USB-drive backup mode, `PATCH BANK [2]` = factory reset, `PATCH NUMBER
-  [1]` = fixed battery operation).
-- Forum users report the D-05 enumerating on Linux with no driver, which would be the
-  kernel's Roland quirk tables doing the work. Anecdotal.
+| | Observed |
+|---|---|
+| USB ID | `0582:01ff` Roland Corp. Boutique D-05 (`lsusb`) |
+| ALSA client | `Boutique` (kernel, one port) |
+| Port name in the app | `Boutique:Boutique MIDI 1 24:0`; the trailing `24:0` changes across replug, the app matches without it |
+| Select from the CLI | `--port Boutique` |
+| Result | `P1-11`, `P2-11`, `P6-88`, `U1-11` sent with `--send` on the unit's channel each showed on the D-05 in order |
+| Unit output | MIDI clock continuously on the USB port; the app ignores timing messages |
 
-So the first step of any Linux hardware test is `aconnect -l` (or
-`./build/d05-patch-switcher --list-ports`) with the D-05 on and plugged in. If a D-05
-client appears, use its port and the port name in the app will be the D-05's own. If
-nothing appears, fall back to the Hapax: it is a class-compliant USB MIDI device and
-the path above works on Linux with no driver when its USB cable is moved to the box.
+Roland's D-05 manual still says the USB driver must be installed and documents no
+GENERIC / class-compliant mode; on Linux the kernel's USB audio driver handles the unit
+regardless. Note the port is named **Boutique**, not D-05.
+
+The first step of any Linux hardware test is `./build/d05-patch-switcher --list-ports`
+(or `aconnect -l`) with the D-05 on and plugged in, then check the unit's `CH`: the
+owner's unit is on channel 3, and sending on another channel does nothing, exactly
+like `Prog.C` OFF. If the `Boutique` port does not appear, fall back to the Hapax: it is
+a class-compliant USB MIDI device and the path above works on Linux with no driver
+when its USB cable is moved to the box.
 
 On macOS and Windows the D-05's own USB port needs Roland's driver; the app does not
 depend on it because the owner's Mac talks to the Hapax.
@@ -121,7 +127,7 @@ the bytes without opening any port, which is what the unit tests use.
 
 1. D-05 on, `SYSTEM` → `MIDI`: `CH` matches the app, `Prog.C` ON (and `Bank.S` ON if the menu has it).
 2. Through the Hapax: Hapax on, thru routing from USB device in to the D-05's DIN out enabled. D-05 on USB directly: confirm it appears in `--list-ports` first (see "Hardware tests on the Linux box").
-3. App: Settings → output port = the Hapax; channel as above; "Test" sends the current
+3. App: Settings → output port = the Hapax (or `Boutique` on USB directly); channel as above; "Test" sends the current
    patch. The D-05 display must change to it.
 4. From the app select `P1-11` *Fantasia*, then `P2-11` *Neo Horizon*, then `P6-88`
    *Big Waves*: each must show on the D-05 within a blink. Then `U1-11`.
