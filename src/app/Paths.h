@@ -17,6 +17,8 @@ QString overrideDir();
 QString dataDir();
 QString libraryPath();
 QString settingsPath();
+// The optional owner-supplied wordmark replacement (SPEC FR-14): <data dir>/logo.png.
+QString logoPath();
 
 }  // namespace Paths
 }  // namespace d05

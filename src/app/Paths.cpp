@@ -27,5 +27,6 @@ QString dataDir()
 
 QString libraryPath() { return dataDir() + QStringLiteral("/library.json"); }
 QString settingsPath() { return dataDir() + QStringLiteral("/settings.ini"); }
+QString logoPath() { return dataDir() + QStringLiteral("/logo.png"); }
 
 }  // namespace d05::Paths

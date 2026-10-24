@@ -53,10 +53,19 @@ target_link_libraries(d05core PUBLIC Qt6::Core d05_options PRIVATE rtmidi)
 
 # --- d05ui: widgets ---
 qt_add_library(d05ui STATIC
-    src/ui/ScaffoldWindow.h src/ui/ScaffoldWindow.cpp
     src/ui/Theme.h          src/ui/Theme.cpp
     src/ui/GlyphTable.h     src/ui/GlyphTable.cpp
     src/ui/DisplayWidget.h  src/ui/DisplayWidget.cpp
+    src/ui/SectionRule.h    src/ui/SectionRule.cpp
+    src/ui/PanelButton.h    src/ui/PanelButton.cpp
+    src/ui/PanelButtonField.h src/ui/PanelButtonField.cpp
+    src/ui/Nameplate.h      src/ui/Nameplate.cpp
+    src/ui/GroupBar.h       src/ui/GroupBar.cpp
+    src/ui/BankGrid.h       src/ui/BankGrid.cpp
+    src/ui/PatchListModel.h src/ui/PatchListModel.cpp
+    src/ui/PatchDelegate.h  src/ui/PatchDelegate.cpp
+    src/ui/PatchListView.h  src/ui/PatchListView.cpp
+    src/ui/MainWindow.h     src/ui/MainWindow.cpp
     src/app/Screenshot.h    src/app/Screenshot.cpp
 )
 # Fonts, style sheet, arrows and icon ship inside the binary: :/fonts, :/theme, :/icons.

@@ -26,6 +26,9 @@ target_compile_definitions(test_display PRIVATE D05_BINARY="$<TARGET_FILE:d05-pa
                                                  D05_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_dependencies(test_display d05-patch-switcher)
 
+d05_add_test(test_main_window test_main_window.cpp)
+target_link_libraries(test_main_window PRIVATE d05ui Qt6::Widgets)
+
 # Hardware-free MIDI check against ALSA "Midi Through" (exit 77 = skipped).
 if(UNIX AND NOT APPLE)
     add_test(NAME midi_smoke COMMAND ${CMAKE_SOURCE_DIR}/scripts/midi-smoke.sh $<TARGET_FILE:d05-patch-switcher>)

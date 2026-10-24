@@ -5,12 +5,14 @@
 #include "core/PatchCatalog.h"
 #include "core/SearchQuery.h"
 #include "midi/FakeMidiBackend.h"
+#include "midi/MidiLink.h"
 #include "ui/DisplayWidget.h"
+#include "ui/MainWindow.h"
+#include "ui/PanelButton.h"
+#include "ui/PatchListView.h"
 
 #include <QApplication>
-#include <QFrame>
-#include <QLabel>
-#include <QMainWindow>
+#include <QLineEdit>
 #include <QPixmap>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -20,9 +22,6 @@
 namespace d05 {
 
 namespace {
-
-constexpr int kWidth = 960;
-constexpr int kHeight = 560;
 
 void fillCannedLibrary(Library &lib)
 {
@@ -39,29 +38,6 @@ void fillCannedLibrary(Library &lib)
     lib.recordSend(addr("P1-11"), base.addSecs(60 * i++));
     lib.flush();
 }
-
-// A minimal stand-in for the main window: the display in its place and an empty
-// band. T3.2 to T3.4 replace it with the real layout.
-class PlaceholderWindow : public QMainWindow {
-public:
-    PlaceholderWindow(const QString &state, DisplayWidget **displayOut)
-    {
-        setWindowTitle(QStringLiteral("D-05 Patch Switcher"));
-        auto *central = new QWidget(this);
-        setCentralWidget(central);
-        auto *display = new DisplayWidget(central);
-        display->setStep(DisplayWidget::pitchForWidth(kWidth), kWidth);
-        display->move(16, 46);
-        const int bandTop = 46 + display->height() + 14;
-        auto *band = new QFrame(central);
-        band->setObjectName(QStringLiteral("band"));
-        band->setGeometry(0, bandTop, kWidth, kHeight - bandTop);
-        auto *label = new QLabel(QStringLiteral("Placeholder, state: %1").arg(state), band);
-        label->move(16, 16);
-        resize(kWidth, kHeight);
-        *displayOut = display;
-    }
-};
 
 }  // namespace
 
@@ -97,31 +73,31 @@ int runScreenshot(const CliOptions &opts)
     }
 
     FakeMidiBackend backend;
-    QString error;
-    const bool connected = state != QLatin1String("disconnected")
-                           && backend.openOutput(QStringLiteral("Fake D-05 In"), &error);
+    MidiLink link(&backend);
+    link.setChannel(1);
+    // "disconnected" asks for a port the fake does not have, as the mockup's "Hapax MIDI 1".
+    const bool disconnected = state == QLatin1String("disconnected");
+    link.setOutputPort(disconnected ? QStringLiteral("Hapax MIDI 1") : QStringLiteral("Fake D-05 In"));
 
     PatchAddress current = *PatchAddress::parse(QStringLiteral("P1-11"));
     if (state == QLatin1String("recents") && !library.recents().isEmpty())
         current = library.recents().first().address;
 
-    DisplayWidget *display = nullptr;
-    PlaceholderWindow window(state, &display);
-    display->setPatch(current, catalog.name(current), catalog.mode(current));
-    display->setConnected(connected);
+    MainWindow window(catalog, library, link);
+    window.setCurrent(current);
     if (state == QLatin1String("search")) {
-        const SearchQuery query(QStringLiteral("brass"));
-        int n = 0;
-        for (int i = 0; i < PatchAddress::CatalogueSize; ++i) {
-            const PatchAddress a = *PatchAddress::fromCatalogueIndex(i);
-            if (query.matches(a, catalog.name(a)))
-                ++n;
-        }
-        display->setSearch(true, n);
+        window.searchField()->setText(QStringLiteral("brass"));
+    } else if (state == QLatin1String("favorites")) {
+        window.viewButton(PatchListModel::View::Favourites)->setChecked(true);
+    } else if (state == QLatin1String("recents")) {
+        window.viewButton(PatchListModel::View::Recents)->setChecked(true);
+    } else if (disconnected) {
+        window.list()->setFocus();  // the mockup's second frame has the list focused
     }
     // "settings" has no dialog yet (T3.4): the main window renders as the default state.
 
     window.show();
+    window.activateWindow();
     QApplication::processEvents();
     const QPixmap shot = window.grab();
     if (!shot.save(opts.screenshotFile, "PNG")) {
