@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- d05-patch-switcher application icon. Geometry: docs/design/DESIGN.md section 14.1.
+     Drawn for this project; no trademarked artwork. Dots are the glyphs P and 1 from
+     DESIGN.md Appendix A at pitch 8, dot 6. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <clipPath id="tile"><rect x="8" y="8" width="240" height="240" rx="44" ry="44"/></clipPath>
+  </defs>
+  <!-- tile: panel -->
+  <rect x="8" y="8" width="240" height="240" rx="44" ry="44" fill="#202326"/>
+  <g clip-path="url(#tile)">
+    <!-- band below y 168, with a 2 px bandEdge line on its top -->
+    <rect x="8" y="168" width="240" height="80" fill="#26292B"/>
+    <rect x="8" y="168" width="240" height="2" fill="#3A3E41"/>
+  </g>
+  <!-- display window: bezelRim 2 px inner frame, bezel inside -->
+  <rect x="32" y="48" width="192" height="96" fill="#2E3134"/>
+  <rect x="34" y="50" width="188" height="92" fill="#050606"/>
+  <!-- lit field -->
+  <rect x="44" y="60" width="168" height="72" fill="#071104"/>
+  <!-- dots: P11 -->
+  <path fill="#98CF1C" d="M61 69h6v6h-6zM69 69h6v6h-6zM77 69h6v6h-6zM85 69h6v6h-6zM61 77h6v6h-6zM93 77h6v6h-6zM61 85h6v6h-6zM93 85h6v6h-6zM61 93h6v6h-6zM69 93h6v6h-6zM77 93h6v6h-6zM85 93h6v6h-6zM61 101h6v6h-6zM61 109h6v6h-6zM61 117h6v6h-6zM125 69h6v6h-6zM117 77h6v6h-6zM125 77h6v6h-6zM125 85h6v6h-6zM125 93h6v6h-6zM125 101h6v6h-6zM125 109h6v6h-6zM117 117h6v6h-6zM125 117h6v6h-6zM133 117h6v6h-6zM173 69h6v6h-6zM165 77h6v6h-6zM173 77h6v6h-6zM173 85h6v6h-6zM173 93h6v6h-6zM173 101h6v6h-6zM173 109h6v6h-6zM165 117h6v6h-6zM173 117h6v6h-6zM181 117h6v6h-6z"/>
+  <!-- three button faces with LEDs; the middle LED lit -->
+  <rect x="40" y="192" width="48" height="24" rx="3" ry="3" fill="#3F4244"/>
+  <rect x="104" y="192" width="48" height="24" rx="3" ry="3" fill="#3F4244"/>
+  <rect x="168" y="192" width="48" height="24" rx="3" ry="3" fill="#3F4244"/>
+  <rect x="56" y="201" width="16" height="6" fill="#2A1A1A"/>
+  <rect x="120" y="201" width="16" height="6" fill="#F0383F"/>
+  <rect x="184" y="201" width="16" height="6" fill="#2A1A1A"/>
+</svg>

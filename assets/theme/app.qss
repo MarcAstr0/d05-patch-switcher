@@ -1,0 +1,585 @@
+/*
+ * d05-patch-switcher application style sheet (Qt 6.4 QSS).
+ * Source of every value: docs/design/DESIGN.md. Loaded once at startup by ui/Theme
+ * from the resource :/theme/app.qss. Everything drawn with QPainter (display, section
+ * rules, panel buttons, group bar, bank grid, nameplate, list rows, status bar LED)
+ * is not styled here; ui/Theme exposes the same tokens as QColor constants.
+ *
+ * ----------------------------------------------------------------------------------
+ * COLOUR TOKENS (DESIGN.md section 2). No other colours appear anywhere.
+ * ----------------------------------------------------------------------------------
+ * 2.1 Panel and surfaces
+ *   panel             #202326  window background, upper panel, status bar, dialogs
+ *   band              #26292B  lower band (grid, controls, list)
+ *   bandEdge          #3A3E41  1 px line on top of the band and the status bar
+ *   well              #141617  list background
+ *   wellEdgeDark      #0B0C0D  top and left 1 px border of the list well and fields
+ *   wellEdgeLight     #34383B  bottom and right 1 px border of the list well
+ *   fieldBack         #0E0F10  search field, combos, spin box, inline editor, tooltip
+ *   fieldBorder       #3A3D40  field border, normal; menu border and separator
+ *   fieldBorderHover  #4C5053  field border, hover
+ *   rowHover          #1B1D1F  list row under the mouse
+ *   selection         #33373B  highlighted list row, menu item hover
+ *   selectionBarIdle  #6B6E70  3 px selection bar when the list is not focused
+ *   matchBack         #2E4366  search-match background; text selection in fields
+ * 2.2 Display
+ *   bezel             #050606  display window
+ *   bezelRim          #2E3134  1 px frame left, right, bottom of the window
+ *   bezelRimTop       #45494D  1 px frame on the top edge of the window
+ *   lcdBack           #071104  lit field background
+ *   lcdOn             #98CF1C  lit dots
+ *   lcdGhost          #0F1D09  unlit dots (switch lcdShowGhost, default true)
+ * 2.3 Lettering and rules
+ *   labelPrimary      #E2E0D4  legends, list names, values, dialog text
+ *   labelSecondary    #A3A293  secondary labels, addresses, status labels, tags
+ *   labelDim          #6E6D64  placeholder text, unnamed user slots, hints
+ *   labelDisabled     #5F5F58  any disabled text
+ *   labelAccent       #86A6D4  patch-section titles and numerals, the wordmark
+ *   ruleAccent        #6E8EBA  rules of the patch section
+ *   ruleSecondary     #8C8B7E  rules of secondary sections, wordmark divider
+ *   labelRed          #E8565C  AUTO SEND, NOT FOUND, errors, default-button border
+ *   arrow             #BDB9A0  PREV / NEXT wedges, combo arrow
+ *   starOff           #5C5E5A  unfilled star outline
+ *   tagBorder         #4A4C48  box around the key-mode letter
+ * 2.4 Buttons and LEDs
+ *   buttonSlot        #121415  1 px recess around every button face
+ *   buttonFace        #3F4244  face, normal
+ *   buttonFaceHover   #4A4D50  face, hover
+ *   buttonPressed     #2F3133  face, pressed
+ *   buttonHighlight   #56595C  1 px top inside edge of the face (not pressed)
+ *   buttonFaceLit     #4B3B3C  face of a button whose LED is lit
+ *   buttonDisabled    #2C2E30  face, disabled
+ *   ledOn             #F0383F  lit LED
+ *   ledCore           #FF9C8C  lighter core inside a lit LED
+ *   ledOff            #2A1A1A  unlit LED
+ *   focusRing         #9DBBE8  every keyboard focus indicator (2 px)
+ *
+ * ----------------------------------------------------------------------------------
+ * TYPE ROLES (DESIGN.md section 3). Family "Inter" (assets/fonts, OFL 1.1), sizes in
+ * px. Weight 400 = Regular, 500 = Medium. "Caps" strings are stored in capitals by the
+ * code: QSS cannot change case.
+ * ----------------------------------------------------------------------------------
+ *   role              weight  size  spacing  case        colour
+ *   type.panelLabel    500     10    0.5      caps        per use
+ *   type.listName      400     14    0        as stored   labelPrimary
+ *   type.listAddress   500     13    cells    caps        labelSecondary
+ *   type.listMeta      500     10    0.5      caps        labelSecondary
+ *   type.field         400     14    0        as typed    labelPrimary
+ *   type.statusLabel   500     10    0.5      caps        labelSecondary
+ *   type.statusValue   400     11    0        as named    labelPrimary
+ *   type.body          400     13    0        sentence    labelPrimary
+ *   type.note          400     12    0        sentence    labelSecondary
+ *   type.emptyTitle    500     11    1.0      caps        labelSecondary
+ *   type.keycap        500     10    0.5      as named    labelPrimary
+ *   type.wordmark      500     15    3.0      caps        labelAccent
+ *   type.wordmarkSub   500     10    1.0      caps        labelSecondary
+ * Application font (Theme): Inter Regular 13 px.
+ *
+ * ----------------------------------------------------------------------------------
+ * NOTES FOR THE BUILDER (Qt 6.4 QSS limits; 1 to 5 checked in a Qt 6.4.2 harness)
+ * ----------------------------------------------------------------------------------
+ * 1. Letter spacing is not a QSS property. Where a role above has spacing, Theme sets
+ *    it in C++ with QFont::setLetterSpacing(QFont::AbsoluteSpacing, n) on the widget's
+ *    font; the size and weight set here do not reset it.
+ * 2. Object names and the dynamic properties [role="..."] and [state="..."] must be
+ *    set before the widget is first shown. Changing one later needs
+ *    style()->unpolish(w); style()->polish(w); (QSS does not re-evaluate by itself).
+ *    For QMessageBox: create the QPushButton, setObjectName("clearButton"), then
+ *    addButton(button, role); naming the button addButton(text, role) returns is
+ *    too late and CLEAR stays labelPrimary.
+ * 3. #band must be a QFrame (a plain QWidget ignores QSS borders).
+ * 4. Combo popups take the item rules below only with
+ *    combo->setItemDelegate(new QStyledItemDelegate(combo)).
+ * 5. The combo arrow is a raster pair, assets/theme/arrow-down.png (8 x 4) and
+ *    arrow-down@2x.png (16 x 8), compiled into the resources under :/theme/. A QSS
+ *    SVG image would need the QtSvg image-format plugin (a new dependency), and a
+ *    border-drawn wedge renders as a bar in Qt 6.4. Source: arrow-down.svg; the PNGs
+ *    are regenerated by make-arrows.py.
+ * 6. :hover rules were not exercised (the offscreen harness has no pointer); check
+ *    them by hand in the T3 review screenshots.
+ */
+
+/* ---------------------------------------------------------------- backgrounds -- */
+
+QMainWindow,
+QDialog,
+QMessageBox {
+    background-color: #202326;
+    color: #E2E0D4;
+}
+
+QFrame#band {
+    background-color: #26292B;
+    border: none;
+    border-top: 1px solid #3A3E41;
+}
+
+/* ------------------------------------------------- search field, DESIGN 7.1 -- */
+
+QLineEdit#searchField {
+    background-color: #0E0F10;
+    color: #E2E0D4;
+    font-size: 14px;
+    font-weight: 400;
+    border-style: solid;
+    border-width: 1px;
+    border-top-color: #0B0C0D;
+    border-left-color: #0B0C0D;
+    border-bottom-color: #3A3D40;
+    border-right-color: #3A3D40;
+    border-radius: 0px;
+    padding: 0px 10px;
+    min-height: 30px;
+    max-height: 30px;
+    selection-background-color: #2E4366;
+    selection-color: #E2E0D4;
+}
+
+QLineEdit#searchField:hover {
+    border: 1px solid #4C5053;
+}
+
+QLineEdit#searchField:focus {
+    border: 2px solid #9DBBE8;
+    padding: 0px 9px;
+    min-height: 28px;
+    max-height: 28px;
+}
+
+/* -------------------------------------------- patch list well, DESIGN 7.2, 7.6 -- */
+
+QListView#patchList {
+    background-color: #141617;
+    color: #E2E0D4;
+    border-style: solid;
+    border-width: 1px;
+    border-top-color: #0B0C0D;
+    border-left-color: #0B0C0D;
+    border-bottom-color: #34383B;
+    border-right-color: #34383B;
+    border-radius: 0px;
+    outline: 0;
+    padding: 0px;
+}
+
+QListView#patchList:focus {
+    border: 1px solid #9DBBE8;
+}
+
+QListView#patchList QScrollBar:vertical {
+    background-color: #141617;
+    width: 10px;
+    margin: 0px;
+    border: none;
+}
+
+QListView#patchList QScrollBar::handle:vertical {
+    background-color: #3F4244;
+    min-height: 24px;
+    margin: 0px 2px;
+    border: none;
+    border-radius: 0px;
+}
+
+QListView#patchList QScrollBar::handle:vertical:hover {
+    background-color: #4A4D50;
+}
+
+QListView#patchList QScrollBar::handle:vertical:pressed {
+    background-color: #2F3133;
+}
+
+QListView#patchList QScrollBar::add-line:vertical,
+QListView#patchList QScrollBar::sub-line:vertical {
+    height: 0px;
+    border: none;
+    background: none;
+}
+
+QListView#patchList QScrollBar::add-page:vertical,
+QListView#patchList QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+/* --------------------------------------------- user-slot editor, DESIGN 7.4 -- */
+
+QLineEdit#nameEditor {
+    background-color: #0E0F10;
+    color: #E2E0D4;
+    font-size: 14px;
+    font-weight: 400;
+    border: 1px solid #9DBBE8;
+    border-radius: 0px;
+    padding: 0px 3px;
+    selection-background-color: #2E4366;
+    selection-color: #E2E0D4;
+}
+
+/* ------------------------------------------------------ status bar, DESIGN 8.1 -- */
+
+QStatusBar#statusBar {
+    background-color: #202326;
+    border: none;
+    border-top: 1px solid #3A3E41;
+    min-height: 21px;
+    max-height: 21px;
+}
+
+QStatusBar#statusBar::item {
+    border: none;
+}
+
+QStatusBar#statusBar QLabel {
+    background: transparent;
+    padding: 0px;
+    margin: 0px;
+}
+
+/* OUT, CH, IN */
+QStatusBar#statusBar QLabel[role="statusLabel"] {
+    color: #A3A293;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+/* FOLLOW */
+QStatusBar#statusBar QLabel[role="statusFollow"] {
+    color: #E2E0D4;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+/* NOT FOUND */
+QStatusBar#statusBar QLabel[role="statusError"] {
+    color: #E8565C;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+/* port names, channel number */
+QStatusBar#statusBar QLabel[role="statusValue"] {
+    color: #E2E0D4;
+    font-size: 11px;
+    font-weight: 400;
+}
+
+/* "None" when no port is set */
+QStatusBar#statusBar QLabel[role="statusDim"] {
+    color: #6E6D64;
+    font-size: 11px;
+    font-weight: 400;
+}
+
+/* right-aligned message */
+QStatusBar#statusBar QLabel[role="statusMessage"] {
+    color: #A3A293;
+    font-size: 11px;
+    font-weight: 400;
+}
+
+/* ------------------------------------------------- menus, DESIGN 8.2 -- */
+
+QMenu {
+    background-color: #202326;
+    color: #E2E0D4;
+    font-size: 13px;
+    font-weight: 400;
+    border: 1px solid #3A3D40;
+    border-radius: 0px;
+    padding: 4px 0px;
+}
+
+QMenu::item {
+    background-color: transparent;
+    padding: 6px 24px 6px 12px;
+    min-height: 16px;
+}
+
+QMenu::item:selected {
+    background-color: #33373B;
+    color: #E2E0D4;
+}
+
+QMenu::item:disabled {
+    color: #5F5F58;
+    background-color: transparent;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #3A3D40;
+    margin: 4px 0px;
+}
+
+/* ------------------------------------------------ tooltips, DESIGN 8.3 -- */
+
+QToolTip {
+    background-color: #0E0F10;
+    color: #E2E0D4;
+    font-size: 12px;
+    font-weight: 400;
+    border: 1px solid #3A3D40;
+    border-radius: 0px;
+    padding: 4px 6px;
+}
+
+/* ------------------------------------------- dialog text roles, DESIGN 10 -- */
+
+QDialog QLabel,
+QMessageBox QLabel {
+    color: #E2E0D4;
+    font-size: 13px;
+    font-weight: 400;
+    background: transparent;
+}
+
+QLabel[role="body"] {
+    color: #E2E0D4;
+    font-size: 13px;
+    font-weight: 400;
+}
+
+QLabel[role="note"] {
+    color: #A3A293;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+QLabel[role="dim"] {
+    color: #6E6D64;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+/* Settings form labels: caps, right edge at x 100 (alignment set in code). */
+QLabel[role="formLabel"] {
+    color: #E2E0D4;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+QLabel#connectionText[state="ok"] {
+    color: #E2E0D4;
+    font-size: 13px;
+    font-weight: 400;
+}
+
+QLabel#connectionText[state="error"] {
+    color: #E8565C;
+    font-size: 13px;
+    font-weight: 400;
+}
+
+/* Shortcuts sheet key caps, DESIGN 10.3: 18 px tall overall, min 18 px wide. */
+QLabel#keycap {
+    color: #E2E0D4;
+    background-color: #3F4244;
+    font-size: 10px;
+    font-weight: 500;
+    border: 1px solid #121415;
+    border-bottom: 2px solid #121415;
+    border-radius: 2px;
+    padding: 1px 6px;
+    min-height: 13px;
+    max-height: 13px;
+    min-width: 4px;
+    qproperty-alignment: AlignCenter;
+}
+
+/* ----------------------------------------- dialog buttons, DESIGN 10.2 -- */
+/* 28 px tall overall, min 100 px wide overall. Text is caps, set by the code. */
+
+QDialog QPushButton,
+QMessageBox QPushButton {
+    background-color: #3F4244;
+    color: #E2E0D4;
+    font-size: 10px;
+    font-weight: 500;
+    border: 1px solid #121415;
+    border-radius: 2px;
+    padding: 0px 12px;
+    min-width: 74px;
+    min-height: 26px;
+    max-height: 26px;
+}
+
+QDialog QPushButton:hover,
+QMessageBox QPushButton:hover {
+    background-color: #4A4D50;
+}
+
+QDialog QPushButton:pressed,
+QMessageBox QPushButton:pressed {
+    background-color: #2F3133;
+}
+
+QDialog QPushButton:default,
+QMessageBox QPushButton:default {
+    border: 1px solid #E8565C;
+}
+
+QDialog QPushButton:focus,
+QMessageBox QPushButton:focus {
+    border: 2px solid #9DBBE8;
+    padding: 0px 11px;
+    min-width: 74px;
+    min-height: 24px;
+    max-height: 24px;
+}
+
+QDialog QPushButton:disabled,
+QMessageBox QPushButton:disabled {
+    background-color: #2C2E30;
+    color: #5F5F58;
+    border: 1px solid #121415;
+}
+
+QMessageBox QPushButton#clearButton {
+    color: #E8565C;
+}
+
+/* ------------------------------------------------- combo box, DESIGN 10.2 -- */
+/* 26 px tall overall. */
+
+QComboBox {
+    combobox-popup: 0;
+    background-color: #0E0F10;
+    color: #E2E0D4;
+    font-size: 13px;
+    font-weight: 400;
+    border: 1px solid #3A3D40;
+    border-radius: 0px;
+    padding: 0px 0px 0px 8px;
+    min-height: 24px;
+    max-height: 24px;
+    selection-background-color: #33373B;
+    selection-color: #E2E0D4;
+}
+
+QComboBox:hover {
+    border: 1px solid #4C5053;
+}
+
+QComboBox:focus {
+    border: 2px solid #9DBBE8;
+    padding: 0px 0px 0px 7px;
+    min-height: 22px;
+    max-height: 22px;
+}
+
+QComboBox:disabled {
+    color: #5F5F58;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    width: 20px;
+    border: none;
+    background: transparent;
+}
+
+/* 8 x 4 solid wedge in `arrow` (see note 5); Qt picks the @2x file at DPR 2. */
+QComboBox::down-arrow {
+    image: url(:/theme/arrow-down.png);
+    width: 8px;
+    height: 4px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #202326;
+    color: #E2E0D4;
+    border: 1px solid #3A3D40;
+    padding: 4px 0px;
+    outline: 0;
+    selection-background-color: #33373B;
+    selection-color: #E2E0D4;
+}
+
+QComboBox QAbstractItemView::item {
+    min-height: 28px;
+    padding: 0px 12px;
+    border: none;
+}
+
+QComboBox QAbstractItemView::item:selected,
+QComboBox QAbstractItemView::item:hover {
+    background-color: #33373B;
+    color: #E2E0D4;
+}
+
+/* -------------------------------------------------- spin box, DESIGN 10.2 -- */
+/* 72 x 26 overall; arrows hidden (keys and wheel change the value). */
+
+QSpinBox {
+    background-color: #0E0F10;
+    color: #E2E0D4;
+    font-size: 13px;
+    font-weight: 400;
+    border: 1px solid #3A3D40;
+    border-radius: 0px;
+    padding: 0px;
+    min-width: 70px;
+    max-width: 70px;
+    min-height: 24px;
+    max-height: 24px;
+    selection-background-color: #2E4366;
+    selection-color: #E2E0D4;
+    qproperty-buttonSymbols: NoButtons;
+    qproperty-alignment: AlignCenter;
+}
+
+QSpinBox:hover {
+    border: 1px solid #4C5053;
+}
+
+QSpinBox:focus {
+    border: 2px solid #9DBBE8;
+    min-width: 68px;
+    max-width: 68px;
+    min-height: 22px;
+    max-height: 22px;
+}
+
+QSpinBox::up-button,
+QSpinBox::down-button {
+    width: 0px;
+    border: none;
+}
+
+/* -------------------------------------------- checkbox (an LED), DESIGN 10.2 -- */
+/* Indicator 16 x 6 overall (14 x 4 plus a 1 px border). */
+
+QCheckBox {
+    color: #E2E0D4;
+    font-size: 13px;
+    font-weight: 400;
+    spacing: 10px;
+    background: transparent;
+}
+
+QCheckBox:disabled {
+    color: #5F5F58;
+}
+
+QCheckBox::indicator {
+    width: 14px;
+    height: 4px;
+    background-color: #2A1A1A;
+    border: 1px solid #121415;
+    border-radius: 0px;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #F0383F;
+    border: 1px solid #F0383F;
+}
+
+QCheckBox::indicator:focus {
+    border: 1px solid #9DBBE8;
+}
+
+QCheckBox::indicator:disabled {
+    background-color: #2C2E30;
+    border: 1px solid #121415;
+}

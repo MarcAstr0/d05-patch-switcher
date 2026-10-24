@@ -132,11 +132,12 @@ more mannered in the caps). Source:
 | `assets/fonts/OFL.txt` | `LICENSE.txt` | |
 | `assets/fonts/README.md` | written by T2.3: source URL, version, hashes above, the subset command | |
 
-The originals are 417 KB each. T2.3 subsets them (allowed: no Reserved Font Name) with
+The originals are 411,640 and 417,300 bytes. T2.3 subsets them (allowed: no Reserved Font Name) with
 `pyftsubset` to `U+0020-007E,U+00A0-017F,U+2018-201E,U+2022,U+2026,U+2190-2193,U+21E7,U+2318,U+2325,U+2212`
 keeping `--layout-features='kern,tnum,case'` and the name table, so the embedded fonts
 cost well under 200 KB together (SPEC §5 binary budget). If subsetting cannot be run,
-commit the originals unchanged. Characters outside the subset (a user typing other
+commit the originals unchanged. Result (T2.3): 57,968 and 58,816 bytes, 114 KB together;
+command, hashes and checks in `assets/fonts/README.md`. Characters outside the subset (a user typing other
 scripts into the search field) fall back to the system font through Qt; that is
 accepted.
 
@@ -144,7 +145,13 @@ The display uses **no font**: it is drawn from the 5 x 7 glyph table in Appendix
 
 The fonts are compiled into the resource file and registered at startup with
 `QFontDatabase::addApplicationFont(":/fonts/Inter-Regular.ttf")` and `...Medium.ttf`.
-Family name `Inter`; Medium is selected with `QFont::setWeight(QFont::Medium)`. The
+Family name `Inter`; Medium is selected with `QFont::setWeight(QFont::Medium)` (verified
+with Qt 6.4.2 on Linux with no system fonts: resolves to style `Medium`, weight 500). The
+Medium file registers two family names, `Inter` and `Inter Medium` (its legacy name ID 1
+is `Inter Medium`). Platform font databases that read only the legacy names may expose
+just `Inter Medium`, so `Theme` checks once at startup that
+`QFontInfo(QFont("Inter") with weight Medium).weight() == 500`; if it is not, every Medium
+role uses family `Inter Medium` at the normal weight instead. The
 application font is Inter Regular 13 px.
 
 ### 3.2 Roles
@@ -737,7 +744,7 @@ control), control column from x 112.
 | Control | Spec |
 |---|---|
 | Dialog button | min width 100, height 28; background `buttonFace`; 1 px `buttonSlot` border, radius 2; text `type.panelLabel` caps `labelPrimary`; hover `buttonFaceHover`; pressed `buttonPressed`; focus 2 px `focusRing` border (padding reduced by 1); default button 1 px `labelRed` border; disabled `buttonDisabled`, text `labelDisabled` |
-| Combo box | height 26; `fieldBack`; 1 px `fieldBorder` (hover `fieldBorderHover`, focus 2 px `focusRing`); padding left 8; text `type.body`; drop-down area 20 px wide, no separator line, arrow `assets/theme/arrow-down.svg` (8 x 5 solid wedge in `arrow`); popup as `QMenu` (8.2) with `selection` for the current item |
+| Combo box | height 26; `fieldBack`; 1 px `fieldBorder` (hover `fieldBorderHover`, focus 2 px `focusRing`); padding left 8; text `type.body`; drop-down area 20 px wide, no separator line, arrow image `:/theme/arrow-down.png` (8 x 4 solid wedge in `arrow`, 45-degree steps, rows 8, 6, 4, 2 px; `arrow-down@2x.png` 16 x 8 is picked at DPR 2); popup as `QMenu` (8.2) with `selection` for the current item |
 | Spin box | height 26, width 72, `fieldBack`, borders as combo, text centred `type.body`, `buttonSymbols = NoButtons` (keys and wheel change it) |
 | Checkbox | indicator 16 x 6 rect, spacing 10 to the text; unchecked `ledOff` with 1 px `buttonSlot` border; checked `ledOn` with 1 px `ledOn` border; focus: indicator border `focusRing`; disabled: indicator `buttonDisabled`, text `labelDisabled`; text `type.body` |
 
@@ -796,7 +803,9 @@ default; `CLEAR` text in `labelRed`. No icon.
    off they stay sharp.
 3. The display computes its geometry in device pixels (5.1) so dots stay square and
    equal at any DPR, including 1.25 and 1.5.
-4. No raster image ships for chrome. The only rasters on screen are the owner's
+4. No raster image ships for chrome except the combo-box arrow (10.2): QSS cannot draw
+   a wedge (a border-drawn triangle renders as a bar in Qt 6.4) and an SVG in QSS needs
+   the QtSvg image-format plugin, a new dependency. The other rasters on screen are the owner's
    `logo.png` (4.5) and the display's own atlas, which is generated at run time.
 5. Fonts are sized in pixels; Qt scales them with the DPR.
 
@@ -822,16 +831,22 @@ Object names and dynamic properties the QSS relies on (T2.3 writes against these
 | Selector | Widget |
 |---|---|
 | `QMainWindow`, `QDialog`, `QMessageBox` | backgrounds |
-| `#band` | the band container |
+| `QFrame#band` | the band container (must be a `QFrame`: a plain `QWidget` ignores QSS borders) |
 | `#searchField` | search `QLineEdit` |
 | `#patchList` | list `QListView` |
 | `#nameEditor` | inline editor |
-| `QStatusBar#statusBar` | status bar; its labels use `[role="statusLabel"]`, `[role="statusValue"]`, `[role="statusDim"]`, `[role="statusError"]` |
+| `QStatusBar#statusBar` | status bar; its labels use `[role="statusLabel"]` (`OUT`, `CH`, `IN`), `[role="statusValue"]`, `[role="statusDim"]` (`None`), `[role="statusError"]` (`NOT FOUND`), `[role="statusFollow"]` (`FOLLOW`), `[role="statusMessage"]` (the right-aligned message) |
 | `QLabel#keycap` | Shortcuts key caps |
 | `QLabel[role="note"]`, `[role="dim"]`, `[role="body"]`, `[role="formLabel"]` | dialog text roles |
 | `QLabel#connectionText[state="ok"]` / `[state="error"]` | Settings connection line |
 | `QPushButton` (inside dialogs) | dialog buttons, `:default` |
-| `QPushButton#clearButton` | `CLEAR` in the confirmation (red text) |
+| `QPushButton#clearButton` | `CLEAR` in the confirmation (red text). Create the button, set the name, then `addButton(button, role)`: naming the button `addButton(text, role)` returns is too late for QSS |
+
+Object names and `role` / `state` properties are set before a widget is first shown;
+changing a property later needs `style()->unpolish(w); style()->polish(w);`. QSS cannot
+set letter spacing: `Theme` sets it on the widget fonts (section 3.2 spacing column) and
+the QSS size and weight do not reset it (verified, Qt 6.4.2). Combo popups take the
+item rules only with `setItemDelegate(new QStyledItemDelegate(combo))`.
 
 Footprint, restated for the builder: the display repaints only from `setLines` with
 changed text; the `SENT` flash and the activity LED share one 400 ms single-shot timer;
@@ -891,8 +906,10 @@ nothing else is time based; no allocation in `paintEvent`s or `PatchDelegate::pa
 - Fonts: section 3.1 (files, licence, subset command, README).
 - `assets/theme/app.qss`: every row marked QSS in section 12, with sections 2 and 3 as
   the header comment (token name, hex, use).
-- `assets/theme/arrow-down.svg`: an 8 x 5 solid downward wedge, fill `#BDB9A0`, viewBox
-  `0 0 8 5`, path `M0 0 H8 L4 5 Z`.
+- `assets/theme/arrow-down.svg`: the combo arrow source, an 8 x 4 solid downward wedge
+  with 45-degree steps (rows 8, 6, 4, 2 px), fill `#BDB9A0`, viewBox `0 0 8 4`; shipped
+  as the pixel-exact rasters `arrow-down.png` (8 x 4) and `arrow-down@2x.png` (16 x 8),
+  written by `assets/theme/make-arrows.py` (see 10.2 and 11.4).
 - `assets/icons/d05-patch-switcher.svg`, 256 x 256 viewBox, no text objects (convert
   everything to paths or rects):
   - tile: rect `(8, 8, 240, 240)`, radius 44, fill `panel` `#202326`;
@@ -906,7 +923,7 @@ nothing else is time based; no allocation in `paintEvent`s or `PatchDelegate::pa
   - three button faces `(40, 192, 48, 24)`, `(104, 192, 48, 24)`, `(168, 192, 48, 24)`,
     radius 3, fill `buttonFace` `#3F4244`; each with an LED `(+16, +9, 16, 6)`: the middle
     one `ledOn` `#F0383F`, the others `ledOff` `#2A1A1A`.
-- `assets/icons/d05-patch-switcher-256.png` from the SVG with
+- `assets/icons/d05-patch-switcher.png` from the SVG with
   `inkscape --export-type=png --export-width=256`; `.ico` and `.icns` (or the commands).
 
 ### 14.2 T2.4 mockups

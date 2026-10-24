@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Combo box arrow, DESIGN.md 10.2: 8 x 4 solid downward wedge in `arrow`, 45-degree
+     steps (rows 8, 6, 4, 2 px wide). Vector source of arrow-down.png and
+     arrow-down@2x.png, which make-arrows.py writes pixel-exact. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4" viewBox="0 0 8 4">
+  <path d="M0 0 H8 V1 H7 V2 H6 V3 H5 V4 H3 V3 H2 V2 H1 V1 H0 Z" fill="#BDB9A0"/>
+</svg>
