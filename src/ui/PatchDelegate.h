@@ -85,6 +85,7 @@ private:
     QPen m_metaRed;
     mutable std::optional<PatchAddress> m_editing;
     mutable int m_editLength = 0;
+    mutable QObject *m_editor = nullptr;  // identity only, never dereferenced
     QPen m_addrPrimary, m_addrSecondary, m_namePrimary, m_nameDim, m_meta;
 };
 

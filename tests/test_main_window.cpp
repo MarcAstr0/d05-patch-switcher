@@ -150,9 +150,6 @@ private slots:
 
     void minimumSizeKeepsListUsable()
     {
-#ifdef Q_OS_WIN
-        QSKIP("allocation counting needs the replaced operator new, not used on Windows");
-#endif
         Rig r;
         r.w->resize(800, 480);
         QVERIFY(r.show());
@@ -704,6 +701,9 @@ private slots:
 
     void delegatePaintAllocationsDoNotGrowWithElisionOrRanges()
     {
+#ifdef Q_OS_WIN
+        QSKIP("allocation counting needs the replaced operator new, not used on Windows");
+#endif
         Rig r;
         r.w->resize(800, 480);
         QVERIFY(r.show());

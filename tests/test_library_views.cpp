@@ -7,6 +7,7 @@
 #include "midi/MidiLink.h"
 #include "ui/DisplayWidget.h"
 #include "ui/MainWindow.h"
+#include "ui/PanelButton.h"
 #include "ui/PatchDelegate.h"
 #include "ui/PatchListModel.h"
 #include "ui/PatchListView.h"
@@ -311,7 +312,7 @@ private slots:
         QCOMPARE(r.model()->rowCount(), 2);  // nothing happened yet
 
         box->defaultButton()->click();  // CANCEL
-        QVERIFY(!r.w->clearRecentsBox());
+        QTRY_VERIFY(!r.w->clearRecentsBox());  // closing may lag (a macOS sheet; deferred delete)
         QCOMPARE(r.library->recents().size(), 2);
         QCOMPARE(r.model()->rowCount(), 2);
 
@@ -320,6 +321,7 @@ private slots:
         QVERIFY(box);
         box->findChild<QPushButton *>(QStringLiteral("clearButton"))->click();
         QVERIFY(r.library->recents().isEmpty());
+        QTRY_VERIFY(!r.w->clearRecentsBox());
         QCOMPARE(r.model()->rowCount(), 0);
         QCOMPARE(r.list()->emptyTitle(), QStringLiteral("NOTHING SENT YET"));
         r.library->flush();
@@ -334,7 +336,7 @@ private slots:
         box = r.w->clearRecentsBox();
         QVERIFY(box);
         QTest::keyClick(box, Qt::Key_Escape);
-        QVERIFY(!r.w->clearRecentsBox());
+        QTRY_VERIFY(!r.w->clearRecentsBox());  // closing may lag (a macOS sheet; deferred delete)
         QCOMPARE(r.library->recents().size(), 1);
         QCOMPARE(r.sentCount(), 0);
     }
@@ -485,6 +487,208 @@ private slots:
         QCOMPARE(r.model()->rowCount(), 0);
         QVERIFY(r.list()->hasFocus());
         QCOMPARE(r.sentCount(), 0);
+    }
+
+
+    // ------------------------------------------------------------------ fix round
+
+    // Opens the editor on a user slot and types; returns it.
+    QLineEdit *typeName(Rig &r, const char *a, const QString &text)
+    {
+        r.highlight(a);
+        r.w->renameHighlighted();
+        QLineEdit *e = r.editor();
+        if (e)
+            QTest::keyClicks(e, text);
+        return e;
+    }
+
+    void viewSwitchCommitsAnOpenEditor()
+    {
+        for (const Qt::Key key : {Qt::Key_2, Qt::Key_3}) {
+            Rig r;
+            QVERIFY(r.show());
+            r.library->setFavorite(addr("P1-12"), true);
+            QVERIFY(typeName(r, "U1-11", QStringLiteral("Kept")));
+            QTest::keyClick(r.w.get(), key, Qt::ControlModifier);
+            QCOMPARE(r.catalog.name(addr("U1-11")), QStringLiteral("Kept"));
+            QVERIFY(!r.editor());
+            QCOMPARE(r.reloadedName("U1-11"), QStringLiteral("Kept"));
+            QCOMPARE(r.sentCount(), 0);
+        }
+        Rig r;  // the view buttons, and back to All
+        QVERIFY(r.show());
+        r.library->recordSend(addr("U1-12"));
+        QVERIFY(typeName(r, "U1-12", QStringLiteral("Btn")));
+        r.w->viewButton(PatchListModel::View::Recents)->click();
+        QCOMPARE(r.catalog.name(addr("U1-12")), QStringLiteral("Btn"));
+        QVERIFY(typeName(r, "U1-12", QStringLiteral("2")));
+        QTest::keyClick(r.w.get(), Qt::Key_1, Qt::ControlModifier);
+        QCOMPARE(r.catalog.name(addr("U1-12")), QStringLiteral("2"));  // the editor opened with the name selected
+    }
+
+    void favouriteToggleCommitsAnOpenEditor()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        r.library->setFavorite(addr("U1-11"), true);
+        r.library->setFavorite(addr("P1-12"), true);
+        QTest::keyClick(r.w.get(), Qt::Key_2, Qt::ControlModifier);
+        QVERIFY(typeName(r, "U1-11", QStringLiteral("Fav")));
+        QTest::keyClick(r.w.get(), Qt::Key_D, Qt::ControlModifier);  // un-stars the row being edited
+        QCOMPARE(r.catalog.name(addr("U1-11")), QStringLiteral("Fav"));
+        QVERIFY(!r.library->isFavorite(addr("U1-11")));
+        // And a star click on another row.
+        QVERIFY(typeName(r, "U1-11", QStringLiteral("X")) == nullptr);  // no longer listed
+        QCOMPARE(r.sentCount(), 0);
+    }
+
+    void clearRecentsAndSendsCommitAnOpenEditor()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        r.library->recordSend(addr("P1-12"));
+        r.library->recordSend(addr("U1-11"));
+        QTest::keyClick(r.w.get(), Qt::Key_3, Qt::ControlModifier);
+        QVERIFY(typeName(r, "U1-11", QStringLiteral("Sent")));
+        r.w->sendHighlighted();  // the highlighted row is the one being edited; sending reorders the list
+        QCOMPARE(r.catalog.name(addr("U1-11")), QStringLiteral("Sent"));
+        QVERIFY(!r.editor());
+
+        QVERIFY(typeName(r, "U1-11", QStringLiteral("Clr")));
+        r.w->action(QStringLiteral("actionClearRecents"))->trigger();
+        r.w->clearRecentsBox()->findChild<QPushButton *>(QStringLiteral("clearButton"))->click();
+        QVERIFY(r.library->recents().isEmpty());
+        QCOMPARE(r.catalog.name(addr("U1-11")), QStringLiteral("Clr"));
+        QCOMPARE(r.reloadedName("U1-11"), QStringLiteral("Clr"));
+    }
+
+    void doubleClickInRecentsEditsThePressedAddress()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        r.library->recordSend(addr("U1-11"));
+        r.library->recordSend(addr("P1-12"));
+        r.library->recordSend(addr("U1-13"));
+        QTest::keyClick(r.w.get(), Qt::Key_3, Qt::ControlModifier);
+        // Rows: U1-13, P1-12, U1-11. Double-click U1-11 (last row): the first click sends it,
+        // it moves to the top, and the editor must open on it, not on what slid under the cursor.
+        const QModelIndex i = r.model()->indexOf(addr("U1-11"));
+        QWidget *vp = r.list()->viewport();
+        const QPoint pos = r.list()->visualRect(i).center();
+        QTest::mousePress(vp, Qt::LeftButton, Qt::NoModifier, pos);
+        QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, pos);
+        QCOMPARE(r.model()->row(0).address, addr("U1-11"));
+        QMouseEvent dbl(QEvent::MouseButtonDblClick, pos, vp->mapToGlobal(pos), Qt::LeftButton, Qt::LeftButton,
+                        Qt::NoModifier);
+        QApplication::sendEvent(vp, &dbl);
+        QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, pos);
+        QLineEdit *e = r.editor();
+        QVERIFY(e);
+        QCOMPARE(r.list()->visualRect(r.model()->indexOf(addr("U1-11"))).y() + 2, e->y());
+        QCOMPARE(r.sentCount(), 3);
+        QTest::keyClicks(e, QStringLiteral("Mine"));
+        finish(e, Qt::Key_Return);
+        QCOMPARE(r.catalog.name(addr("U1-11")), QStringLiteral("Mine"));
+        QCOMPARE(r.catalog.name(addr("U1-13")), QString());
+
+        // Pressing a preset that then moves away, with a user row sliding under: no editor.
+        r.backend.clearSent();
+        const QModelIndex p = r.model()->indexOf(addr("P1-12"));
+        const QPoint ppos = r.list()->visualRect(p).center();
+        QTest::mousePress(vp, Qt::LeftButton, Qt::NoModifier, ppos);
+        QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, ppos);
+        QMouseEvent dbl2(QEvent::MouseButtonDblClick, ppos, vp->mapToGlobal(ppos), Qt::LeftButton, Qt::LeftButton,
+                         Qt::NoModifier);
+        QApplication::sendEvent(vp, &dbl2);
+        QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, ppos);
+        QVERIFY(!r.editor());
+    }
+
+    void starDoubleClickInFavouritesDoesNotToggleTheNextRow()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        r.library->setFavorite(addr("P1-12"), true);
+        r.library->setFavorite(addr("P1-13"), true);
+        QTest::keyClick(r.w.get(), Qt::Key_2, Qt::ControlModifier);
+        const QModelIndex i = r.model()->indexOf(addr("P1-12"));
+        QWidget *vp = r.list()->viewport();
+        const QPoint pos = r.starPos(i);
+        QTest::mousePress(vp, Qt::LeftButton, Qt::NoModifier, pos);
+        QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, pos);
+        QVERIFY(!r.library->isFavorite(addr("P1-12")));
+        QMouseEvent dbl(QEvent::MouseButtonDblClick, pos, vp->mapToGlobal(pos), Qt::LeftButton, Qt::LeftButton,
+                        Qt::NoModifier);
+        QApplication::sendEvent(vp, &dbl);
+        QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, pos);
+        QVERIFY(r.library->isFavorite(addr("P1-13")));  // slid into place, untouched
+        QVERIFY(!r.library->isFavorite(addr("P1-12")));
+        QCOMPARE(r.sentCount(), 0);
+    }
+
+    void focusOutCommitKeepsTheFocusWhereTheUserPutIt()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        QVERIFY(typeName(r, "U1-11", QStringLiteral("Away")));
+        QTest::mouseClick(r.w->searchField(), Qt::LeftButton);
+        for (int i = 0; i < 3; ++i)
+            QCoreApplication::processEvents();
+        QCOMPARE(r.catalog.name(addr("U1-11")), QStringLiteral("Away"));
+        QVERIFY(r.w->searchField()->hasFocus());
+        QVERIFY(!r.editor());
+        QCOMPARE(r.sentCount(), 0);
+    }
+
+    void typingAtTheLimitIsRefusedNotShifted()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        QLineEdit *e = typeName(r, "U1-11", QStringLiteral("012345678901234567"));
+        QVERIFY(e);
+        QCOMPARE(e->text().size(), 18);
+        e->setCursorPosition(0);
+        QTest::keyClick(e, Qt::Key_Z);
+        QCOMPARE(e->text(), QStringLiteral("012345678901234567"));  // the last character survives
+        e->setCursorPosition(5);
+        QTest::keyClick(e, Qt::Key_Z);
+        QCOMPARE(e->text(), QStringLiteral("012345678901234567"));
+        QTest::keyClick(e, Qt::Key_Backspace);
+        QTest::keyClick(e, Qt::Key_Z);
+        QCOMPARE(e->text(), QStringLiteral("0123z5678901234567"));
+        // A paste at the limit still sanitises and cuts.
+        e->setCursorPosition(0);
+        QApplication::clipboard()->setText(QStringLiteral("ab\tcd"));
+        e->paste();
+        QCOMPARE(e->text().size(), 18);
+    }
+
+    void spaceAndCtrlDInAnEmptyFavouritesViewAddThePatch()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        r.highlight("P2-22");
+        QTest::keyClick(r.w.get(), Qt::Key_2, Qt::ControlModifier);
+        QCOMPARE(r.model()->rowCount(), 0);
+        r.list()->setFocus();
+        QTest::keyClick(r.list(), Qt::Key_Space);  // the last highlight, P2-22
+        QVERIFY(r.library->isFavorite(addr("P2-22")));
+        QCOMPARE(r.model()->rowCount(), 1);
+        QTest::keyClick(r.w.get(), Qt::Key_D, Qt::ControlModifier);  // now on the row: removes it
+        QCOMPARE(r.model()->rowCount(), 0);
+        QTest::keyClick(r.w.get(), Qt::Key_D, Qt::ControlModifier);
+        QVERIFY(r.library->isFavorite(addr("P2-22")));
+        QCOMPARE(r.sentCount(), 0);
+        // Never highlighted anything before: the current patch.
+        Rig q;
+        QVERIFY(q.show());
+        q.w->setCurrent(addr("P5-55"));
+        q.library->setFavorite(addr("P1-11"), true);
+        q.library->setFavorite(addr("P1-11"), false);
+        QTest::keyClick(q.w.get(), Qt::Key_2, Qt::ControlModifier);
+        QTest::keyClick(q.w.get(), Qt::Key_D, Qt::ControlModifier);
+        QCOMPARE(q.library->favorites().size(), 1);
     }
 
     void editorCountsAndPaints()

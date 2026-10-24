@@ -329,7 +329,12 @@ void MainWindow::buildWidgets()
     connect(m_list, &PatchListView::starClicked, this,
             [this](const QModelIndex &index) { toggleFavorite(m_model->addressAt(index)); });
     connect(m_list, &PatchListView::favoriteToggleRequested, this,
-            [this](const QModelIndex &index) { toggleFavorite(m_model->addressAt(index)); });
+            [this](const QModelIndex &index) {
+                if (index.isValid())
+                    toggleFavorite(m_model->addressAt(index));
+                else
+                    toggleHighlightedFavorite();
+            });
     connect(m_delegate, &PatchDelegate::nameCommitted, this, &MainWindow::onNameCommitted);
     connect(&m_library, &Library::userNamesChanged, this, &MainWindow::refreshDisplayPatch);
     connect(m_list, &PatchListView::rowClicked, this, [this](const QModelIndex &index) {
@@ -590,6 +595,7 @@ void MainWindow::beginGridEntry()
 
 void MainWindow::onSent(const PatchAddress &address)
 {
+    finishEditing();  // recording the send reorders the Recents view
     m_library.recordSend(address);
     applyCurrent(address);
     m_display->flashSent();
@@ -638,6 +644,7 @@ void MainWindow::onQueryChanged(const QString &text)
 
 void MainWindow::onViewToggled()
 {
+    finishEditing();
     PatchListModel::View v = PatchListModel::View::All;
     if (m_viewFav->isChecked())
         v = PatchListModel::View::Favourites;
@@ -651,6 +658,8 @@ void MainWindow::onViewToggled()
 void MainWindow::onModelAboutToReset()
 {
     m_savedHighlight = highlighted();
+    if (m_savedHighlight)
+        m_lastHighlight = m_savedHighlight;
 }
 
 void MainWindow::onModelReset()
@@ -727,6 +736,7 @@ void MainWindow::moveHighlight(int delta)
 
 void MainWindow::toggleFavorite(const PatchAddress &address)
 {
+    finishEditing();
     const std::optional<PatchAddress> before = highlighted();
     const int oldRow = m_list->currentIndex().isValid() ? m_list->currentIndex().row() : 0;
     m_library.toggleFavorite(address);
@@ -738,8 +748,11 @@ void MainWindow::toggleFavorite(const PatchAddress &address)
 
 void MainWindow::toggleHighlightedFavorite()
 {
-    if (const auto a = highlighted())
-        toggleFavorite(*a);
+    // An empty list (no favourites yet) toggles the last highlighted patch, else the current one.
+    std::optional<PatchAddress> a = highlighted();
+    if (!a)
+        a = m_lastHighlight ? m_lastHighlight : std::optional<PatchAddress>(m_current);
+    toggleFavorite(*a);
 }
 
 void MainWindow::renameHighlighted()
@@ -763,9 +776,18 @@ void MainWindow::onNameCommitted(const PatchAddress &address, const QString &tex
         this,
         [this, address, text] {
             m_library.setUserName(address, text);
-            m_list->setFocus(Qt::OtherFocusReason);
+            // Enter and Esc leave the focus with the list; a commit by clicking elsewhere
+            // must leave it where the user put it.
+            if (!QApplication::focusWidget())
+                m_list->setFocus(Qt::OtherFocusReason);
         },
         Qt::QueuedConnection);
+}
+
+void MainWindow::finishEditing()
+{
+    if (const auto held = m_list->takeEditor())
+        m_library.setUserName(held->first, held->second);
 }
 
 void MainWindow::refreshDisplayPatch()
@@ -776,7 +798,7 @@ void MainWindow::refreshDisplayPatch()
 void MainWindow::confirmClearRecents()
 {
     if (m_clearBox)
-        return;  // already asking
+        return;  // already asking (or the last box is still being deleted)
     auto *box = new QMessageBox(this);
     box->setObjectName(QStringLiteral("clearRecentsBox"));
     box->setIcon(QMessageBox::NoIcon);
@@ -789,8 +811,10 @@ void MainWindow::confirmClearRecents()
     box->setDefaultButton(cancel);
     box->setEscapeButton(cancel);
     box->setAttribute(Qt::WA_DeleteOnClose);
-    connect(box, &QDialog::finished, this, [this] { m_clearBox = nullptr; });
-    connect(clear, &QAbstractButton::clicked, this, [this] { m_library.clearRecents(); });
+    connect(clear, &QAbstractButton::clicked, this, [this] {
+        finishEditing();
+        m_library.clearRecents();
+    });
     m_clearBox = box;
     box->open();
 }

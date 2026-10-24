@@ -6,6 +6,7 @@
 
 #include <QFontMetricsF>
 #include <QKeyEvent>
+#include <QLineEdit>
 #include <QPainter>
 #include <QScrollBar>
 #include <QStyle>
@@ -111,6 +112,13 @@ bool PatchListView::starHit(const QPoint &pos, QModelIndex *index) const
 void PatchListView::mousePressEvent(QMouseEvent *event)
 {
     QModelIndex i;
+    if (event->button() == Qt::LeftButton) {
+        const QModelIndex under = indexAt(event->position().toPoint());
+        if (under.isValid() && qobject_cast<PatchListModel *>(model()))
+            m_pressAddress = static_cast<PatchListModel *>(model())->addressAt(under);
+        else
+            m_pressAddress.reset();
+    }
     if (event->button() == Qt::LeftButton && starHit(event->position().toPoint(), &i)) {
         m_swallowRelease = true;
         emit starClicked(i);
@@ -124,17 +132,55 @@ void PatchListView::mouseDoubleClickEvent(QMouseEvent *event)
 {
     QModelIndex i;
     m_swallowRelease = true;
-    if (event->button() == Qt::LeftButton && starHit(event->position().toPoint(), &i)) {
-        emit starClicked(i);  // a quick second click on a star toggles again
+    auto *list = qobject_cast<PatchListModel *>(model());
+    if (event->button() != Qt::LeftButton || !list) {
+        QListView::mouseDoubleClickEvent(event);
+        return;
+    }
+    if (starHit(event->position().toPoint(), &i)) {
+        // A second click on the same star toggles again. If the first click removed the
+        // row (Favourites view) another row has slid under the cursor: leave that one alone.
+        if (m_pressAddress && list->addressAt(i) == *m_pressAddress)
+            emit starClicked(i);
         event->accept();
         return;
     }
+    // The base class turns a double-click on a row other than the pressed one (the Recents
+    // reorder) into a press of its own, which would overwrite m_pressAddress.
+    const std::optional<PatchAddress> pressed = m_pressAddress;
     QListView::mouseDoubleClickEvent(event);
     // Double-click renames a user row (preset rows refuse: edit() checks the item flags).
-    // The first click already sent; this one must not.
-    i = indexAt(event->position().toPoint());
-    if (event->button() == Qt::LeftButton && i.isValid() && (model()->flags(i) & Qt::ItemIsEditable))
-        edit(i);
+    // The first click already sent, and in the Recents view that moved the row: edit the
+    // address that was pressed, wherever it is now, never whatever is under the cursor.
+    if (pressed && pressed->isUser()) {
+        const QModelIndex target = list->indexOf(*pressed);
+        if (target.isValid() && (list->flags(target) & Qt::ItemIsEditable)) {
+            setCurrentIndex(target);
+            edit(target);
+        }
+    }
+}
+
+bool PatchListView::edit(const QModelIndex &index, EditTrigger trigger, QEvent *event)
+{
+    const bool opened = QListView::edit(index, trigger, event);
+    if (opened)
+        m_editIndex = index;
+    return opened;
+}
+
+std::optional<QPair<PatchAddress, QString>> PatchListView::takeEditor()
+{
+    auto *list = qobject_cast<PatchListModel *>(model());
+    if (!list || !m_editIndex.isValid())
+        return std::nullopt;
+    auto *editor = qobject_cast<QLineEdit *>(indexWidget(m_editIndex));
+    if (!editor || editor->isHidden())
+        return std::nullopt;
+    const QPair<PatchAddress, QString> held(list->addressAt(m_editIndex), editor->text());
+    closeEditor(editor, QAbstractItemDelegate::NoHint);
+    m_editIndex = QModelIndex();
+    return held;
 }
 
 void PatchListView::mouseReleaseEvent(QMouseEvent *event)
@@ -163,7 +209,8 @@ void PatchListView::keyPressEvent(QKeyEvent *event)
         return;
     }
     if (event->key() == Qt::Key_Space && (event->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier) {
-        if (!event->isAutoRepeat() && currentIndex().isValid())
+        // An invalid index (empty list) still asks: the window toggles the current patch.
+        if (!event->isAutoRepeat())
             emit favoriteToggleRequested(currentIndex());
         event->accept();
         return;

@@ -11,6 +11,7 @@
 #include <QApplication>
 #include <QFile>
 #include <QImage>
+#include <QDebug>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSignalSpy>
@@ -442,9 +443,13 @@ private slots:
         QVERIFY(out.isValid());
         const auto run = [&](const QStringList &args) {
             QProcess p;
+            p.setProcessChannelMode(QProcess::MergedChannels);  // so a failing child shows its output
             p.start(QStringLiteral(D05_BINARY), args);
             if (!p.waitForFinished(30000))
                 return -999;
+            const QByteArray output = p.readAll();
+            if (!output.isEmpty())
+                qInfo().noquote() << "child output:" << QString::fromLocal8Bit(output);
             return p.exitStatus() == QProcess::NormalExit ? p.exitCode() : -998;
         };
         const QString png = out.filePath(QStringLiteral("a.png"));
@@ -465,9 +470,14 @@ private slots:
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
         env.insert(QStringLiteral("QT_SCALE_FACTOR"), QStringLiteral("2"));
         p.setProcessEnvironment(env);
+        p.setProcessChannelMode(QProcess::MergedChannels);
         const QString png = out.filePath(QStringLiteral("x2.png"));
         p.start(QStringLiteral(D05_BINARY), {QStringLiteral("--screenshot"), png});
         QVERIFY(p.waitForFinished(30000));
+        const QByteArray output = p.readAll();
+        if (p.exitCode() != 0 || p.exitStatus() != QProcess::NormalExit)
+            qWarning().noquote() << "child output:" << QString::fromLocal8Bit(output);
+        QCOMPARE(p.exitStatus(), QProcess::NormalExit);
         QCOMPARE(p.exitCode(), 0);
         QImage img;
         QVERIFY(img.load(png));

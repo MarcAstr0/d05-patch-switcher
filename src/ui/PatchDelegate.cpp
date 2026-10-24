@@ -37,12 +37,15 @@ void frame1(QPainter *p, const QRect &r, const QBrush &c)
 class NameValidator : public QValidator {
 public:
     using QValidator::QValidator;
+    // QLineEdit hands the validator the whole candidate text; the last accepted text tells a
+    // one-character insertion from a paste.
     State validate(QString &input, int &pos) const override
     {
         QString out;
         out.reserve(input.size());
         int newPos = 0;  // kept characters before the cursor
-        for (int i = 0; i < input.size() && out.size() < PatchDelegate::MaxNameLength; ++i) {
+        int kept = 0;    // characters that survive the filter, before the cut
+        for (int i = 0; i < input.size(); ++i) {
             const char16_t u = input.at(i).unicode();
             QChar ch;
             if (u == u'\t' || u == u'\r' || u == u'\n' || u == u'\v' || u == u'\f')
@@ -51,16 +54,27 @@ public:
                 ch = input.at(i);
             else
                 continue;
+            ++kept;
+            if (out.size() >= PatchDelegate::MaxNameLength)
+                continue;
             out.append(ch);
             if (i < pos)
                 ++newPos;
         }
+        // One character typed at the limit is refused, not inserted at the cost of the last
+        // one. Anything longer (a paste) is sanitised and cut.
+        if (out.size() >= PatchDelegate::MaxNameLength && kept > PatchDelegate::MaxNameLength
+            && kept - m_accepted.size() == 1)
+            return Invalid;
         if (out != input) {
             input = out;
             pos = qMin(newPos, int(out.size()));
         }
+        m_accepted = out;
         return Acceptable;
     }
+private:
+    mutable QString m_accepted;
 };
 
 // Esc and Enter belong to the editor while it is open (the window has an Esc shortcut
@@ -304,7 +318,15 @@ QWidget *PatchDelegate::createEditor(QWidget *parent, const QStyleOptionViewItem
         m_editLength = n;
         viewport->update(QRect(0, e->y() - 2, viewport->width(), RowHeight));
     });
-    connect(e, &QObject::destroyed, this, [this] { m_editing.reset(); });
+    m_editor = e;
+    // Only the current editor's destruction ends the editing state: a closed editor is
+    // deleted later, possibly after the next one opened.
+    connect(e, &QObject::destroyed, this, [this](QObject *gone) {
+        if (gone == m_editor) {
+            m_editing.reset();
+            m_editor = nullptr;
+        }
+    });
     return e;
 }
 

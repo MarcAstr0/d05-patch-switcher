@@ -1,9 +1,14 @@
 #pragma once
 
+#include "core/PatchAddress.h"
+
 #include <QFont>
 #include <QFontMetricsF>
 #include <QListView>
+#include <QPersistentModelIndex>
+#include <QPair>
 #include <QString>
+#include <optional>
 
 namespace d05 {
 
@@ -20,6 +25,11 @@ public:
     void setEmptyText(const QString &title, const QString &note);
     QString emptyTitle() const { return m_title; }
     QString emptyNote() const { return m_note; }
+
+    // Closes the open name editor, if any, and returns what it held (address, text) so the
+    // caller can store it. Used before anything that would reset the list under the editor.
+    std::optional<QPair<PatchAddress, QString>> takeEditor();
+    using QListView::edit;  // keeps edit(index) visible next to the override below
 
 signals:
     // The star of a row was pressed (the press does not select the row or send).
@@ -40,6 +50,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
+    bool edit(const QModelIndex &index, EditTrigger trigger, QEvent *event) override;
 
 private:
     void prepareDelegate();
@@ -49,6 +60,8 @@ private:
     QFontMetricsF m_titleMetrics;
     QFontMetricsF m_noteMetrics;
     bool starHit(const QPoint &pos, QModelIndex *index) const;
+    QPersistentModelIndex m_editIndex;
+    std::optional<PatchAddress> m_pressAddress;  // the row of the last left press
     bool m_swallowRelease = false;  // the release after a double-click or a star press
     QString m_title;
     QString m_note;

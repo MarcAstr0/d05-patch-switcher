@@ -4,7 +4,9 @@
 #include "ui/PatchListModel.h"
 
 #include <QMainWindow>
+#include <QMessageBox>
 #include <QModelIndex>
+#include <QPointer>
 #include <optional>
 
 class QAction;
@@ -81,7 +83,8 @@ public:
     void renameHighlighted();
     // Opens the DESIGN 10.5 confirmation (window-modal, not blocking); CLEAR empties the recents.
     void confirmClearRecents();
-    QMessageBox *clearRecentsBox() const { return m_clearBox; }
+    // Null once the box is closed and deleted (deletion can lag behind closing).
+    QMessageBox *clearRecentsBox() const { return m_clearBox.data(); }
 
     // Sends and selects the highlighted patch (Enter).
     void sendHighlighted();
@@ -121,6 +124,8 @@ private:
     void popupSystemMenu();
     void onNameCommitted(const PatchAddress &address, const QString &text);
     void refreshDisplayPatch();
+    // Stores and closes an open rename editor (before anything resets the list).
+    void finishEditing();
 
     PatchCatalog &m_catalog;
     Library &m_library;
@@ -155,7 +160,8 @@ private:
     QMenu *m_systemMenu = nullptr;
     QWidget *m_statusStrip = nullptr;
     QMenuBar *m_nativeMenuBar = nullptr;  // macOS only
-    QMessageBox *m_clearBox = nullptr;
+    QPointer<QMessageBox> m_clearBox;
+    std::optional<PatchAddress> m_lastHighlight;  // the last highlight seen before a reset
 };
 
 }  // namespace d05
