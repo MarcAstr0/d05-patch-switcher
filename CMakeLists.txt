@@ -54,6 +54,22 @@ target_link_libraries(d05core PUBLIC Qt6::Core d05_options PRIVATE rtmidi)
 # --- d05ui: widgets ---
 qt_add_library(d05ui STATIC
     src/ui/ScaffoldWindow.h src/ui/ScaffoldWindow.cpp
+    src/ui/Theme.h          src/ui/Theme.cpp
+    src/ui/GlyphTable.h     src/ui/GlyphTable.cpp
+    src/ui/DisplayWidget.h  src/ui/DisplayWidget.cpp
+    src/app/Screenshot.h    src/app/Screenshot.cpp
+)
+# Fonts, style sheet, arrows and icon ship inside the binary: :/fonts, :/theme, :/icons.
+qt_add_resources(d05ui "ui"
+    PREFIX "/"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+    FILES
+        assets/fonts/Inter-Regular.ttf
+        assets/fonts/Inter-Medium.ttf
+        assets/theme/app.qss
+        assets/theme/arrow-down.png
+        assets/theme/arrow-down@2x.png
+        assets/icons/d05-patch-switcher.png
 )
 target_link_libraries(d05ui PUBLIC Qt6::Widgets d05core)
 

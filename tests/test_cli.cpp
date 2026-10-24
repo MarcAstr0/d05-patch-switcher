@@ -59,6 +59,27 @@ private slots:
         QVERIFY(o.headless());
     }
 
+    void screenshotOptions()
+    {
+        for (const QString &state : Cli::screenshotStates()) {
+            CliOptions o;
+            QString msg;
+            int code = 0;
+            QCOMPARE(Cli::parse(argv({"--screenshot", "a.png", "--screenshot-state", state.toLatin1().constData()}),
+                                &o, &msg, &code),
+                     Cli::ParseStatus::Run);
+            QVERIFY(o.wantsScreenshot());
+            QVERIFY(!o.headless());
+            QCOMPARE(o.screenshotState, state);
+        }
+        CliOptions o;
+        QString msg;
+        int code = 0;
+        QCOMPARE(Cli::parse(argv({"--screenshot", "a.png"}), &o, &msg, &code), Cli::ParseStatus::Run);
+        QCOMPARE(o.screenshotState, QStringLiteral("default"));
+        QCOMPARE(Cli::screenshotStates().size(), 6);
+    }
+
     void usageErrors_data()
     {
         QTest::addColumn<QStringList>("args");
@@ -67,7 +88,9 @@ private slots:
         QTest::newRow("channel text") << argv({"--channel", "x"});
         QTest::newRow("unknown") << argv({"--bogus"});
         QTest::newRow("positional") << argv({"stray"});
-        QTest::newRow("screenshot") << argv({"--screenshot", "a.png"});
+        QTest::newRow("screenshot bad state") << argv({"--screenshot", "a.png", "--screenshot-state", "bogus"});
+        QTest::newRow("screenshot state alone") << argv({"--screenshot-state", "search"});
+        QTest::newRow("screenshot with send") << argv({"--screenshot", "a.png", "--send", "P1-11"});
         QTest::newRow("missing value") << argv({"--port"});
     }
     void usageErrors()

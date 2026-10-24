@@ -1,0 +1,349 @@
+// DisplayWidget, glyph table, Theme and --screenshot, all under QT_QPA_PLATFORM=offscreen.
+#include "app/Cli.h"
+#include "app/Paths.h"
+#include "app/Screenshot.h"
+#include "core/PatchCatalog.h"
+#include "ui/DisplayWidget.h"
+#include "ui/GlyphTable.h"
+#include "ui/Theme.h"
+
+#include <QApplication>
+#include <QFile>
+#include <QImage>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QSignalSpy>
+#include <QTemporaryDir>
+#include <QTest>
+
+using namespace d05;
+
+namespace {
+
+class PaintCounter : public QObject {
+public:
+    int paints = 0;
+    bool eventFilter(QObject *, QEvent *e) override
+    {
+        if (e->type() == QEvent::Paint)
+            ++paints;
+        return false;
+    }
+};
+
+PatchAddress addr(const char *t)
+{
+    return *PatchAddress::parse(QString::fromLatin1(t));
+}
+
+QString pad(const QString &left, const QString &right = QString())
+{
+    return left.leftJustified(DisplayWidget::Columns - right.size(), QLatin1Char(' ')) + right;
+}
+
+}  // namespace
+
+class TestDisplay : public QObject {
+    Q_OBJECT
+private slots:
+    void initTestCase() { Theme::install(*qobject_cast<QApplication *>(qApp)); }
+
+    void glyphsBitForBit()
+    {
+        const auto row = [](char c) { return kGlyphs[int(c) - 0x20]; };
+        const quint8 A[7] = {0x0E, 0x11, 0x11, 0x11, 0x1F, 0x11, 0x11};
+        const quint8 zero[7] = {0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E};
+        const quint8 tilde[7] = {0x00, 0x00, 0x08, 0x15, 0x02, 0x00, 0x00};
+        const quint8 g[7] = {0x00, 0x0F, 0x11, 0x11, 0x0F, 0x01, 0x0E};
+        const quint8 colon[7] = {0x00, 0x0C, 0x0C, 0x00, 0x0C, 0x0C, 0x00};
+        for (int i = 0; i < 7; ++i) {
+            QCOMPARE(row('A')[i], A[i]);
+            QCOMPARE(row('0')[i], zero[i]);
+            QCOMPARE(row('~')[i], tilde[i]);
+            QCOMPARE(row('g')[i], g[i]);
+            QCOMPARE(row(':')[i], colon[i]);
+            QCOMPARE(row(' ')[i], quint8(0));
+        }
+    }
+
+    void glyphsMatchDesignDocument()
+    {
+        QFile f(QStringLiteral(D05_SOURCE_DIR "/docs/design/DESIGN.md"));
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QString text = QString::fromUtf8(f.readAll());
+        const QString appendix = text.mid(text.indexOf(QLatin1String("## Appendix A")));
+        const QRegularExpression re(
+            QStringLiteral("^([0-9A-F]{2})  ((?:[0-9A-F]{2} ){6}[0-9A-F]{2})  "),
+            QRegularExpression::MultilineOption);
+        int n = 0;
+        auto it = re.globalMatch(appendix);
+        while (it.hasNext()) {
+            const auto m = it.next();
+            const int code = m.captured(1).toInt(nullptr, 16);
+            const QStringList bytes = m.captured(2).split(QLatin1Char(' '));
+            QCOMPARE(bytes.size(), 7);
+            for (int r = 0; r < 7; ++r)
+                QCOMPARE(int(kGlyphs[code - 0x20][r]), bytes[r].toInt(nullptr, 16));
+            ++n;
+        }
+        QCOMPARE(n, kGlyphCount);
+    }
+
+    void themeTokensAndFonts()
+    {
+        QCOMPARE(Theme::lcdOn.name().toUpper(), QStringLiteral("#98CF1C"));
+        QCOMPARE(Theme::panel.name().toUpper(), QStringLiteral("#202326"));
+        QCOMPARE(qApp->palette().color(QPalette::Window), Theme::panel);
+        QVERIFY(!qApp->styleSheet().isEmpty());
+        QCOMPARE(qApp->font().pixelSize(), 13);
+        QCOMPARE(Theme::font(Theme::Role::Wordmark).pixelSize(), 15);
+        QCOMPARE(Theme::font(Theme::Role::Wordmark).letterSpacing(), 3.0);
+        QVERIFY(Theme::mediumByWeight());
+    }
+
+    void geometryByPitch()
+    {
+        DisplayWidget d;
+        const qreal dpr = d.devicePixelRatioF();
+        if (dpr != 1.0)
+            QSKIP("pixel sizes asserted at 1x");
+        d.setPitch(3);
+        QCOMPARE(d.size(), QSize(767, 79));
+        d.setPitch(4);
+        QCOMPARE(d.size(), QSize(1010, 98));
+        d.setPitch(5);
+        QCOMPARE(d.size(), QSize(1253, 117));
+        QCOMPARE(DisplayWidget::pitchForWidth(800), 3);
+        QCOMPARE(DisplayWidget::pitchForWidth(1042), 4);
+        QCOMPARE(DisplayWidget::pitchForWidth(1285), 5);
+    }
+
+    void line1Layout()
+    {
+        DisplayWidget d;
+        d.setPatch(addr("P1-11"), QStringLiteral("Fantasia"), QLatin1Char('D'));
+        QCOMPARE(d.line1(), pad(QStringLiteral("P1-11:Fantasia"), QStringLiteral("DUAL")));
+        QCOMPARE(d.line1().size(), 40);
+        d.setPatch(addr("P1-18"), QStringLiteral("Alpha Omega Ensemble"), QLatin1Char('W'));
+        QCOMPARE(d.line1(), pad(QStringLiteral("P1-18:Alpha Omega Ensemble"), QStringLiteral("WHOLE")));
+        d.setPatch(addr("P2-11"), QStringLiteral("Some Name"), QLatin1Char('S'));
+        QVERIFY(d.line1().endsWith(QStringLiteral("SPLIT")));
+        d.setPatch(addr("U3-45"), QString(), QChar());
+        QCOMPARE(d.line1(), pad(QStringLiteral("U3-45:")));
+        d.setPatch(addr("U1-11"), QStringLiteral("Warm Pad Mk2"), QChar());
+        QCOMPARE(d.line1(), pad(QStringLiteral("U1-11:Warm Pad Mk2")));
+    }
+
+    void line2Priority()
+    {
+        DisplayWidget d;
+        d.setPatch(addr("P1-11"), QStringLiteral("Fantasia"), QLatin1Char('D'));
+        QVERIFY(d.line2().startsWith(QStringLiteral("NO MIDI OUTPUT")));
+        d.setConnected(true);
+        QCOMPARE(d.line2(), pad(QStringLiteral("PRESET 1: ORIGINAL D-50")));
+        d.setSearch(true, 23);
+        QCOMPARE(d.line2(), pad(QStringLiteral("23 MATCHES")));
+        d.setSearch(true, 1);
+        QCOMPARE(d.line2(), pad(QStringLiteral("1 MATCH")));
+        d.setSearch(true, 0);
+        QCOMPARE(d.line2(), pad(QStringLiteral("NO MATCHES")));
+        d.flashSent();
+        QCOMPARE(d.line2(), pad(QStringLiteral("SENT")));
+        d.setConnected(false);
+        QCOMPARE(d.line2(), pad(QStringLiteral("NO MIDI OUTPUT")));
+        d.setConnected(true);
+        d.setSearch(false, 0);
+        for (int g = 0; g < PatchAddress::GroupCount; ++g)
+            QVERIFY(!DisplayWidget::groupLongName(g).isEmpty());
+        QCOMPARE(DisplayWidget::groupLongName(0), QStringLiteral("USER 1"));
+        QCOMPARE(DisplayWidget::groupLongName(13), QStringLiteral("PRESET 6: PN-D50-04"));
+    }
+
+    void entryEchoAndKeyModeSwitch()
+    {
+        DisplayWidget d;
+        d.setConnected(true);
+        d.setPatch(addr("P3-45"), QStringLiteral("Whatever"), QLatin1Char('D'));
+        d.setEntry(QStringLiteral("P3-4_"));
+        QCOMPARE(d.line1(), pad(QStringLiteral("P3-4_")));
+        d.setDisplayEntryEcho(false);
+        QVERIFY(d.line1().startsWith(QStringLiteral("P3-45:Whatever")));
+        d.setDisplayEntryEcho(true);
+        d.setEntry(QString());
+        d.setKeyModeOnLine2(true);
+        QVERIFY(!d.line1().contains(QStringLiteral("DUAL")));
+        QCOMPARE(d.line2(), pad(QStringLiteral("PRESET 3: PN-D50-01"), QStringLiteral("DUAL")));
+    }
+
+    void outOfRangeCharactersRenderAsQuestionMark()
+    {
+        DisplayWidget a, b;
+        a.setLines(QStringLiteral("?"), QString());
+        b.setLines(QString(QChar(0x00E9)), QString());
+        QCOMPARE(a.fieldImage(), b.fieldImage());
+    }
+
+    void dotsAreDrawn()
+    {
+        DisplayWidget d;
+        d.setLines(QStringLiteral("A"), QString());
+        const QImage img = d.fieldImage();
+        const int P = d.deviceDot();
+        // 'A' row 0 is .###. : column 1 lit, column 0 unlit (ghost).
+        QCOMPARE(QColor(img.pixel(3 * P, 2 * P)), Theme::lcdOn);
+        QCOMPARE(QColor(img.pixel(2 * P, 2 * P)), Theme::lcdGhost);
+        // The gap between dots stays lcdBack.
+        QCOMPARE(QColor(img.pixel(3 * P + P - 1, 2 * P)), Theme::lcdBack);
+        d.setLcdShowGhost(false);
+        const QImage img2 = d.fieldImage();
+        QCOMPARE(QColor(img2.pixel(3 * P, 2 * P)), Theme::lcdOn);
+        QCOMPARE(QColor(img2.pixel(2 * P, 2 * P)), Theme::lcdBack);
+    }
+
+    void repaintsOnlyOnTextChange()
+    {
+        DisplayWidget d;
+        PaintCounter counter;
+        d.installEventFilter(&counter);
+        d.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&d));
+        QTest::qWait(50);
+        QVERIFY(counter.paints >= 1);
+
+        d.setPatch(addr("P1-11"), QStringLiteral("Fantasia"), QLatin1Char('D'));
+        d.setConnected(true);
+        QTest::qWait(50);
+        const int base = counter.paints;
+
+        // Unchanged inputs: no repaint.
+        d.setPatch(addr("P1-11"), QStringLiteral("Fantasia"), QLatin1Char('D'));
+        d.setConnected(true);
+        d.setSearch(false, 0);
+        d.setEntry(QString());
+        d.setLines(d.line1(), d.line2());
+        d.setLines(d.line1().trimmed(), d.line2().trimmed());  // same text once padded
+        d.setKeyModeOnLine2(false);
+        QTest::qWait(50);
+        QCOMPARE(counter.paints, base);
+
+        // A real change repaints.
+        d.setSearch(true, 5);
+        QTest::qWait(50);
+        QVERIFY(counter.paints > base);
+    }
+
+    void atlasBuiltOncePerPitchAndDpr()
+    {
+        const int before = DisplayWidget::atlasBuildCount();
+        DisplayWidget d;
+        QCOMPARE(DisplayWidget::atlasBuildCount(), before + 1);
+        d.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&d));
+        d.setPatch(addr("P1-11"), QStringLiteral("Fantasia"), QLatin1Char('D'));
+        d.setSearch(true, 3);
+        d.flashSent();
+        QTest::qWait(450);
+        d.setPitch(3);  // unchanged
+        d.update();
+        QTest::qWait(50);
+        QCOMPARE(DisplayWidget::atlasBuildCount(), before + 1);
+        QCOMPARE(d.atlas().width(), kGlyphCount * 5 * d.deviceDot());
+        QCOMPARE(d.atlas().height(), 7 * d.deviceDot());
+        d.setPitch(4);
+        QCOMPARE(DisplayWidget::atlasBuildCount(), before + 2);
+        d.setPitch(4);
+        QCOMPARE(DisplayWidget::atlasBuildCount(), before + 2);
+    }
+
+    void sentFlash()
+    {
+        DisplayWidget d;
+        d.setConnected(true);
+        d.setPatch(addr("P1-11"), QStringLiteral("Fantasia"), QLatin1Char('D'));
+        QSignalSpy spy(&d, &DisplayWidget::sentChanged);
+        QElapsedTimer t;
+        t.start();
+        d.flashSent();
+        QVERIFY(d.sentActive());
+        QCOMPARE(d.line2(), pad(QStringLiteral("SENT")));
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(spy.wait(1500));
+        QCOMPARE(spy.count(), 2);
+        QVERIFY(spy.at(1).at(0).toBool() == false);
+        QVERIFY(t.elapsed() >= 380);
+        QVERIFY(!d.sentActive());
+        QCOMPARE(d.line2(), pad(QStringLiteral("PRESET 1: ORIGINAL D-50")));
+    }
+
+    void screenshotsOfThreeStates()
+    {
+        QTemporaryDir out;
+        QVERIFY(out.isValid());
+        QImage shots[3];
+        const QStringList states = {QStringLiteral("default"), QStringLiteral("disconnected"), QStringLiteral("search")};
+        for (int i = 0; i < 3; ++i) {
+            CliOptions o;
+            o.screenshotFile = out.filePath(states[i] + QStringLiteral(".png"));
+            o.screenshotState = states[i];
+            QCOMPARE(runScreenshot(o), 0);
+            QVERIFY(shots[i].load(o.screenshotFile));
+            const qreal dpr = qApp->devicePixelRatio();
+            QCOMPARE(shots[i].width(), int(960 * dpr));
+            QCOMPARE(shots[i].height(), int(560 * dpr));
+        }
+        Paths::setOverride(QString());
+        QVERIFY(shots[0] != shots[1]);
+        QVERIFY(shots[0] != shots[2]);
+        QVERIFY(shots[1] != shots[2]);
+    }
+
+    void screenshotProcessExitCodes()
+    {
+        QTemporaryDir out;
+        QVERIFY(out.isValid());
+        const auto run = [&](const QStringList &args) {
+            QProcess p;
+            p.start(QStringLiteral(D05_BINARY), args);
+            if (!p.waitForFinished(30000))
+                return -999;
+            return p.exitStatus() == QProcess::NormalExit ? p.exitCode() : -998;
+        };
+        const QString png = out.filePath(QStringLiteral("a.png"));
+        QCOMPARE(run({QStringLiteral("--screenshot"), png, QStringLiteral("--screenshot-state"),
+                      QStringLiteral("recents")}),
+                 0);
+        QVERIFY(QFile::exists(png));
+        QCOMPARE(run({QStringLiteral("--screenshot"), png, QStringLiteral("--screenshot-state"),
+                      QStringLiteral("nope")}),
+                 64);
+    }
+
+    void screenshotAtScaleFactor2()
+    {
+        QTemporaryDir out;
+        QVERIFY(out.isValid());
+        QProcess p;
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        env.insert(QStringLiteral("QT_SCALE_FACTOR"), QStringLiteral("2"));
+        p.setProcessEnvironment(env);
+        const QString png = out.filePath(QStringLiteral("x2.png"));
+        p.start(QStringLiteral(D05_BINARY), {QStringLiteral("--screenshot"), png});
+        QVERIFY(p.waitForFinished(30000));
+        QCOMPARE(p.exitCode(), 0);
+        QImage img;
+        QVERIFY(img.load(png));
+        QCOMPARE(img.size(), QSize(1920, 1120));
+        // p = 3 at 2x: P = 6. Lit field at logical (16 + 19, 46 + 11); dot area 2P inside.
+        // "P1-11": 'P' row 0 is #### . : column 0 lit, column 4 unlit (ghost).
+        const int x0 = (16 + 19) * 2 + 12;
+        const int y0 = (46 + 11) * 2 + 12;
+        QCOMPARE(QColor(img.pixel(x0, y0)), Theme::lcdOn);
+        QCOMPARE(QColor(img.pixel(x0 + 4 * 6, y0)), Theme::lcdGhost);
+        // Cell 1 starts 6P = 36 px on; '1' row 0 (0x04) lights column 2 only.
+        QCOMPARE(QColor(img.pixel(x0 + 36 + 2 * 6, y0)), Theme::lcdOn);
+        QCOMPARE(QColor(img.pixel(x0 + 36, y0)), Theme::lcdGhost);
+    }
+};
+
+QTEST_MAIN(TestDisplay)
+#include "test_display.moc"

@@ -18,9 +18,13 @@ struct CliOptions {
     QString inPort;
     int channel = 0;  // 0 = not given
     QString configDir;
+    QString screenshotFile;   // --screenshot FILE.png (empty = none)
+    QString screenshotState;  // default | search | favorites | recents | disconnected | settings
 
     // True when the run needs no window (--list-ports, --send).
     bool headless() const { return listPorts || hasSend; }
+    // True when the run renders the window to a PNG offscreen and exits (needs a QApplication).
+    bool wantsScreenshot() const { return !screenshotFile.isEmpty(); }
 };
 
 namespace Exit {
@@ -32,6 +36,9 @@ constexpr int Usage = 64;
 }  // namespace Exit
 
 namespace Cli {
+
+// The values --screenshot-state accepts.
+QStringList screenshotStates();
 
 enum class ParseStatus { Run, ExitNow };
 

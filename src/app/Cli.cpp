@@ -45,9 +45,12 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
                                        QStringLiteral("Directory for library.json and settings."),
                                        QStringLiteral("dir"));
     const QCommandLineOption shot(QStringLiteral("screenshot"),
-                                  QStringLiteral("Not available yet (milestone 3)."), QStringLiteral("file"));
+                                  QStringLiteral("Render the main window offscreen to FILE.png and exit."),
+                                  QStringLiteral("file"));
     const QCommandLineOption shotState(QStringLiteral("screenshot-state"),
-                                       QStringLiteral("Not available yet (milestone 3)."), QStringLiteral("state"));
+                                       QStringLiteral("State for --screenshot: default, search, favorites, recents, "
+                                                      "disconnected or settings."),
+                                       QStringLiteral("state"));
     p.addOptions({listPorts, port, inPort, channel, send, fake, configDir, shot, shotState});
 
     auto fail = [&](const QString &text) {
@@ -72,8 +75,10 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
         *exitCode = Exit::Ok;
         return ParseStatus::ExitNow;
     }
-    if (p.isSet(shot) || p.isSet(shotState))
-        return fail(QStringLiteral("--screenshot and --screenshot-state are not available yet"));
+    if (p.isSet(shotState) && !p.isSet(shot))
+        return fail(QStringLiteral("--screenshot-state needs --screenshot FILE.png"));
+    if (p.isSet(shot) && (p.isSet(listPorts) || p.isSet(send)))
+        return fail(QStringLiteral("--screenshot cannot be combined with --list-ports or --send"));
     if (!p.positionalArguments().isEmpty())
         return fail(QStringLiteral("unexpected argument '%1'").arg(p.positionalArguments().first()));
 
@@ -90,12 +95,27 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
             return fail(QStringLiteral("--channel must be 1 to 16"));
         o.channel = c;
     }
+    if (p.isSet(shot)) {
+        o.screenshotFile = p.value(shot);
+        o.screenshotState = p.isSet(shotState) ? p.value(shotState) : QStringLiteral("default");
+        if (o.screenshotFile.isEmpty())
+            return fail(QStringLiteral("--screenshot needs a file name"));
+        if (!screenshotStates().contains(o.screenshotState))
+            return fail(QStringLiteral("--screenshot-state must be one of: %1")
+                            .arg(screenshotStates().join(QStringLiteral(", "))));
+    }
     if (p.isSet(send)) {
         o.hasSend = true;
         o.sendAddress = p.value(send);
     }
     *opts = o;
     return ParseStatus::Run;
+}
+
+QStringList screenshotStates()
+{
+    return {QStringLiteral("default"),      QStringLiteral("search"),   QStringLiteral("favorites"),
+            QStringLiteral("recents"),      QStringLiteral("disconnected"), QStringLiteral("settings")};
 }
 
 int runListPorts(MidiBackend &backend, QTextStream &out, QTextStream &err)

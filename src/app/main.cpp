@@ -4,11 +4,13 @@
 
 #include "app/Cli.h"
 #include "app/Paths.h"
+#include "app/Screenshot.h"
 #include "core/PatchCatalog.h"
 #include "midi/FakeMidiBackend.h"
 #include "midi/MidiBackend.h"
 #include "midi/RtMidiBackend.h"
 #include "ui/ScaffoldWindow.h"
+#include "ui/Theme.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -110,8 +112,11 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     QGuiApplication::setApplicationDisplayName(QStringLiteral("D-05 Patch Switcher"));
+    d05::Theme::install(app);
     if (!opts.configDir.isEmpty())
         d05::Paths::setOverride(opts.configDir);
+    if (opts.wantsScreenshot())
+        return d05::runScreenshot(opts);
     // M3 wires the MIDI backend (--fake-midi or RtMidi) into the main window; the
     // scaffold creates none, so no ALSA client appears at start.
 

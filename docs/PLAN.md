@@ -48,9 +48,9 @@ Touches only `docs/design/`, `assets/`. No C++.
 when the Artifact tool is available, otherwise give the paths) and asks for approval or
 changes. One round of changes is budgeted. M3 starts only after approval.
 
-## M3 · GUI (builder, designer reviews) ☐ — after G1 answered and G2 approved
+## M3 · GUI (builder, designer reviews) ◐ — after G1 answered and G2 approved
 
-- ☐ **T3.1 Theme and DisplayWidget.** `Theme` loads the QSS and tokens; `DisplayWidget` per DESIGN.md with a pre-rendered glyph atlas per size, repaint only on text change, `flashSent()`. `--screenshot` implemented (fake backend, canned library, every `--screenshot-state`). Test: construction + screenshot of three states under `offscreen`.
+- ☑ **T3.1 Theme and DisplayWidget.** `Theme` loads the QSS and tokens; `DisplayWidget` per DESIGN.md with a pre-rendered glyph atlas per size, repaint only on text change, `flashSent()`. `--screenshot` implemented (fake backend, canned library, every `--screenshot-state`). Test: construction + screenshot of three states under `offscreen`.
 - ☐ **T3.2 Main window.** Layout per DESIGN.md: display, group bar, bank/number grid, search, list with delegate, status bar, toolbar actions, every shortcut in FR-13. Highlight does not send; Enter and clicks do; prev/next works across groups.
 - ☐ **T3.3 Views and library.** All / Favourites / Recents; star toggle; recents counts; `F2` rename for U slots with the 18-character limit; clear-recents with confirmation.
 - ☐ **T3.4 Settings dialog and connection.** FR-9 and FR-10 wired to `MidiLink`; disconnected state on the display; auto-send; follow-the-panel; resend-on-connect; Test button.
