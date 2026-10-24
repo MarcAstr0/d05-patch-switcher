@@ -151,7 +151,7 @@ Vitest, so that both implementations are proven against the same cases:
     { "query": "3",           "expectContains": ["P3-66"], "expectNot": ["P3-11"] },
     { "query": "brass p1",    "expectContains": ["P1-33", "P1-35"] }
   ],
-  "formats": [ { "input": "p3 45", "canonical": "P3-45" } ]
+  "formats": [ { "input": " p345 ", "canonical": "P3-45" } ]
 }
 ```
 

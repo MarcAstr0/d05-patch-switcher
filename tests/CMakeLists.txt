@@ -51,3 +51,6 @@ endif()
 
 d05_add_test(test_help_ui test_help_ui.cpp)
 target_link_libraries(test_help_ui PRIVATE d05ui Qt6::Widgets)
+
+d05_add_test(test_shared_vectors test_shared_vectors.cpp)
+target_compile_definitions(test_shared_vectors PRIVATE D05_VECTORS_FILE="${CMAKE_SOURCE_DIR}/data/test-vectors.json")

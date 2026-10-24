@@ -83,6 +83,21 @@ the D-05 display showed. Fixes go back to the builder.
 - ☑ **R5 Final review** (reviewer + Codex; the foreman may run the agent on Opus).
 - ☑ **T5.4** Tag `v1.0.0`; release green; the vault's project page updated by the owner.
 
+## W · Web version (web-builder; spec in docs/WEB.md) ◐
+
+Started 2026-10-24 after v1.0.0, in the main tree (desktop work is finished).
+
+- ☐ **W0 Setup** (foreman): `.claude/agents/web-builder.md`; `web/` with Vite + TypeScript + Vitest + Playwright and a green empty test; a `web` CI job (path-filtered to `web/**`, `data/**`); `data/test-vectors.json` and a C++ test that reads it.
+- ☐ **W1 Core** (web-builder): `address`, `catalog`, `search`, `library` passing the shared vectors and the spec's own cases; import/export round-trip with a `library.json` written by the desktop app.
+- ☐ **W2 Design addendum** (designer): `docs/design/DESIGN-WEB.md` with the phone layouts; token generation into `theme.css` (from a `docs/design/tokens.json`); fonts served from `web/public`.
+- ☐ **W3 UI** (web-builder): display on canvas, grid, list, settings, keyboard map, views, PWA. Playwright screenshots at desktop and phone sizes reviewed by the designer.
+- ☐ **W4 MIDI and deploy** (web-builder): Web MIDI layer, permission flow, hot-plug, follow mode; GitHub Pages deployment live; size budget check in CI.
+- ☐ **RW Review** (reviewer + Codex): all of `web/`.
+
+**Gates (owner).** GW1 Chrome on the MacBook against the rig; GW2 Chrome on the Redmi 10A
+over OTG, straight into the D-05 or through a forwarding device; GW3 one pass in Firefox
+to confirm the permission add-on flow reads sensibly.
+
 ## Decisions log
 
 Append-only. Date, who, what changed and why. The foreman writes here whenever a spec
@@ -122,3 +137,4 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-24, foreman (T5.3): the README keeps the owner's real macOS capture (`docs/images/screenshot-macos.png`) as its screenshot instead of `--screenshot` renders; a real window shows native chrome and true font rendering. `CHANGELOG.md` follows Keep a Changelog; the [Unreleased] section becomes 1.0.0 at T5.4.
 - 2026-10-24, foreman (R5): rejected "PREV/NEXT resend at the catalogue ends" (FR-5: "stops at the ends, and sends"; settled in T1.3). Accepted as a documented exception to SPEC §5: the library's 2 s single-shot save retry also runs while connected, only while saves keep failing (read-only data dir). The version bump to 1.0.0 is T5.4, not part of the R5 fixes.
 - 2026-10-24, foreman (T5.4): user-facing docs made device-agnostic at the owner's request (README "Connecting the D-05", CHANGELOG, docs/MIDI.md; the verified Hapax behaviour kept as one example in MIDI.md). `v1.0.0` tagged at 73693a2; release run 40127471062 published https://github.com/MarcAstr0/d05-patch-switcher/releases/tag/v1.0.0 as a full release (AppImage, universal dmg, Windows zip, SHA256SUMS), each package's `--version` checked against the tag. Remaining owner item from T5.4: update the vault's project page.
+- 2026-10-24, foreman (W0): `docs/WEB.md` §7's sample `"p3 45"` → `P3-45` contradicted FR-3 (`p3 45` is two search tokens; an address has no inner space). Corrected to `" p345 "`. `data/test-vectors.json` is authoritative for both implementations; it lists `P3 45` as invalid.

@@ -1,0 +1,576 @@
+{
+ "$comment": [
+  "Shared test vectors for the D-05 patch switcher. Hand-written from docs/SPEC.md (FR-3, 3.3) and docs/MIDI.md; consumed by tests/test_shared_vectors.cpp and, later, the web Vitest suite. See data/README-test-vectors.md for the field reference. Never edit a vector to make an implementation pass: if they disagree, the spec decides.",
+  "Catalogue = data/d05-presets.tsv (384 presets) plus 512 unnamed user slots; the library section's userNames overlay applies only inside that section's cases."
+ ],
+ "addresses": [
+  {
+   "text": "P1-11",
+   "group": 8,
+   "bank": 1,
+   "number": 1,
+   "index": 512,
+   "msb": 87,
+   "lsb": 8,
+   "program": 0
+  },
+  {
+   "text": "P1-21",
+   "group": 8,
+   "bank": 2,
+   "number": 1,
+   "index": 520,
+   "msb": 87,
+   "lsb": 8,
+   "program": 8
+  },
+  {
+   "text": "P1-44",
+   "group": 8,
+   "bank": 4,
+   "number": 4,
+   "index": 539,
+   "msb": 87,
+   "lsb": 8,
+   "program": 27
+  },
+  {
+   "text": "P6-88",
+   "group": 13,
+   "bank": 8,
+   "number": 8,
+   "index": 895,
+   "msb": 87,
+   "lsb": 13,
+   "program": 63
+  },
+  {
+   "text": "P3-45",
+   "group": 10,
+   "bank": 4,
+   "number": 5,
+   "index": 668,
+   "msb": 87,
+   "lsb": 10,
+   "program": 28
+  },
+  {
+   "text": "U1-11",
+   "group": 0,
+   "bank": 1,
+   "number": 1,
+   "index": 0,
+   "msb": 87,
+   "lsb": 0,
+   "program": 0
+  },
+  {
+   "text": "U8-88",
+   "group": 7,
+   "bank": 8,
+   "number": 8,
+   "index": 511,
+   "msb": 87,
+   "lsb": 7,
+   "program": 63
+  },
+  {
+   "text": "U4-52",
+   "group": 3,
+   "bank": 5,
+   "number": 2,
+   "index": 225,
+   "msb": 87,
+   "lsb": 3,
+   "program": 33
+  },
+  {
+   "text": "P2-57",
+   "group": 9,
+   "bank": 5,
+   "number": 7,
+   "index": 614,
+   "msb": 87,
+   "lsb": 9,
+   "program": 38
+  },
+  {
+   "text": "U3-18",
+   "group": 2,
+   "bank": 1,
+   "number": 8,
+   "index": 135,
+   "msb": 87,
+   "lsb": 2,
+   "program": 7
+  }
+ ],
+ "parse": [
+  {
+   "input": "P3-45",
+   "canonical": "P3-45"
+  },
+  {
+   "input": "p3-45",
+   "canonical": "P3-45"
+  },
+  {
+   "input": "P345",
+   "canonical": "P3-45"
+  },
+  {
+   "input": "p345",
+   "canonical": "P3-45"
+  },
+  {
+   "input": "3-45",
+   "canonical": "P3-45"
+  },
+  {
+   "input": "345",
+   "canonical": "P3-45"
+  },
+  {
+   "input": "U3-45",
+   "canonical": "U3-45"
+  },
+  {
+   "input": "u345",
+   "canonical": "U3-45"
+  },
+  {
+   "input": "u3-45",
+   "canonical": "U3-45"
+  },
+  {
+   "input": "  P3-45 ",
+   "canonical": "P3-45"
+  },
+  {
+   "input": "\tp345\n",
+   "canonical": "P3-45"
+  },
+  {
+   "input": "1-11",
+   "canonical": "P1-11"
+  },
+  {
+   "input": "611",
+   "canonical": "P6-11"
+  },
+  {
+   "input": "U8-88",
+   "canonical": "U8-88"
+  },
+  {
+   "input": "u811",
+   "canonical": "U8-11"
+  },
+  {
+   "input": "P6-88",
+   "canonical": "P6-88"
+  }
+ ],
+ "invalid": [
+  "P1-19",
+  "P1-90",
+  "P7-11",
+  "U9-11",
+  "X1-11",
+  "P1-1",
+  "",
+  "   ",
+  "P",
+  "U",
+  "P0-11",
+  "U0-11",
+  "7-11",
+  "12",
+  "1234",
+  "P1-111",
+  "P1--11",
+  "P1_11",
+  "P1-1a",
+  "P 3-45",
+  "P3 45",
+  "P3-4 5",
+  "-345",
+  "P-345",
+  "P345-",
+  "Ｓ１-11",
+  "P１-11",
+  "P1-１１",
+  "P١-11",
+  "P3-45x",
+  "PP3-45"
+ ],
+ "search": [
+  {
+   "query": "p345",
+   "expect": [
+    "P3-45"
+   ]
+  },
+  {
+   "query": "P3-45",
+   "expect": [
+    "P3-45"
+   ]
+  },
+  {
+   "query": "3-45",
+   "expect": [
+    "P3-45"
+   ]
+  },
+  {
+   "query": "345",
+   "expect": [
+    "P3-45"
+   ]
+  },
+  {
+   "query": "  u345 ",
+   "expect": [
+    "U3-45"
+   ]
+  },
+  {
+   "query": "p3-4",
+   "expectCount": 8,
+   "expectFirst": "P3-41",
+   "expectLast": "P3-48"
+  },
+  {
+   "query": "P34",
+   "expectCount": 8,
+   "expectFirst": "P3-41",
+   "expectLast": "P3-48"
+  },
+  {
+   "query": "p1",
+   "expectCount": 64,
+   "expectFirst": "P1-11",
+   "expectLast": "P1-88"
+  },
+  {
+   "query": "P6",
+   "expectCount": 64
+  },
+  {
+   "query": "u3",
+   "expectCount": 64,
+   "expectFirst": "U3-11",
+   "expectLast": "U3-88"
+  },
+  {
+   "query": "U8-8",
+   "expectCount": 8
+  },
+  {
+   "query": "",
+   "expectCount": 896
+  },
+  {
+   "query": "   ",
+   "expectCount": 896
+  },
+  {
+   "query": "p3 p4",
+   "expectCount": 0
+  },
+  {
+   "query": "p3 345",
+   "expect": [
+    "P3-45"
+   ]
+  },
+  {
+   "query": "345 p3-4",
+   "expect": [
+    "P3-45"
+   ]
+  },
+  {
+   "query": "p3 p34",
+   "expectCount": 8
+  },
+  {
+   "query": "3-45 3-46",
+   "expectCount": 0
+  },
+  {
+   "query": "brass p1",
+   "expectContains": [
+    "P1-33",
+    "P1-35"
+   ],
+   "expectNot": [
+    "P3-35",
+    "P2-14"
+   ],
+   "expectOnlyPresets": true
+  },
+  {
+   "query": "p3 brass",
+   "expect": [
+    "P3-34",
+    "P3-35",
+    "P3-37",
+    "P3-38"
+   ]
+  },
+  {
+   "query": "BRASS",
+   "expectContains": [
+    "P1-33",
+    "P3-35",
+    "P5-31"
+   ],
+   "expectNot": [
+    "P3-11"
+   ],
+   "expectOnlyPresets": true
+  },
+  {
+   "query": "brass",
+   "expectCount": 17,
+   "expectOnlyPresets": true
+  },
+  {
+   "query": "3",
+   "expectContains": [
+    "P3-66"
+   ],
+   "expectNot": [
+    "P3-11"
+   ],
+   "expectOnlyPresets": true
+  },
+  {
+   "query": "45",
+   "expectCount": 0
+  },
+  {
+   "query": "cafe",
+   "expectContains": [
+    "P6-44"
+   ],
+   "expectOnlyPresets": true
+  },
+  {
+   "query": "Café",
+   "expectContains": [
+    "P6-44"
+   ],
+   "expectOnlyPresets": true
+  },
+  {
+   "query": "CAFÉ",
+   "expectContains": [
+    "P6-44"
+   ],
+   "expectOnlyPresets": true
+  },
+  {
+   "query": "e-piano",
+   "expectContains": [
+    "P1-88",
+    "P4-23",
+    "P6-11"
+   ],
+   "expectNot": [
+    "P3-35"
+   ],
+   "expectOnlyPresets": true
+  },
+  {
+   "query": "p7",
+   "expectCount": 0
+  },
+  {
+   "query": "u9",
+   "expectCount": 0
+  },
+  {
+   "query": "p3-9",
+   "expectCount": 0
+  },
+  {
+   "query": "p1-19",
+   "expectCount": 0
+  },
+  {
+   "query": "p7-11",
+   "expectCount": 0
+  },
+  {
+   "query": "synth lead 3",
+   "expect": [
+    "P3-66"
+   ]
+  },
+  {
+   "query": "synth lead",
+   "expect": [
+    "P3-61",
+    "P3-62",
+    "P3-64",
+    "P3-66"
+   ]
+  },
+  {
+   "query": "synth 3",
+   "expectContains": [
+    "P3-66"
+   ],
+   "expectNot": [
+    "P3-61"
+   ]
+  },
+  {
+   "query": "pad",
+   "expectContains": [
+    "P2-15",
+    "P1-87"
+   ],
+   "expectOnlyPresets": true
+  },
+  {
+   "query": "zzzz",
+   "expectCount": 0
+  }
+ ],
+ "library": {
+  "file": {
+   "version": 1,
+   "favorites": [
+    "P2-57",
+    "U8-88",
+    "P1-11",
+    "P1-11"
+   ],
+   "recents": [
+    {
+     "address": "P1-11",
+     "count": 12,
+     "last": "2026-10-24T18:02:11Z"
+    },
+    {
+     "address": "U1-11",
+     "count": 1,
+     "last": "2026-10-24T09:00:00"
+    },
+    {
+     "address": "P2-57",
+     "count": 3,
+     "last": "2026-10-24T19:00:00Z"
+    }
+   ],
+   "userNames": {
+    "U1-11": "Warm Pad Mk2",
+    "U2-22": "  Tab\there  éx  ",
+    "U3-33": "123456789012345678901234"
+   }
+  },
+  "expect": {
+   "favorites": [
+    "U8-88",
+    "P1-11",
+    "P2-57"
+   ],
+   "recents": [
+    {
+     "address": "P2-57",
+     "count": 3,
+     "last": "2026-10-24T19:00:00Z"
+    },
+    {
+     "address": "P1-11",
+     "count": 12,
+     "last": "2026-10-24T18:02:11Z"
+    },
+    {
+     "address": "U1-11",
+     "count": 1,
+     "last": "2026-10-24T09:00:00Z"
+    }
+   ],
+   "userNames": {
+    "U1-11": "Warm Pad Mk2",
+    "U2-22": "Tab here x",
+    "U3-33": "123456789012345678"
+   },
+   "names": {
+    "U1-11": "Warm Pad Mk2",
+    "U1-12": "",
+    "P1-11": "Fantasia"
+   },
+   "searches": [
+    {
+     "query": "warm",
+     "expect": [
+      "U1-11",
+      "P2-15",
+      "P3-14",
+      "P5-18"
+     ]
+    },
+    {
+     "query": "u1",
+     "expectCount": 64
+    },
+    {
+     "query": "u2-2 tab",
+     "expect": [
+      "U2-22"
+     ]
+    },
+    {
+     "query": "u1-1 warm",
+     "expect": [
+      "U1-11"
+     ]
+    }
+   ]
+  },
+  "invalidEntries": {
+   "file": {
+    "version": 1,
+    "favorites": [
+     "P1-19",
+     "P3-45",
+     "bogus",
+     7
+    ],
+    "recents": [
+     {
+      "address": "P7-11",
+      "count": 2,
+      "last": "2026-10-24T19:00:00Z"
+     },
+     {
+      "address": "P1-12",
+      "count": 2,
+      "last": "2026-10-24T19:00:00Z"
+     }
+    ],
+    "userNames": {
+     "P1-11": "Not allowed",
+     "U1-12": "ok"
+    }
+   },
+   "expect": {
+    "favorites": [
+     "P3-45"
+    ],
+    "recents": [
+     "P1-12"
+    ],
+    "userNames": {
+     "U1-12": "ok"
+    }
+   }
+  }
+ }
+}
