@@ -135,8 +135,7 @@ void SettingsDialog::buildUi()
     // where the output row has REFRESH.
     m_inputStatus = new QLabel(this);
     m_inputStatus->setObjectName(QStringLiteral("inputStatusText"));
-    m_inputStatus->setFont(Theme::font(Theme::Role::Note));
-    m_inputStatus->setStyleSheet(QStringLiteral("QLabel { color: %1; }").arg(Theme::labelRed.name()));
+    m_inputStatus->setFont(Theme::font(Theme::Role::Body));  // colour and size: QLabel#inputStatusText in app.qss
     m_inputStatus->setGeometry(QRect(at(380, 144), QSize(100, 26)));
     m_follow = new QCheckBox(QStringLiteral("Follow the panel"), this);
     m_follow->setObjectName(QStringLiteral("followCheck"));
@@ -258,7 +257,7 @@ void SettingsDialog::updateInputStatus()
         text = m_link.inputStatus();
     }
     m_inputFullStatus = text;
-    const QFontMetrics fm(Theme::font(Theme::Role::Note));
+    const QFontMetrics fm(Theme::font(Theme::Role::Body));
     m_inputStatus->setText(fm.elidedText(text, Qt::ElideRight, 100));
     m_inputStatus->setToolTip(text);
 }

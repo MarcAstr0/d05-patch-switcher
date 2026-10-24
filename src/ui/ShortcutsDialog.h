@@ -5,11 +5,11 @@
 namespace d05 {
 
 // The keyboard shortcut sheet (DESIGN.md 10.3), opened with F1 and generated from
-// Shortcuts::sections(). Window width 600, modal, closed by Esc or F1.
+// Shortcuts::sections(). Window 680 x 412, modal, closed by Esc or F1.
 class ShortcutsDialog : public QDialog {
     Q_OBJECT
 public:
-    static constexpr int ClientWidth = 600;
+    static constexpr int ClientWidth = 680;
 
     explicit ShortcutsDialog(QWidget *parent = nullptr);
 

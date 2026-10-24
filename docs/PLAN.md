@@ -78,7 +78,7 @@ the D-05 display showed. Fixes go back to the builder.
 ## M5 · Polish and v1.0.0 ◐
 
 - ☑ **T5.1** `F1` shortcut sheet; About box with version, licence and the trademark notice; first-run hint on the display's second line when no port is configured (`OPEN SETTINGS: CTRL+,`).
-- ☐ **T5.2** Everything the owner reported at G3/G4.
+- ☑ **T5.2** Everything the owner reported at G3/G4.
 - ☑ **T5.3** `CHANGELOG.md`; README screenshots from `--screenshot` at 2×.
 - ☐ **R5 Final review** (reviewer + Codex; the foreman may run the agent on Opus).
 - ☐ **T5.4** Tag `v1.0.0`; release green; the vault's project page updated by the owner.

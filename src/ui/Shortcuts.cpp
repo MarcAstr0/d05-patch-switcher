@@ -57,20 +57,21 @@ const QList<Section> &sections()
     static const QList<Section> list = {
         {QStringLiteral("FIND"), 0,
          {row({bound("actionFocusSearch"), word("or"), bound("actionFocusSearchCtrlF")}, "Focus the search field"),
-          row({bound("actionEscape")}, "Clear the search, then back to the list")}},
+          row({bound("actionEscape")}, "Clear the search"),
+          row({bound("actionEscape"), word("again")}, "Back to the list")}},
         {QStringLiteral("LIST"), 0,
          {row({lit("Up"), lit("Down")}, "Move the highlight"),
           row({lit("Home"), lit("End")}, "First or last row"),
-          row({lit("Enter")}, "Send the highlighted patch"),
+          row({lit("Enter")}, "Send highlighted patch"),
           row({lit("Space"), word("or"), bound("actionToggleFavourite")}, "Toggle favourite"),
           row({bound("actionRename")}, "Rename a user slot")}},
-        {QStringLiteral("VIEW"), 0,
-         {row({bound("actionViewAll")}, "All"), row({bound("actionViewFavourites")}, "Favourites"),
-          row({bound("actionViewRecents")}, "Recents")}},
         {QStringLiteral("PLAY"), 1,
          {row({bound("actionPrev")}, "Previous patch"), row({bound("actionNext")}, "Next patch"),
           row({bound("actionGridEntry"), word("then"), lit("1-8"), lit("1-8")}, "Enter bank and number"),
           row({bound("actionAutoSend")}, "Auto-send on or off")}},
+        {QStringLiteral("VIEW"), 1,
+         {row({bound("actionViewAll")}, "All"), row({bound("actionViewFavourites")}, "Favourites"),
+          row({bound("actionViewRecents")}, "Recents")}},
         {QStringLiteral("APP"), 1,
          {row({bound("actionSettings")}, "Settings"), row({bound("actionShortcuts")}, "This sheet"),
           row({bound("actionQuit")}, "Quit")}},
@@ -78,13 +79,29 @@ const QList<Section> &sections()
     return list;
 }
 
+QString capText(const QKeySequence &key, Platform platform)
+{
+    if (platform == Platform::Mac) {
+        if (key == QKeySequence(Qt::Key_Escape))
+            return QStringLiteral("Esc");
+        if (key == QKeySequence(Qt::Key_PageUp))
+            return QStringLiteral("fn \u2191");
+        if (key == QKeySequence(Qt::Key_PageDown))
+            return QStringLiteral("fn \u2193");
+        return key.toString(QKeySequence::NativeText);
+    }
+    QString t = key.toString(QKeySequence::NativeText);
+    t.replace(QStringLiteral("PgDown"), QStringLiteral("PgDn"));
+    return t;
+}
+
 QString capText(const QKeySequence &key)
 {
-    QString t = key.toString(QKeySequence::NativeText);
-#ifndef Q_OS_MACOS
-    t.replace(QStringLiteral("PgDown"), QStringLiteral("PgDn"));
+#ifdef Q_OS_MACOS
+    return capText(key, Platform::Mac);
+#else
+    return capText(key, Platform::Other);
 #endif
-    return t;
 }
 
 QString partText(const Part &part)

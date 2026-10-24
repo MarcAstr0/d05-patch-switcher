@@ -43,6 +43,11 @@ const QList<Section> &sections();
 // Cap text for a key: the platform's native text (symbols on macOS), with Qt's "PgDown"
 // written "PgDn" as in the design.
 QString capText(const QKeySequence &key);
+// The same for an explicit platform, so the macOS mapping can be tested anywhere (DESIGN 10.3):
+// Esc stays "Esc", PgUp / PgDn are "fn ↑" / "fn ↓" (Qt's ⎋ ⇞ ⇟ are not in the font subset);
+// everything else is Qt's native text (⌘ ⇧ ⌥ on macOS).
+enum class Platform { Mac, Other };
+QString capText(const QKeySequence &key, Platform platform);
 // The cap text of a part (resolves a binding).
 QString partText(const Part &part);
 

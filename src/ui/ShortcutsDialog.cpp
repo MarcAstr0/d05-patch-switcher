@@ -5,70 +5,63 @@
 #include "ui/Theme.h"
 
 #include <QFontMetrics>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QShortcut>
-#include <QVBoxLayout>
 
 namespace d05 {
 
 namespace {
 
 constexpr int kMargin = 20;
-constexpr int kColumnW = 270;
+constexpr int kColumnW = 310;
 constexpr int kColumnGap = 20;
 constexpr int kRowH = 26;
-constexpr int kKeyColumnW = 120;
+constexpr int kTextX = 156;
+constexpr int kTextW = 154;
 constexpr int kCapH = 18;
 constexpr int kCapGap = 4;
 constexpr int kWordGap = 4;
-constexpr int kSectionGap = 14;
+constexpr int kSectionGap = 16;
 constexpr int kRuleGap = 4;
+constexpr int kFooterH = 16;
 
 QLabel *makeCap(const QString &text, QWidget *parent)
 {
     auto *cap = new QLabel(text, parent);
     cap->setObjectName(QStringLiteral("keycap"));
     cap->setFont(Theme::font(Theme::Role::Keycap));
-    cap->adjustSize();
+    cap->ensurePolished();
     cap->setFixedHeight(kCapH);
     cap->setFixedWidth(qMax(kCapH, cap->sizeHint().width()));
     return cap;
 }
 
-// One row: caps (and joining words) from the left, the action text after the key column.
-// The action wraps to a second line when it does not fit; the row then grows.
-QWidget *makeRow(const Shortcuts::Row &row, QWidget *parent)
+// One row at (x, y) in `parent`: caps and joining words from the left, the action at x 156,
+// one line, never wrapped (a test checks each one fits).
+void placeRow(const Shortcuts::Row &row, QWidget *parent, int x0, int y)
 {
-    auto *w = new QWidget(parent);
-    int x = 0;
+    int x = x0;
     for (const Shortcuts::Part &part : row.parts) {
         if (part.kind == Shortcuts::Part::Kind::Key) {
-            QLabel *cap = makeCap(Shortcuts::partText(part), w);
-            cap->move(x, (kRowH - kCapH) / 2);
+            QLabel *cap = makeCap(Shortcuts::partText(part), parent);
+            cap->move(x, y + (kRowH - kCapH) / 2);
             x += cap->width() + kCapGap;
         } else {
-            auto *word = new QLabel(part.text, w);
+            auto *word = new QLabel(part.text, parent);
             word->setProperty("role", QStringLiteral("dim"));
+            word->ensurePolished();
             word->adjustSize();
-            x += kWordGap - kCapGap;  // the gap after the previous cap is replaced by the word's own
-            word->move(x, (kRowH - word->sizeHint().height()) / 2);
-            x += word->sizeHint().width() + kWordGap;
+            x += kWordGap - kCapGap;  // the word's own 4 px replace the gap after the cap
+            word->move(x, y + (kRowH - word->height()) / 2);
+            x += word->width() + kWordGap;
         }
     }
-    x -= kCapGap;
-    const int textX = qMax(kKeyColumnW, x + 8);
-    auto *text = new QLabel(row.text, w);
+    auto *text = new QLabel(row.text, parent);
     text->setProperty("role", QStringLiteral("body"));
     text->setObjectName(QStringLiteral("rowText"));
-    text->setWordWrap(true);
-    text->ensurePolished();
-    const int textW = kColumnW - textX;
-    const int textH = qMax(kRowH, text->heightForWidth(textW));
-    text->setGeometry(textX, 0, textW, textH);
+    text->setWordWrap(false);
     text->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    w->setFixedSize(kColumnW, textH);
-    return w;
+    text->setGeometry(x0 + kTextX, y, kTextW, kRowH);
 }
 
 }  // namespace
@@ -80,43 +73,30 @@ ShortcutsDialog::ShortcutsDialog(QWidget *parent)
     setWindowTitle(QStringLiteral("Keyboard Shortcuts"));
     setModal(true);
 
-    auto *outer = new QVBoxLayout(this);
-    outer->setContentsMargins(kMargin, kMargin, kMargin, kMargin);
-    outer->setSpacing(0);
-    auto *columns = new QHBoxLayout;
-    columns->setContentsMargins(0, 0, 0, 0);
-    columns->setSpacing(kColumnGap);
-    QVBoxLayout *column[2];
-    for (QVBoxLayout *&c : column) {
-        c = new QVBoxLayout;
-        c->setContentsMargins(0, 0, 0, 0);
-        c->setSpacing(0);
-        columns->addLayout(c);
-    }
+    // Everything sits at the design's coordinates (DESIGN 10.3), content origin (20, 20).
+    int y[2] = {kMargin, kMargin};
+    bool first[2] = {true, true};
     for (const Shortcuts::Section &section : Shortcuts::sections()) {
-        QVBoxLayout *c = column[section.column];
-        if (c->count() > 0)
-            c->addSpacing(kSectionGap);
+        const int c = section.column;
+        const int x0 = kMargin + c * (kColumnW + kColumnGap);
+        if (!first[c])
+            y[c] += kSectionGap;
+        first[c] = false;
         auto *rule = new SectionRule(section.title, false, this);
-        rule->setFixedSize(kColumnW, SectionRule::Height);
-        c->addWidget(rule);
-        c->addSpacing(kRuleGap);
-        for (const Shortcuts::Row &row : section.rows)
-            c->addWidget(makeRow(row, this));
+        rule->setGeometry(x0, y[c], kColumnW, SectionRule::Height);
+        y[c] += SectionRule::Height + kRuleGap;
+        for (const Shortcuts::Row &row : section.rows) {
+            placeRow(row, this, x0, y[c]);
+            y[c] += kRowH;
+        }
     }
-    for (QVBoxLayout *c : column)
-        c->addStretch(1);
-    outer->addLayout(columns);
-    outer->addSpacing(kSectionGap);
-
+    const int bottom = qMax(y[0], y[1]) + kSectionGap;
     auto *footer = new QLabel(QStringLiteral("Esc or F1 closes"), this);
     footer->setProperty("role", QStringLiteral("dim"));
     footer->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    outer->addWidget(footer);
+    footer->setGeometry(kMargin, bottom, 2 * kColumnW + kColumnGap, kFooterH);
 
-    setFixedWidth(ClientWidth);
-    layout()->activate();
-    setFixedHeight(layout()->sizeHint().height());
+    setFixedSize(2 * kMargin + 2 * kColumnW + kColumnGap, bottom + kFooterH + kMargin);
 
     // F1 closes the sheet it opened; Esc is the dialog's own reject.
     auto *f1 = new QShortcut(QKeySequence(Qt::Key_F1), this);

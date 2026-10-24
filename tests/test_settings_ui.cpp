@@ -390,6 +390,21 @@ private slots:
         Paths::setOverride(QString());
     }
 
+    void inputErrorElidesWithBodyMetrics()
+    {
+        Rig r;
+        r.backend.setListError(QStringLiteral("a very long input enumeration failure text"));
+        SettingsDialog *d = r.openDialog();
+        QVERIFY(d);
+        QLabel *l = d->findChild<QLabel *>(QStringLiteral("inputStatusText"));
+        QVERIFY(l);
+        QVERIFY2(l->text().endsWith(QChar(0x2026)), qPrintable(l->text()));
+        QCOMPARE(l->font(), Theme::font(Theme::Role::Body));
+        QVERIFY(QFontMetrics(Theme::font(Theme::Role::Body)).horizontalAdvance(l->text()) <= 100);
+        QVERIFY(l->styleSheet().isEmpty());
+        QVERIFY(l->toolTip().contains(QStringLiteral("very long")));
+    }
+
     void settingsScreenshotRenders()
     {
         QTemporaryDir out;

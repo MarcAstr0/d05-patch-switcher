@@ -17,6 +17,11 @@ QString AboutDialog::trademarkNotice()
         "affiliated with or endorsed by Roland.");
 }
 
+QString AboutDialog::projectUrl()
+{
+    return QStringLiteral("https://github.com/MarcAstr0/d05-patch-switcher");
+}
+
 AboutDialog::AboutDialog(const QString &version, QWidget *parent)
     : QDialog(parent)
 {
@@ -35,7 +40,7 @@ AboutDialog::AboutDialog(const QString &version, QWidget *parent)
     column->addWidget(mark, 0, Qt::AlignLeft);
     column->addSpacing(8);  // 8 + the 8 spacing on each side = 16 px gap
 
-    const auto paragraph = [&](const QString &text, const char *role) {
+    const auto paragraph = [&](const QString &text, const char *role) -> QLabel * {
         auto *l = new QLabel(text, this);
         l->setObjectName(QStringLiteral("aboutParagraph"));
         l->setProperty("role", QString::fromLatin1(role));
@@ -45,9 +50,17 @@ AboutDialog::AboutDialog(const QString &version, QWidget *parent)
         l->ensurePolished();  // the style sheet's font decides the wrap
         l->setFixedHeight(l->heightForWidth(ClientWidth - 40));
         column->addWidget(l);
+        return l;
     };
     paragraph(QStringLiteral("Version %1").arg(version), "body");
     paragraph(QStringLiteral("Selects patches on a Roland Boutique D-05 over MIDI."), "body");
+    // The link: accent colour, no underline, mouse only so OK keeps the only focus (DESIGN 10.4).
+    m_link = paragraph(QStringLiteral("<a href=\"%1\" style=\"color:%2; text-decoration:none\">github.com/MarcAstr0/d05-patch-switcher</a>")
+                           .arg(projectUrl(), Theme::labelAccent.name()),
+                       "note");
+    m_link->setTextFormat(Qt::RichText);
+    m_link->setOpenExternalLinks(true);
+    m_link->setTextInteractionFlags(Qt::LinksAccessibleByMouse);
     paragraph(QStringLiteral("MIT licence. Copyright 2026 Mario Castro Squella."), "note");
     paragraph(trademarkNotice(), "note");
     paragraph(QStringLiteral("Inter typeface, SIL Open Font License 1.1."), "note");

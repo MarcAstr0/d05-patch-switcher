@@ -19,6 +19,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
+#include <QLabel>
 #include <QImage>
 #include <QPushButton>
 #include <QSet>
@@ -108,7 +109,7 @@ private slots:
     {
         // FR-13, as portable text, in the order the sheet shows it.
         const char *literal[] = {"Up", "Down", "Home", "End", "Enter", "Space", "1-8", "1-8"};
-        const char *keys[] = {"/", "Ctrl+F", "Esc", "Ctrl+D", "F2", "Ctrl+1", "Ctrl+2", "Ctrl+3", "PgUp", "PgDown",
+        const char *keys[] = {"/", "Ctrl+F", "Esc", "Esc", "Ctrl+D", "F2", "Ctrl+1", "Ctrl+2", "Ctrl+3", "PgUp", "PgDown",
                               "Ctrl+G", "Ctrl+Shift+A", "Ctrl+,", "F1", "Ctrl+Q"};
         Rig r;
         ShortcutsDialog d;
@@ -132,7 +133,7 @@ private slots:
         for (const Shortcuts::Binding &b : Shortcuts::bindings())
             QVERIFY2(caps.contains(Shortcuts::capText(b.key)), qPrintable(b.action));
         QCOMPARE(d.windowTitle(), QStringLiteral("Keyboard Shortcuts"));
-        QCOMPARE(d.width(), 600);
+        QCOMPARE(d.size(), QSize(680, 412));
     }
 
     void f1OpensAndEscCloses()
@@ -167,11 +168,11 @@ private slots:
         auto *about = qobject_cast<AboutDialog *>(box);
         QVERIFY(about);
         const QStringList p = about->paragraphs();
-        QCOMPARE(p.size(), 5);
+        QCOMPARE(p.size(), 6);
         QCOMPARE(p[0], QStringLiteral("Version 9.8.7"));
-        QVERIFY(p[2].contains(QStringLiteral("MIT licence")));
-        QCOMPARE(p[3], AboutDialog::trademarkNotice());
-        QVERIFY(p[3].contains(QStringLiteral("not affiliated with or endorsed by Roland")));
+        QVERIFY(p[3].contains(QStringLiteral("MIT licence")));
+        QCOMPARE(p[4], AboutDialog::trademarkNotice());
+        QVERIFY(p[4].contains(QStringLiteral("not affiliated with or endorsed by Roland")));
         QCOMPARE(box->width(), 440);
         QCOMPARE(box->windowTitle(), QStringLiteral("About"));
         QPushButton *ok = box->findChild<QPushButton *>(QStringLiteral("okButton"));
@@ -180,6 +181,58 @@ private slots:
         ok->click();
         QTRY_VERIFY(!guard);
         QVERIFY(r.backend.sentMessages().isEmpty());
+    }
+
+    void everyActionFitsItsLabel()
+    {
+        ShortcutsDialog d;
+        const auto labels = d.findChildren<QLabel *>(QStringLiteral("rowText"));
+        QCOMPARE(labels.size(), 18);
+        for (const QLabel *l : labels) {
+            QCOMPARE(l->width(), 154);
+            QVERIFY2(!l->wordWrap(), qPrintable(l->text()));
+            QVERIFY2(l->sizeHint().width() <= l->width(), qPrintable(l->text()));
+        }
+        // The key caps and joining words never run into the text column (x 156 in a 310 px column).
+        for (const QLabel *l : d.findChildren<QLabel *>()) {
+            if (l->objectName() == QLatin1String("rowText") || l->parentWidget() != &d)
+                continue;
+            if (l->geometry().y() < 20 + 16)
+                continue;
+            if (l->objectName() == QLatin1String("keycap") || l->property("role") == QLatin1String("dim")) {
+                if (l->text().startsWith(QStringLiteral("Esc or")))
+                    continue;
+                const int col = l->x() >= 20 + 330 ? 350 : 20;
+                QVERIFY2(l->geometry().right() - col < 156, qPrintable(l->text()));
+            }
+        }
+    }
+
+    void macCapMapping()
+    {
+        using P = Shortcuts::Platform;
+        QCOMPARE(Shortcuts::capText(QKeySequence(Qt::Key_Escape), P::Mac), QStringLiteral("Esc"));
+        QCOMPARE(Shortcuts::capText(QKeySequence(Qt::Key_PageUp), P::Mac), QStringLiteral("fn \u2191"));
+        QCOMPARE(Shortcuts::capText(QKeySequence(Qt::Key_PageDown), P::Mac), QStringLiteral("fn \u2193"));
+        QCOMPARE(Shortcuts::capText(QKeySequence(Qt::Key_F1), P::Mac), QStringLiteral("F1"));
+        QCOMPARE(Shortcuts::capText(QKeySequence(Qt::Key_PageDown), P::Other), QStringLiteral("PgDn"));
+        QCOMPARE(Shortcuts::capText(QKeySequence(Qt::Key_PageUp), P::Other), QStringLiteral("PgUp"));
+        QCOMPARE(Shortcuts::capText(QKeySequence(Qt::Key_Escape), P::Other), QStringLiteral("Esc"));
+    }
+
+    void aboutLinkIsMouseOnlyAndPointsAtTheRepo()
+    {
+        AboutDialog d(QStringLiteral("1.0.0"));
+        QLabel *link = d.linkLabel();
+        QVERIFY(link);
+        QCOMPARE(AboutDialog::projectUrl(), QStringLiteral("https://github.com/MarcAstr0/d05-patch-switcher"));
+        QVERIFY(link->text().contains(QStringLiteral("href=\"https://github.com/MarcAstr0/d05-patch-switcher\"")));
+        QVERIFY(link->text().contains(QStringLiteral(">github.com/MarcAstr0/d05-patch-switcher<")));
+        QVERIFY(link->text().contains(QStringLiteral("text-decoration:none")));
+        QVERIFY(link->openExternalLinks());
+        QCOMPARE(link->textInteractionFlags(), Qt::TextInteractionFlags(Qt::LinksAccessibleByMouse));
+        QCOMPARE(link->focusPolicy(), Qt::NoFocus);
+        QCOMPARE(d.paragraphs().at(2), link->text());  // third line
     }
 
     void firstRunHintShowsWithNoPort()
