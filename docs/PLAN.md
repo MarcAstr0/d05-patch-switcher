@@ -64,12 +64,12 @@ enumerates, otherwise through the Hapax: `docs/MIDI.md` checklist steps 1–6. T
 (`brew install qt cmake`, then the README commands) and repeat steps 3–5. Report what
 the D-05 display showed. Fixes go back to the builder.
 
-## M4 · Packaging and CI (builder) ☐
+## M4 · Packaging and CI (builder) ◐
 
-- ☐ **T4.1 CI green** on all three runners including the packaging steps; artifacts downloadable from the Actions run. Fix the workflow, not the symptom (pin runner images and action versions when a step is flaky).
+- ☑ **T4.1 CI green** on all three runners including the packaging steps; artifacts downloadable from the Actions run. Fix the workflow, not the symptom (pin runner images and action versions when a step is flaky).
 - ☐ **T4.2 Linux AppImage** launches on the dev box from `~/Downloads` with no extra packages; desktop file and icon integrated.
 - ☐ **T4.3 macOS .dmg** universal (`lipo -info` shows x86_64 and arm64), ad-hoc signed, opens after right-click → Open. The README documents the Gatekeeper step.
-- ☐ **T4.4 Windows zip** runs on a clean Windows 10/11 (CI-only proof: the exe starts with `--list-ports` on the runner).
+- ☑ **T4.4 Windows zip** runs on a clean Windows 10/11 (CI-only proof: the exe starts with `--list-ports` on the runner).
 - ☐ **T4.5 Pre-release** `v0.9.0` tag → GitHub release with the three files and generated notes.
 
 **Gate G4 (owner).** Download the `.dmg` on the MacBook, run it against the real rig
@@ -111,3 +111,4 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-24, foreman (T3.5): the text caret does not blink (`QApplication::setCursorFlashTime(0)`); Qt's 500 ms caret timer broke the "no timer under 2 s" rule while the window was active. Footprint measured on the real X11 display, all within SPEC §5 (numbers in the T3.5 commit message).
 - 2026-10-24, foreman (R3): supersedes the T3.3 reading "in the Recents view a send reorders the list". While the Recents view is shown, sends update counts in place; the order refreshes when the view is entered again. Reordering under the cursor made auto-send in Recents bounce between two rows. Codex's R3 run hit the account's usage limit and returned no findings; it is re-run over the M3 range after the limit resets.
 - 2026-10-24, G3 passed (owner): D-05 on USB directly (`Boutique`, channel 3), preview build of f2ccb92. Checklist steps 1, 3 (TEST), 4 (P1-11, P2-11, P6-88, U1-11), 5 (P1-88 NEXT lands on P2-11) and 6 (follow the panel, no re-select) all passed. The Hapax (thru) path is untested; it is covered at G4 on the MacBook, where the app talks to the Hapax.
+- 2026-10-24, foreman (M4): T4.1 and T4.4 proven by CI run 40113475789. Pinned Qt 6.8.3, linuxdeploy 1-alpha-20251107-1, plugin-qt 1-alpha-20250213-1, actions by SHA. Verify steps: macOS dmg universal (x86_64 arm64), codesign valid, slices 744 KB stripped; Windows zip runs from a fresh directory (`--version`, `--list-ports`), exe 601 KB; Linux AppImage runs; the runner has no ALSA sequencer (no snd-seq module), so the real backend is checked for exit 3 and the packaged binary is exercised with `--fake-midi`.
