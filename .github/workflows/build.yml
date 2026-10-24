@@ -315,8 +315,22 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: |
+          for f in d05-patch-switcher-x86_64.AppImage d05-patch-switcher-macos-universal.dmg d05-patch-switcher-windows-x64.zip; do
+            test -f "$f" || { echo "missing $f"; exit 1; }
+          done
+          sha256sum d05-patch-switcher-x86_64.AppImage d05-patch-switcher-macos-universal.dmg d05-patch-switcher-windows-x64.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
       - name: Publish release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
-          files: dist/*
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/d05-patch-switcher-x86_64.AppImage
+            dist/d05-patch-switcher-macos-universal.dmg
+            dist/d05-patch-switcher-windows-x64.zip
+            dist/SHA256SUMS.txt
           generate_release_notes: true

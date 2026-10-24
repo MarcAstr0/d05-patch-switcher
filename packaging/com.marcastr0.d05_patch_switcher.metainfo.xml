@@ -15,4 +15,7 @@
   <provides><binary>d05-patch-switcher</binary></provides>
   <categories><category>Audio</category><category>Midi</category></categories>
   <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.9.0" date="2026-10-24" type="development"/>
+  </releases>
 </component>
