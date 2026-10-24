@@ -70,7 +70,7 @@ the D-05 display showed. Fixes go back to the builder.
 - ☑ **T4.2 Linux AppImage** launches on the dev box from `~/Downloads` with no extra packages; desktop file and icon integrated.
 - ☑ **T4.3 macOS .dmg** universal (`lipo -info` shows x86_64 and arm64), ad-hoc signed, opens after right-click → Open. The README documents the Gatekeeper step.
 - ☑ **T4.4 Windows zip** runs on a clean Windows 10/11 (CI-only proof: the exe starts with `--list-ports` on the runner).
-- ☐ **T4.5 Pre-release** `v0.9.0` tag → GitHub release with the three files and generated notes.
+- ☑ **T4.5 Pre-release** `v0.9.0` tag → GitHub release with the three files and generated notes.
 
 **Gate G4 (owner).** Download the `.dmg` on the MacBook, run it against the real rig
 (checklist steps 3–5). Report.
@@ -113,3 +113,4 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-24, G3 passed (owner): D-05 on USB directly (`Boutique`, channel 3), preview build of f2ccb92. Checklist steps 1, 3 (TEST), 4 (P1-11, P2-11, P6-88, U1-11), 5 (P1-88 NEXT lands on P2-11) and 6 (follow the panel, no re-select) all passed. The Hapax (thru) path is untested; it is covered at G4 on the MacBook, where the app talks to the Hapax.
 - 2026-10-24, foreman (M4): T4.1 and T4.4 proven by CI run 40113475789. Pinned Qt 6.8.3, linuxdeploy 1-alpha-20251107-1, plugin-qt 1-alpha-20250213-1, actions by SHA. Verify steps: macOS dmg universal (x86_64 arm64), codesign valid, slices 744 KB stripped; Windows zip runs from a fresh directory (`--version`, `--list-ports`), exe 601 KB; Linux AppImage runs; the runner has no ALSA sequencer (no snd-seq module), so the real backend is checked for exit 3 and the packaged binary is exercised with `--fake-midi`.
 - 2026-10-24, foreman (T4.3): proven in CI run 40114572432 (universal, ad-hoc signed, bundle `D-05 Patch Switcher.app` with icon, `NSHighResolutionCapable`, `LSMinimumSystemVersion` 12.0, dmg with an Applications link). "Opens after right-click → Open" is checked by the owner at G4; macOS 15 needs Privacy & Security → Open Anyway instead (README "macOS notes", SPEC §8).
+- 2026-10-24, foreman (T4.5): `v0.9.0` tagged at b4e813e; release run 40115379566 published https://github.com/MarcAstr0/d05-patch-switcher/releases/tag/v0.9.0 as a pre-release with the AppImage, the universal dmg, the Windows zip and SHA256SUMS.txt.
