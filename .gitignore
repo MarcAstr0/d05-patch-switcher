@@ -13,5 +13,12 @@ _deps/
 # Local, never-committed artwork (trademarked logos live only on the user's machine)
 assets/local/
 
+# Web version
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+
 # Claude Code local state
 .claude/settings.local.json
+.claude/worktrees/
