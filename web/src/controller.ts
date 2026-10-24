@@ -16,6 +16,9 @@ import { SEPARATOR, openMenu, type MenuItem } from './ui/menu';
 import { Panel } from './ui/panel';
 
 const FLASH_MS = 400;
+/** Dialog heights in CSS px (title strip + client area + border), for the sheet decision. */
+const SETTINGS_H = 474;
+const ABOUT_H = 463;
 const START_PATCH = 512; // P1-11
 
 declare const __APP_VERSION__: string;
@@ -106,12 +109,12 @@ export class Controller {
 
     // Storage state first, so the message survives the first render.
     const loaded = this.library.load();
-    if (loaded === 'recovered') this.say('The saved library could not be read. It was set aside and a new one started.', true);
-    else if (loaded === 'unreadable' || loaded === 'sidelineFailed') this.say(this.library.saveError ?? 'The saved library could not be read.', true);
-    else if (!persistent || !this.settings.persistent) this.say('Storage is blocked: favourites and settings last only until this page closes.', true);
+    if (loaded === 'recovered') this.warn('The saved library could not be read. It was set aside and a new one started.');
+    else if (loaded === 'unreadable' || loaded === 'sidelineFailed') this.warn(this.library.saveError ?? 'The saved library could not be read.');
+    else if (!persistent || !this.settings.persistent) this.warn('Storage is blocked: favourites and settings last only until this page closes.');
     this.library.onSaveStatus((e) => {
       this.notSaved = e;
-      if (e) this.say(`Library not saved: ${e}`, true);
+      if (e) this.warn(`Library not saved: ${e}`);
       this.render();
     });
     this.notSaved = this.library.saveError;
@@ -127,11 +130,12 @@ export class Controller {
     this.measure();
     this.rebuild('highlight');
     this.render();
-    if (this.metrics?.choice.kind !== 'portrait') {
-      // The user's own scroll aside, the current patch sits near the top (DESIGN.md 14.2).
-      if (port.access === 'granted') this.panel.search.focus({ preventScroll: true });
-      else this.panel.access.focusButton();
-    }
+    // Initial focus (DESIGN-WEB 10): the search field on the desktop layout; on phones none (a focused
+    // field opens the soft keyboard), except the access panel button on the landscape layout.
+    const kind = this.metrics?.choice.kind;
+    if (port.access !== 'granted') {
+      if (kind !== 'portrait') this.panel.access.focusButton();
+    } else if (kind === 'desktop') this.panel.search.focus({ preventScroll: true });
     this.panel.scrollGroupIntoView(this.current.group);
   }
 
@@ -284,7 +288,7 @@ export class Controller {
       kind !== 'portrait' || (this.metrics?.W ?? 0) >= 480,
     );
     this.panel.access.update(accessContent(this.port.access, this.env));
-    this.showNoteCard();
+    this.pumpCards();
   }
 
   private notSavedText(): string | null {
@@ -295,18 +299,28 @@ export class Controller {
 
   private say(text: string, error = false): void {
     this.message = { text, error };
-    this.noteCard = { text, error };
   }
 
-  private noteCard: { text: string; error: boolean } | null = null;
+  private cards: { title: string; text: string; red: boolean }[] = [];
+  private seenWarnings = new Set<string>();
 
-  /** Portrait has no message slot in the status bar (DESIGN-WEB 7.7): messages come as a small card. */
-  private showNoteCard(): void {
-    const n = this.noteCard;
-    if (!n || this.kind !== 'portrait' || !this.metrics) return;
-    this.noteCard = null;
+  /** A storage or library warning: the status message, and in portrait one card per distinct warning. */
+  private warn(text: string): void {
+    this.say(text, true);
+    if (this.seenWarnings.has(text)) return;
+    this.seenWarnings.add(text);
+    this.cards.push({ title: 'WARNING', text, red: false });
+  }
+
+  /** Portrait has no status message slot (DESIGN-WEB 7.7, 7.10): import results, refusals and warnings come as a card, one at a time. */
+  private pumpCards(): void {
+    if (this.kind !== 'portrait' || !this.metrics) return;
     if (document.querySelector('dialog.note')) return;
-    confirmDialog(document.body, { title: n.error ? 'WARNING' : 'MESSAGE', text: n.text, confirm: '', sheet: true }, () => {}).dlg.classList.add('note');
+    const n = this.cards.shift();
+    if (!n) return;
+    const d = confirmDialog(document.body, { title: n.title, text: n.text, red: n.red, confirm: '', sheet: true }, () => {});
+    d.dlg.classList.add('note');
+    d.dlg.addEventListener('close', () => this.pumpCards());
   }
 
   // ------------------------------------------------------------------ list model
@@ -584,7 +598,7 @@ export class Controller {
     if (this.settingsOpen) return;
     this.settingsOpen = true;
     const before = { output: this.settings.value.output, channel: this.channel };
-    const sheet = this.useSheet(520);
+    const sheet = this.useSheet(520, SETTINGS_H);
     settingsDialog(document.body, {
       port: this.port,
       settings: this.settings.value,
@@ -608,13 +622,14 @@ export class Controller {
         this.port.setOutput(before.output);
         this.connectPending = false; // the restored port is the one that was open before: nothing to resend
       },
-    }).dlg.addEventListener('close', () => {
-      this.settingsOpen = false;
-      if (this.connectPending) {
-        this.connectPending = false;
-        if (this.settings.value.resendOnConnect) this.resendCurrent();
-      }
-      this.render();
+      onClosed: () => {
+        this.settingsOpen = false;
+        if (this.connectPending) {
+          this.connectPending = false;
+          if (this.settings.value.resendOnConnect) this.resendCurrent();
+        }
+        this.render();
+      },
     });
   }
 
@@ -623,10 +638,12 @@ export class Controller {
     this.send(this.current, true);
   }
 
-  private useSheet(width: number): boolean {
+  /** Phone sheet when portrait, or when the dialog does not fit the window in either direction (DESIGN-WEB 11.1). */
+  private useSheet(width: number, height: number): boolean {
+    this.measure(); // the resize event may not have been handled yet: decide from the current viewport
     const m = this.metrics;
     if (!m) return false;
-    return m.choice.kind === 'portrait' || (m.choice.kind === 'landscape' && m.W < width + 16);
+    return m.choice.kind === 'portrait' || (m.choice.kind === 'landscape' && (m.W < width + 16 || m.H < height + 16));
   }
 
   // ------------------------------------------------------------------ system menu
@@ -677,7 +694,7 @@ export class Controller {
         this.exportLibrary();
         break;
       case 'about':
-        aboutDialog(document.body, __APP_VERSION__, this.useSheet(440));
+        aboutDialog(document.body, __APP_VERSION__, this.useSheet(440, ABOUT_H));
         break;
     }
   }
@@ -715,11 +732,11 @@ export class Controller {
     try {
       text = await file.text();
     } catch (e) {
-      this.announce(`Not a library file: ${e instanceof Error ? e.message : 'could not read it'}`, true);
+      this.announce(`Not a library file: ${e instanceof Error ? e.message : 'could not read it'}`, true, true);
       return;
     }
     if (parseLibraryJson(text) === null) {
-      this.announce('Not a library file: expected a library.json written by this app (version 1)', true);
+      this.announce('Not a library file: expected a library.json written by this app (version 1)', true, true);
       return;
     }
     confirmDialog(document.body, { title: 'IMPORT LIBRARY', text: `Replace favourites, recents and user names with the ones in ${file.name}?`, confirm: 'IMPORT', sheet: this.kind !== 'desktop' }, () => {
@@ -728,14 +745,16 @@ export class Controller {
       const r = this.library.importJson(text);
       if (r.ok) {
         this.library.flush();
-        this.announce(`Imported ${r.favorites} favourites, ${r.userNames} names${r.skipped > 0 ? ` (${r.skipped} entries skipped)` : ''}`);
-      } else this.announce(`Not a library file: ${r.error}`, true);
+        const n = (k: number, one: string, many: string): string => `${k} ${k === 1 ? one : many}`;
+        this.announce(`Imported ${n(r.favorites, 'favourite', 'favourites')}, ${n(r.userNames, 'name', 'names')}${r.skipped > 0 ? ` (${n(r.skipped, 'entry', 'entries')} skipped)` : ''}`, false, true);
+      } else this.announce(`Not a library file: ${r.error}`, true, true);
     });
   }
 
-  /** A status message; on the portrait layout (no message slot) also a small card. */
-  private announce(text: string, error = false): void {
+  /** A status message. `card`: in portrait it also opens the message card (import results and refusals only). */
+  private announce(text: string, error = false, card = false): void {
     this.say(text, error);
+    if (card) this.cards.push({ title: 'IMPORT LIBRARY', text, red: error });
     this.render();
   }
 

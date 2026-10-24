@@ -90,7 +90,7 @@ Started 2026-10-24 after v1.0.0, in the main tree (desktop work is finished).
 - ☑ **W0 Setup** (foreman): `.claude/agents/web-builder.md`; `web/` with Vite + TypeScript + Vitest + Playwright and a green empty test; a `web` CI job (path-filtered to `web/**`, `data/**`); `data/test-vectors.json` and a C++ test that reads it.
 - ☑ **W1 Core** (web-builder): `address`, `catalog`, `search`, `library` passing the shared vectors and the spec's own cases; import/export round-trip with a `library.json` written by the desktop app.
 - ☑ **W2 Design addendum** (designer): `docs/design/DESIGN-WEB.md` with the phone layouts; token generation into `theme.css` (from a `docs/design/tokens.json`); fonts served from `web/public`.
-- ☐ **W3 UI** (web-builder): display on canvas, grid, list, settings, keyboard map, views, PWA. Playwright screenshots at desktop and phone sizes reviewed by the designer.
+- ☑ **W3 UI** (web-builder): display on canvas, grid, list, settings, keyboard map, views, PWA. Playwright screenshots at desktop and phone sizes reviewed by the designer.
 - ☐ **W4 MIDI and deploy** (web-builder): Web MIDI layer, permission flow, hot-plug, follow mode; GitHub Pages deployment live; size budget check in CI.
 - ☐ **RW Review** (reviewer + Codex): all of `web/`.
 

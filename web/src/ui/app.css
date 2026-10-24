@@ -103,6 +103,7 @@ button { font: inherit; color: inherit; }
 .status .dimv { color: var(--labelDim); }
 .status .se { color: var(--labelRed); margin-left: 6px; }
 .status .gap { margin-left: 16px; }
+.status .ns { margin-left: 16px; }
 .status .gap + .sv { margin-left: 6px; }
 .status .fol { color: var(--labelPrimary); }
 .status .msg { margin-left: auto; padding: 0 16px; font-weight: var(--type-statusValue-weight); font-size: var(--type-statusValue-size); line-height: 14px; color: var(--labelSecondary); overflow: hidden; text-overflow: ellipsis; }
@@ -139,9 +140,15 @@ button { font: inherit; color: inherit; }
 .sizer { position: relative; width: 100%; }
 .row { position: absolute; left: 0; right: 0; height: var(--rowH); }
 @media (hover: hover) { .row:hover { background: var(--rowHover); } }
-.row.hl { background: var(--selection); }
-.row.hl::before { content: ""; position: absolute; left: 0; top: 0; width: 3px; height: 100%; background: var(--selectionBarIdle); }
-.list:focus .row.hl::before { background: var(--focusRing); }
+/* The highlight is drawn on the desktop layout, and on phone layouts only where a mouse is the primary pointer (DESIGN-WEB 7.8). */
+[data-layout="desktop"] .row.hl { background: var(--selection); }
+[data-layout="desktop"] .row.hl::before { content: ""; position: absolute; left: 0; top: 0; width: 3px; height: 100%; background: var(--selectionBarIdle); }
+[data-layout="desktop"] .list:focus .row.hl::before { background: var(--focusRing); }
+@media (pointer: fine) {
+  .row.hl { background: var(--selection); }
+  .row.hl::before { content: ""; position: absolute; left: 0; top: 0; width: 3px; height: 100%; background: var(--selectionBarIdle); }
+  .list:focus .row.hl::before { background: var(--focusRing); }
+}
 .rin { position: absolute; left: 0; right: 0; top: var(--ry); height: 28px; }
 .rin > * { position: absolute; }
 .rin i.cur { left: 10px; top: 12px; width: 10px; height: 4px; background: var(--ledOn); }
@@ -162,7 +169,7 @@ button { font: inherit; color: inherit; }
   left: 80px; right: 100px; top: 2px; height: 24px; padding: 0 3px; background: var(--fieldBack); border: 1px solid var(--focusRing); border-radius: 0; color: var(--labelPrimary);
   font-family: var(--font-family); font-weight: var(--type-listName-weight); font-size: var(--type-listName-size); line-height: 20px; outline: none; -webkit-user-select: text; user-select: text;
 }
-.empty { left: 0; right: 0; top: 38%; text-align: center; pointer-events: none; }
+.empty { position: absolute; left: 0; right: 0; top: 38%; text-align: center; pointer-events: none; }
 .empty .type-note { margin-top: 8px; }
 
 /* ------------------------------------------------------------------ access panel (DESIGN-WEB 6) */
@@ -181,7 +188,17 @@ button { font: inherit; color: inherit; }
 .matrix .mb { width: 200px; color: var(--labelPrimary); }
 .matrix .ma { color: var(--labelSecondary); }
 .ab .dbtn { margin-top: 20px; width: 160px; height: 32px; }
-.ab .note { margin-top: 16px; }
+.ab .note { margin-top: 16px; color: var(--labelDim); }
+.ab .dbtn.try { width: 120px; height: 28px; }
+.ab .nw { white-space: nowrap; }
+.ab { container-type: inline-size; }
+.about .dc { container-type: inline-size; }
+@container (max-width: 379px) {
+  .matrix, .matrix tbody, .matrix tr, .matrix td { display: block; width: auto; }
+  .matrix { margin-left: 0; margin-right: 0; width: 100%; }
+  .matrix td { height: 16px; line-height: 16px; }
+  .matrix tr + tr { margin-top: 8px; }
+}
 
 /* ------------------------------------------------------------------ chips (DESIGN-WEB 7.5) */
 .chip { flex: none; display: flex; align-items: center; height: 44px; width: max-content; max-width: 220px; }
@@ -191,7 +208,7 @@ button { font: inherit; color: inherit; }
 .chip .ad { position: absolute; left: 22px; top: 0; height: 32px; width: 45px; line-height: 32px; font-weight: var(--type-listAddress-weight); font-size: var(--type-listAddress-size); color: var(--labelSecondary); display: flex; }
 .chip.lit .ad { color: var(--labelPrimary); }
 .chip .nm { position: static; display: block; height: 32px; line-height: 32px; overflow: hidden; text-overflow: ellipsis; }
-.nochips { display: flex; align-items: center; gap: 8px; height: 44px; padding-left: var(--spanX); white-space: nowrap; }
+.nochips { display: flex; align-items: center; gap: 8px; height: 44px; white-space: nowrap; }
 
 /* ------------------------------------------------------------------ DESKTOP (DESIGN 4.3) */
 [data-layout="desktop"] .nameplate { display: flex; left: 16px; top: 10px; width: 360px; height: 28px; }
@@ -241,7 +258,7 @@ button { font: inherit; color: inherit; }
 [data-layout="portrait"] .pad:disabled .num, [data-layout="landscape"] .pad:disabled .v .num { color: var(--labelDisabled); }
 [data-layout="portrait"] .lg, [data-layout="landscape"] .lg { font-size: var(--type-padLabel-size); letter-spacing: var(--type-padLabel-spacing); line-height: var(--type-padLabel-line); font-weight: var(--type-padLabel-weight); }
 [data-layout="portrait"] .g .lg, [data-layout="landscape"] .g .lg { display: block; text-align: center; padding-top: 4px; }
-[data-layout="portrait"] .g .led, [data-layout="landscape"] .g .led { left: calc(50% - 8px); top: 23px; width: 16px; height: 3px; }
+[data-layout="portrait"] .g .led, [data-layout="landscape"] .g .led { left: var(--lx); top: 23px; width: 16px; height: 3px; }
 [data-layout="portrait"] .groups, [data-layout="landscape"] .groups { display: flex; overflow-x: auto; overflow-y: hidden; height: 44px; scrollbar-width: none; padding-right: 12px; position: absolute; }
 [data-layout="portrait"] .groups::-webkit-scrollbar, [data-layout="landscape"] .groups::-webkit-scrollbar, .chips::-webkit-scrollbar { display: none; }
 [data-layout="portrait"] .pad.g, [data-layout="landscape"] .pad.g { flex: none; width: 52px; height: 44px; --fx: 3px; --fy: 6px; }
@@ -259,11 +276,11 @@ button { font: inherit; color: inherit; }
 [data-layout="portrait"] .nameEditor, [data-layout="landscape"] .nameEditor { top: 2px; }
 
 /* stacked legend + LED in pads (kind B) */
-[data-layout="portrait"] .pad.b .led, [data-layout="portrait"] .pad.n .led, [data-layout="landscape"][data-density="compact"] .pad.b .led, [data-layout="landscape"][data-density="compact"] .pad.n .led { left: calc(50% - 8px); top: calc(var(--lt) + 19px); width: 16px; height: 4px; }
+[data-layout="portrait"] .pad.b .led, [data-layout="portrait"] .pad.n .led, [data-layout="landscape"][data-density="compact"] .pad.b .led, [data-layout="landscape"][data-density="compact"] .pad.n .led { left: var(--lx); top: calc(var(--lt) + 19px); width: 16px; height: 4px; }
 .v { --lt: 4px; }
 [data-layout="landscape"] .v { --lt: 6px; }
 [data-layout="landscape"][data-density="compact"] .pad.b, [data-layout="landscape"][data-density="compact"] .pad.n { --lt: 6px; }
-[data-layout="portrait"] .v .led, [data-layout="landscape"] .v .led { left: calc(50% - 8px); top: calc(var(--lt) + 19px); width: 16px; height: 3px; }
+[data-layout="portrait"] .v .led, [data-layout="landscape"] .v .led { left: var(--lx); top: calc(var(--lt) + 19px); width: 16px; height: 3px; }
 [data-layout="portrait"] .searchBtn, [data-layout="portrait"] .search, [data-layout="landscape"] .search { height: 44px; }
 
 /* ------------------------------------------------------------------ PORTRAIT (DESIGN-WEB 7) */
@@ -319,7 +336,7 @@ button { font: inherit; color: inherit; }
 [data-layout="landscape"] .numbers { left: 12px; top: 174px; }
 [data-layout="landscape"] .banks, [data-layout="landscape"] .numbers { width: calc(8 * var(--c)); height: 44px; grid-template-columns: repeat(8, var(--c)); }
 [data-layout="landscape"] .pad.b, [data-layout="landscape"] .pad.n { width: var(--c); height: 44px; --fx: 2px; --fy: 4px; }
-[data-layout="landscape"] .banks .face .led, [data-layout="landscape"] .numbers .face .led { left: calc(50% - 8px); top: calc(50% - 2px); width: 16px; height: 4px; }
+[data-layout="landscape"] .banks .face .led, [data-layout="landscape"] .numbers .face .led { left: var(--lx); top: calc(50% - 2px); width: 16px; height: 4px; }
 [data-layout="landscape"] .banks .num, [data-layout="landscape"] .numbers .num { position: absolute; left: -2px; right: -2px; top: -18px; }
 [data-layout="landscape"] .transport { left: 12px; top: 224px; width: calc(8 * var(--c)); height: 44px; grid-template-columns: 1fr 1fr; }
 [data-layout="landscape"] .pad.t { width: 100%; height: 44px; --fx: 2px; --fy: 4px; }
@@ -344,7 +361,8 @@ button { font: inherit; color: inherit; }
 .menu.phone { min-width: 0; }
 .mi { display: flex; justify-content: space-between; gap: 24px; width: 100%; height: 28px; align-items: center; padding: 0 24px 0 12px; border: 0; background: none; text-align: left; cursor: default; white-space: nowrap; }
 .menu.phone .mi { height: 44px; }
-.mi:hover, .mi:focus { background: var(--selection); outline: none; }
+.mi:hover, .mi:focus-visible { background: var(--selection); }
+.mi:focus { outline: none; }
 .msc { color: var(--labelSecondary); }
 .msep { height: 1px; margin: 4px 0; background: var(--fieldBorder); }
 
@@ -455,4 +473,28 @@ dialog.sheet::backdrop { background: none; }
 .sheet.about .matrix .mb { width: 50%; }
 .cardPhone .dbtn { height: 44px; font-size: var(--type-padLabel-size); }
 dialog.dlg:focus { outline: none; }
-.sheet .inprob:empty { display: none; }
+
+/* landscape numerals and PREV/NEXT legends are type.padLabel too (DESIGN-WEB 3.3) */
+[data-layout="landscape"] .banks .num, [data-layout="landscape"] .numbers .num, [data-layout="landscape"] .t .num { font-size: var(--type-padLabel-size); letter-spacing: var(--type-padLabel-spacing); line-height: var(--type-padLabel-line); font-weight: var(--type-padLabel-weight); }
+/* phone name editor: (80, y, Wl - 224, 24) */
+[data-layout="portrait"] .nameEditor, [data-layout="landscape"] .nameEditor { right: 144px; }
+.nameEditor::selection { background: var(--matchBack); color: var(--labelPrimary); }
+/* portrait DONE is type.padLabel and not the default button */
+.done { font-size: var(--type-padLabel-size); letter-spacing: var(--type-padLabel-spacing); font-weight: var(--type-padLabel-weight); }
+/* pad LED x from the layout code */
+.pad.b, .pad.n { --lx: var(--ledxPad); }
+.v { --lx: var(--ledxView); }
+.pad.g { --lx: 15px; }
+[data-layout="portrait"] .g .led, [data-layout="landscape"] .g .led, [data-layout="portrait"] .pad.b .led, [data-layout="portrait"] .pad.n .led, [data-layout="landscape"][data-density="compact"] .pad.b .led, [data-layout="landscape"][data-density="compact"] .pad.n .led, [data-layout="portrait"] .v .led, [data-layout="landscape"] .v .led, [data-layout="landscape"] .banks .face .led, [data-layout="landscape"] .numbers .face .led { left: var(--lx); }
+/* Settings sheet: every row at the y of DESIGN-WEB 11.2 */
+.sheet.settings .rule { margin-top: 20px; }
+.sheet.settings .dc > .rule:first-child { margin-top: 0; }
+.sheet.settings .rule + * { margin-top: 8px; }
+.sheet.settings .frow { margin-top: 12px; }
+.sheet.settings .rule + .frow { margin-top: 8px; }
+.sheet.settings .frow + .chk { margin-top: 4px; }
+.sheet.settings .chk { margin-top: 0; }
+.sheet.settings .rule + .chk { margin-top: 8px; }
+.sheet.settings .conn { margin-top: 12px; }
+.sheet.settings .combo { margin-top: 4px; }
+.sheet.settings .inprob { margin: 4px 0 0; height: 20px; }

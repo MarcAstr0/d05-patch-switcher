@@ -128,11 +128,11 @@ export function computeMetrics(W: number, H: number, dpr: number): Metrics {
     const pm = portraitMetrics(W);
     display = phoneDisplay('portrait', false, pm.spanW, dpr);
     const { B, hp } = portraitRows(H, display.bezelH);
-    Object.assign(vars, { B, hp, cw: pm.cw, gx: pm.gx, spanX: pm.spanX, spanW: pm.spanW, vw: Math.floor((pm.spanW + 6) / 3), bezelX: pm.spanX + Math.floor((pm.spanW - display.bezelW) / 2), bezelY: 8 });
+    Object.assign(vars, { B, hp, cw: pm.cw, gx: pm.gx, spanX: pm.spanX, spanW: pm.spanW, vw: Math.floor((pm.spanW + 6) / 3), ledxPad: Math.floor((pm.cw - 6) / 2) - 8, ledxView: Math.floor((Math.floor((pm.spanW + 6) / 3) - 6) / 2) - 8, bezelX: pm.spanX + Math.floor((pm.spanW - display.bezelW) / 2), bezelY: 8 });
   } else {
     const lm = landscapeMetrics(W);
     display = phoneDisplay('landscape', choice.compact, lm.spanW, dpr);
-    Object.assign(vars, { c: lm.c, L: lm.L, spanW: lm.spanW, rw: lm.rw, vw: lm.vw, B: 8 + display.bezelH + 4, bezelX: lm.spanX + Math.floor((lm.spanW - display.bezelW) / 2), bezelY: 8 });
+    Object.assign(vars, { c: lm.c, L: lm.L, spanW: lm.spanW, rw: lm.rw, vw: lm.vw, ledxPad: Math.floor((lm.c - 4) / 2) - 8, ledxView: Math.floor((lm.vw - 6) / 2) - 8, B: 8 + display.bezelH + 4, bezelX: lm.spanX + Math.floor((lm.spanW - display.bezelW) / 2), bezelY: 8 });
   }
   Object.assign(vars, { bezelW: display.bezelW, bezelH: display.bezelH, fieldW: display.fieldW, fieldH: display.fieldH, padX: display.padX, padY: display.padY });
   return { choice, W, H, dpr, display, vars };

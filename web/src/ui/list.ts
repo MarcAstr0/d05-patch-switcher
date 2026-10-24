@@ -105,7 +105,9 @@ export class PatchList {
     const h = this.m.rowH;
     const top = i * h;
     const view = this.host.clientHeight;
-    if (nearTop) this.host.scrollTop = Math.max(0, top - 3 * h);
+    // Desktop: 3 rows below the top; phones: fewer when the list is short (DESIGN-WEB 8.2).
+    const k = this.m.contextRename ? Math.max(0, Math.min(3, Math.floor((view - h) / (2 * h)))) : 3;
+    if (nearTop) this.host.scrollTop = Math.max(0, top - k * h);
     else if (top < this.host.scrollTop) this.host.scrollTop = top;
     else if (top + h > this.host.scrollTop + view) this.host.scrollTop = top + h - view;
     this.render();

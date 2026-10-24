@@ -11,18 +11,16 @@ for w in Regular Medium; do
   /tmp/venv-fonts/bin/python -I -c "
 import sys
 from fontTools.ttLib import TTFont
-f = TTFont(sys.argv[1]); f.flavor = 'woff2'; f.save(sys.argv[2])
+f = TTFont(sys.argv[1], recalcTimestamp=False); f.flavor = 'woff2'; f.save(sys.argv[2])
 " assets/fonts/Inter-$w.ttf web/public/fonts/Inter-$w.woff2
 done
 cp assets/fonts/OFL.txt web/public/fonts/OFL.txt
 ```
 
+`recalcTimestamp=False` keeps the TTF's `head.modified`, so the output is deterministic.
+
 | File | Bytes | sha256 |
 |---|---|---|
-| `Inter-Regular.woff2` | 22,744 | `3d47ddbc0cb77e0edf2f5c5067a93d85d65c27e341ecff66355c6fc3131940dc` |
-| `Inter-Medium.woff2` | 23,060 | `fb207b907e4554637e008a4f194a781963ce7cd4da47743e192c652b2e272b56` |
+| `Inter-Regular.woff2` | 22,664 | `a8a0bf4b3eecae1b2fe703cd2f7d04a6e997395310ab1d112df072dfa06d4375` |
+| `Inter-Medium.woff2` | 23,084 | `9a5c338ed57e8636b4619de0e119776aeb7f3582f3e5da21a504571bc7741185` |
 | `OFL.txt` | 4,380 | `262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a` |
-
-The sizes and hashes differ slightly from the ones in DESIGN-WEB 3.1 (22,644 and 23,052 bytes):
-the command above ran here with the pinned versions but produced these bytes (another Python or
-brotli build). Glyphs and tables are the same input; the service worker precaches both files.

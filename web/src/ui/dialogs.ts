@@ -62,9 +62,14 @@ export function openDialog(host: HTMLElement, o: DialogOptions, onClose?: () => 
     if (dlg.open) dlg.close();
   };
   dlg.addEventListener('close', finish);
-  closeBtn.addEventListener('click', () => dlg.close());
+  // Closing is synchronous (the `close` event comes a task later): callers may open the next dialog at once.
+  const shut = (): void => {
+    if (dlg.open) dlg.close();
+    finish();
+  };
+  closeBtn.addEventListener('click', shut);
   dlg.addEventListener('click', (e) => {
-    if (e.target === dlg && !o.sheet) dlg.close();
+    if (e.target === dlg && !o.sheet) shut();
   });
   dlg.tabIndex = -1;
   dlg.showModal();
@@ -74,7 +79,7 @@ export function openDialog(host: HTMLElement, o: DialogOptions, onClose?: () => 
     pushed = true;
     window.addEventListener('popstate', onPop);
   }
-  return { dlg, content, bar, add: (n) => void content.insertBefore(n, bar.parentNode === content ? bar : null), close: () => dlg.close() };
+  return { dlg, content, bar, add: (n) => void content.insertBefore(n, bar.parentNode === content ? bar : null), close: shut };
 }
 
 const button = (text: string, cls = ''): HTMLButtonElement => {
@@ -97,12 +102,14 @@ export interface ConfirmOptions {
   /** Confirm button text, drawn in red (the object role). Empty: a notice with OK only. */
   confirm: string;
   sheet: boolean;
+  /** Text in labelRed (a refusal). */
+  red?: boolean;
 }
 
 /** A 360 px confirmation (DESIGN.md 10.5). CANCEL is the default and has the focus. */
 export function confirmDialog(host: HTMLElement, o: ConfirmOptions, onConfirm: () => void): OpenDialog {
   const d = openDialog(host, { title: o.title, width: 360, sheet: false, cls: `card${o.sheet ? ' cardPhone' : ''}` });
-  const p = el('p', 'type-body ctext', o.text);
+  const p = el('p', `type-body ctext${o.red ? ' red' : ''}`, o.text);
   d.add(p);
   d.bar.classList.add('right');
   if (o.confirm) {
@@ -114,12 +121,14 @@ export function confirmDialog(host: HTMLElement, o: ConfirmOptions, onConfirm: (
     });
     cancel.addEventListener('click', () => d.close());
     d.bar.append(ok, cancel);
-    cancel.focus();
+    if (o.sheet) d.dlg.focus();
+    else cancel.focus();
   } else {
     const ok = button('OK', 'def');
     ok.addEventListener('click', () => d.close());
     d.bar.appendChild(ok);
-    ok.focus();
+    if (o.sheet) d.dlg.focus();
+    else ok.focus();
   }
   return d;
 }
@@ -157,7 +166,8 @@ export function aboutDialog(host: HTMLElement, version: string, sheet: boolean):
   ok.addEventListener('click', () => d.close());
   d.bar.classList.add('right');
   d.bar.appendChild(ok);
-  ok.focus();
+  if (sheet) d.dlg.focus();
+  else ok.focus();
   return d;
 }
 
@@ -204,12 +214,15 @@ export interface SettingsOptions {
   onOk(next: Settings): void;
   /** Cancel, Esc, CLOSE or the back gesture: the controller restores whatever TEST applied. */
   onCancel(): void;
+  /** After the dialog is gone, whichever way it closed. */
+  onClosed(): void;
 }
 
 export function settingsDialog(host: HTMLElement, o: SettingsOptions): OpenDialog {
   let ok = false;
   const d = openDialog(host, { title: 'SETTINGS', width: 520, sheet: o.sheet, cls: 'settings' }, () => {
     if (!ok) o.onCancel();
+    o.onClosed();
   });
   const pend: Settings = { ...o.settings };
   if (!pend.output && o.port.outputs().length > 0) pend.output = o.port.outputs()[0]!;
@@ -319,14 +332,15 @@ export function settingsDialog(host: HTMLElement, o: SettingsOptions): OpenDialo
   okb.addEventListener('click', () => {
     ok = true;
     const next = read();
-    d.close();
     o.onOk(next);
+    d.close();
   });
   d.bar.classList.add('split');
   d.bar.append(test, cancel, okb);
   const off = o.port.onChange(refresh);
   d.dlg.addEventListener('close', off);
   refresh();
-  outSel.focus();
+  if (o.sheet) d.dlg.focus();
+  else outSel.focus();
   return d;
 }

@@ -59,21 +59,23 @@ for (const [size, vp] of Object.entries(SIZES)) {
       await page.keyboard.press('Escape');
     });
 
-    test('states needing other starting points', async ({ page }) => {
+    test('states needing other starting points', async ({ page, browser }) => {
       await open(page, '', { settings: { output: { name: 'Gone Port' }, channel: 3 }, library: lib });
       await shot(page, '10-disconnected');
-      const p2 = await page.context().newPage();
-      await p2.setViewportSize(vp);
-      await open(p2, '', { settings: null });
-      await p2.screenshot({ path: `${dir}${size}-11-first-run.png` });
-      const p3 = await page.context().newPage();
-      await p3.setViewportSize(vp);
-      await open(p3);
-      await p3.waitForTimeout(60);
-      await p3.screenshot({ path: `${dir}${size}-12-no-favourites.png` });
-      if (size === 'portrait') await p3.locator('.searchBtn').click();
-      await p3.locator('.pad.v[data-v=favorites]').click();
-      await p3.screenshot({ path: `${dir}${size}-13-favourites-empty.png` });
+      // Each in its own browser context: no storage shared with the page above.
+      for (const [name, opts] of [['11-first-run', { settings: null }], ['12-no-favourites', {}]] as const) {
+        const ctx = await browser.newContext({ viewport: vp, hasTouch: phone });
+        const p = await ctx.newPage();
+        await open(p, '', opts);
+        await p.waitForTimeout(60);
+        await p.screenshot({ path: `${dir}${size}-${name}.png` });
+        if (name === '12-no-favourites') {
+          if (size === 'portrait') await p.locator('.searchBtn').click();
+          await p.locator('.pad.v[data-v=favorites]').click();
+          await p.screenshot({ path: `${dir}${size}-13-favourites-empty.png` });
+        }
+        await ctx.close();
+      }
     });
 
     test('menu and dialogs', async ({ page }) => {

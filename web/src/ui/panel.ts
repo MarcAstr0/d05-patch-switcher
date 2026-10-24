@@ -112,7 +112,7 @@ export class Panel {
       `<button type="button" class="pad sys" data-act="sys" aria-haspopup="menu" title="System menu"><span class="face"><span class="num">SYSTEM</span></span></button>` +
       `<input class="search type-field" type="text" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Search patches">` +
       `<button type="button" class="searchBtn type-field" data-act="openSearch"><span class="sbt"></span></button>` +
-      `<button type="button" class="dbtn def type-padLabel done" data-act="done">DONE</button>` +
+      `<button type="button" class="dbtn type-padLabel done" data-act="done">DONE</button>` +
       `<div class="list" tabindex="0" role="listbox" aria-label="Patches"></div>` +
       `<div class="access" hidden></div>` +
       `<div class="status"></div>` +

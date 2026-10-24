@@ -1,5 +1,5 @@
 // The status bar (docs/design/DESIGN.md 8.1, DESIGN-WEB 7.7) and the MIDI access panel (DESIGN-WEB 6).
-import { SUPPORT_MATRIX, type AccessContent } from '../logic/access';
+import { PAGE_URL, SUPPORT_MATRIX, type AccessContent } from '../logic/access';
 import { el, q } from './dom';
 
 let measureCtx: CanvasRenderingContext2D | null | undefined;
@@ -113,7 +113,16 @@ export class AccessPanel {
     if (!c) return;
     const block = el('div', 'ab');
     block.appendChild(el('h2', `type-emptyTitle title${c.red ? ' red' : ''}`, c.title));
-    for (const p of c.body) block.appendChild(el('p', 'type-body body', p));
+    for (const text of c.body) {
+      const p = el('p', 'type-body body');
+      const i = text.indexOf(PAGE_URL);
+      if (i < 0) p.textContent = text;
+      else {
+        // The page address never breaks across lines (DESIGN-WEB 6.4).
+        p.append(text.slice(0, i), Object.assign(el('span', 'nw'), { textContent: PAGE_URL }), text.slice(i + PAGE_URL.length));
+      }
+      block.appendChild(p);
+    }
     if (c.steps.length > 0) {
       const ol = el('ol', 'steps');
       c.steps.forEach((s) => ol.appendChild(el('li', 'type-body', s)));
@@ -129,7 +138,7 @@ export class AccessPanel {
       block.appendChild(t);
     }
     if (c.button) {
-      const b = el('button', 'dbtn def type-padLabel', c.button);
+      const b = el('button', `dbtn def type-padLabel${c.button === 'TRY AGAIN' ? ' try' : ''}`, c.button);
       b.type = 'button';
       b.disabled = c.button === 'WAITING';
       b.addEventListener('click', () => this.h.connect());

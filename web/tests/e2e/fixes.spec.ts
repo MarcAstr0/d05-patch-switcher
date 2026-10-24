@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { fake, line1, open, sent } from './helpers';
+import { fake, line1, line2, open, sent } from './helpers';
 
 const hold = async (page: import('@playwright/test').Page, key: string) => {
   await page.keyboard.down(key);
@@ -104,13 +104,91 @@ test('auto-send also on Home and End, with the held-key rule', async ({ page }) 
   expect((await sent(page)).slice(-3)).toEqual(['B0 00 57', 'B0 20 00', 'C0 00']);
 });
 
-test('portrait shows messages as a card', async ({ page }) => {
+test('portrait: no card for Not sent or Library exported; the display says why', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page, '', { settings: { output: { name: 'Gone Port' }, channel: 1 } });
   await page.locator('.pad.next').click();
-  await expect(page.locator('dialog.note')).toContainText('Not sent: Port not found');
-  await page.getByRole('button', { name: 'OK' }).click();
+  expect(await line2(page)).toBe('P1-11 NO MIDI OUTPUT');
   await expect(page.locator('dialog')).toHaveCount(0);
+  await page.locator('.sys').click();
+  await page.getByRole('menuitem', { name: 'Export Library' }).click();
+  await expect(page.locator('dialog')).toHaveCount(0);
+});
+
+test('portrait: import result and refusal come as IMPORT LIBRARY cards; sheets and cards focus the dialog', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page);
+  await page.locator('#importFile').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"nope":1}') });
+  const card = page.locator('dialog.note');
+  await expect(card).toContainText('IMPORT LIBRARY');
+  await expect(card.locator('.ctext')).toHaveClass(/red/);
+  expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('DIALOG');
+  await card.getByRole('button', { name: 'OK' }).click();
+  const one = { version: 1, favorites: ['P1-11'], recents: [], userNames: { 'U1-11': 'A' } };
+  await page.locator('#importFile').setInputFiles({ name: 'one.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(one)) });
+  await page.getByRole('button', { name: 'IMPORT' }).click();
+  await expect(page.locator('dialog.note .ctext')).toHaveText('Imported 1 favourite, 1 name');
+  await page.getByRole('button', { name: 'OK' }).click();
+  await page.locator('.sys').click();
+  await page.getByRole('menuitem', { name: 'Settings...' }).click();
+  expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('DIALOG');
+});
+
+test('portrait: a storage warning is one card, once', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('blocked', 'SecurityError'); } });
+  });
+  await page.goto('/d05-patch-switcher/?fake=1');
+  await expect(page.locator('dialog.note')).toContainText('Storage is blocked');
+  await page.getByRole('button', { name: 'OK' }).click();
+  await page.locator('.pad.next').click();
+  await expect(page.locator('dialog')).toHaveCount(0);
+});
+
+test('no initial focus on phones, except the landscape access button', async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await open(page);
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+  const p2 = await page.context().newPage();
+  await p2.setViewportSize({ width: 390, height: 844 });
+  await open(p2, 'access=prompt');
+  expect(await p2.evaluate(() => document.activeElement === document.body)).toBe(true);
+  const p3 = await page.context().newPage();
+  await p3.setViewportSize({ width: 844, height: 390 });
+  await open(p3, 'access=prompt');
+  await expect(p3.getByRole('button', { name: 'CONNECT MIDI' })).toBeFocused();
+});
+
+test('phone list: the current row sits k rows below the top, k = min(3, floor((listH - rowH) / (2 rowH)))', async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await open(page);
+  const r = await page.evaluate(() => {
+    const l = document.querySelector<HTMLElement>('.list')!;
+    return { k: (l.querySelector<HTMLElement>('.row.cur')!.offsetTop - l.scrollTop) / 44, h: l.clientHeight };
+  });
+  expect(r.k).toBe(Math.min(3, Math.floor((r.h - 44) / 88)));
+  expect(r.k).toBe(2);
+  const d = await page.context().newPage();
+  await d.setViewportSize({ width: 960, height: 560 });
+  await open(d);
+  expect(await d.evaluate(() => { const l = document.querySelector<HTMLElement>('.list')!; return (l.querySelector<HTMLElement>('.row.cur')!.offsetTop - l.scrollTop) / 28; })).toBe(3);
+});
+
+test('landscape Settings and About are sheets when the height does not fit', async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await open(page);
+  await page.keyboard.press('Control+,');
+  await expect(page.locator('dialog.settings')).toHaveClass(/sheet/);
+  await page.getByRole('button', { name: 'CANCEL' }).click();
+  await page.locator('.sys').click();
+  await page.getByRole('menuitem', { name: 'About D-05 Patch Switcher' }).click();
+  await expect(page.locator('dialog.about')).toHaveClass(/sheet/);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('dialog')).toHaveCount(0);
+  await page.setViewportSize({ width: 900, height: 500 });
+  await page.keyboard.press('Control+,');
+  await expect(page.locator('dialog.settings')).not.toHaveClass(/sheet/);
 });
 
 test('Import while Recents is shown lists most recent first', async ({ page }) => {
