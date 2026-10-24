@@ -3,6 +3,7 @@
 #include "midi/MidiBackend.h"
 
 #include <QElapsedTimer>
+#include <QRegularExpression>
 
 #include <memory>
 
@@ -10,7 +11,8 @@ namespace d05 {
 
 namespace {
 
-// Case-insensitive; exact match wins over substring. Returns "" when none.
+// Exact full-name match first, then equal keys (ALSA ids stripped), then a
+// case-insensitive substring of the key. Returns "" when none.
 QString matchPort(const QStringList &ports, const QString &wanted)
 {
     if (wanted.isEmpty())
@@ -19,12 +21,13 @@ QString matchPort(const QStringList &ports, const QString &wanted)
         if (p == wanted)
             return p;
     }
+    const QString key = MidiLink::portKey(wanted);
     for (const QString &p : ports) {
-        if (p.compare(wanted, Qt::CaseInsensitive) == 0)
+        if (MidiLink::portKey(p).compare(key, Qt::CaseInsensitive) == 0)
             return p;
     }
     for (const QString &p : ports) {
-        if (p.contains(wanted, Qt::CaseInsensitive))
+        if (MidiLink::portKey(p).contains(key, Qt::CaseInsensitive))
             return p;
     }
     return {};
@@ -32,11 +35,19 @@ QString matchPort(const QStringList &ports, const QString &wanted)
 
 }  // namespace
 
+QString MidiLink::portKey(const QString &name)
+{
+    static const QRegularExpression suffix(QStringLiteral("\\s+\\d+:\\d+$"));
+    QString k = name;
+    k.remove(suffix);
+    return k;
+}
+
 MidiLink::MidiLink(MidiBackend *backend, QObject *parent)
     : QObject(parent)
     , m_backend(backend)
     , m_timer(this)
-    , m_status(QStringLiteral("Port not found"))
+    , m_status(QStringLiteral("No port selected"))
 {
     auto clock = std::make_shared<QElapsedTimer>();
     clock->start();
@@ -47,6 +58,7 @@ MidiLink::MidiLink(MidiBackend *backend, QObject *parent)
     connect(&m_timer, &QTimer::timeout, this, &MidiLink::pollNow);
     connect(m_backend, &MidiBackend::received, this, &MidiLink::onReceived, Qt::QueuedConnection);
     connect(m_backend, &MidiBackend::outputLost, this, &MidiLink::onOutputLost);
+    connect(m_backend, &MidiBackend::inputLost, this, &MidiLink::onInputLost);
 }
 
 void MidiLink::setStatus(const QString &s)
@@ -86,6 +98,7 @@ void MidiLink::setFollowEnabled(bool on)
 void MidiLink::setChannel(int channel)
 {
     m_channel = qBound(1, channel, 16);
+    m_rxMsb = m_rxLsb = -1;
 }
 
 void MidiLink::setCurrent(const PatchAddress &a)
@@ -102,10 +115,14 @@ bool MidiLink::connectOutput()
 
     bool ok = false;
     if (!outputWanted()) {
-        setStatus(QStringLiteral("Port not found"));
+        setStatus(QStringLiteral("No port selected"));
     } else {
-        const QString port = matchPort(m_backend->outputPortNames(), m_outName);
-        if (port.isEmpty()) {
+        QString listErr;
+        const QStringList ports = m_backend->outputPortNames(&listErr);
+        const QString port = matchPort(ports, m_outName);
+        if (!listErr.isEmpty()) {
+            setStatus(QStringLiteral("Error: ") + listErr);
+        } else if (port.isEmpty()) {
             setStatus(QStringLiteral("Port not found"));
         } else {
             QString err;
@@ -113,7 +130,7 @@ bool MidiLink::connectOutput()
                 m_connected = true;
                 m_connectedName = port;
                 ok = true;
-                setStatus(QStringLiteral("Connected to ") + port);
+                setStatus(QStringLiteral("Connected to ") + portKey(port));
             } else {
                 setStatus(QStringLiteral("Error: ") + err);
             }
@@ -127,12 +144,19 @@ bool MidiLink::connectOutput()
 bool MidiLink::applyInput()
 {
     m_backend->closeInput();
+    m_connectedInName.clear();
     m_rxMsb = m_rxLsb = -1;
     if (!inputWanted()) {
         m_inputStatus.clear();
         return false;
     }
-    const QString port = matchPort(m_backend->inputPortNames(), m_inName);
+    QString listErr;
+    const QStringList ports = m_backend->inputPortNames(&listErr);
+    if (!listErr.isEmpty()) {
+        m_inputStatus = QStringLiteral("Error: ") + listErr;
+        return false;
+    }
+    const QString port = matchPort(ports, m_inName);
     if (port.isEmpty()) {
         m_inputStatus = QStringLiteral("Port not found");
         return false;
@@ -142,7 +166,8 @@ bool MidiLink::applyInput()
         m_inputStatus = QStringLiteral("Error: ") + err;
         return false;
     }
-    m_inputStatus = QStringLiteral("Connected to ") + port;
+    m_connectedInName = port;
+    m_inputStatus = QStringLiteral("Connected to ") + portKey(port);
     return true;
 }
 
@@ -182,6 +207,41 @@ void MidiLink::onOutputLost()
         dropOutput(QStringLiteral("Port not found"));
 }
 
+void MidiLink::dropInput(const QString &status)
+{
+    m_backend->closeInput();
+    m_connectedInName.clear();
+    m_rxMsb = m_rxLsb = -1;
+    m_inputStatus = status;
+    updatePolling();
+}
+
+void MidiLink::onInputLost()
+{
+    if (inputWanted())
+        dropInput(QStringLiteral("Port not found"));
+}
+
+void MidiLink::checkConnection()
+{
+    if (m_connected) {
+        QString err;
+        const QStringList ports = m_backend->outputPortNames(&err);
+        if (!err.isEmpty())
+            dropOutput(QStringLiteral("Error: ") + err);
+        else if (!ports.contains(m_connectedName))
+            dropOutput(QStringLiteral("Port not found"));
+    }
+    if (!m_connectedInName.isEmpty()) {
+        QString err;
+        const QStringList ports = m_backend->inputPortNames(&err);
+        if (!err.isEmpty())
+            dropInput(QStringLiteral("Error: ") + err);
+        else if (!ports.contains(m_connectedInName))
+            dropInput(QStringLiteral("Port not found"));
+    }
+}
+
 QList<QByteArray> MidiLink::patchMessages(const PatchAddress &a, int channel)
 {
     const int ch = qBound(1, channel, 16) - 1;
@@ -201,6 +261,9 @@ bool MidiLink::sendPatch(const PatchAddress &a)
 {
     if (!m_connected)
         return false;
+    checkConnection();
+    if (!m_connected)
+        return false;
     for (const QByteArray &m : patchMessages(a, m_channel)) {
         QString err;
         if (!m_backend->send(m, &err)) {
@@ -208,11 +271,20 @@ bool MidiLink::sendPatch(const PatchAddress &a)
             return false;
         }
     }
-    m_lastSent = a.midiTriplet();
-    m_lastSentAt = m_clock();
+    const qint64 now = m_clock();
+    pruneSent(now);
+    m_recentSent.append({a.midiTriplet(), now});
     m_current = a;
     emit sent(a);
     return true;
+}
+
+void MidiLink::pruneSent(qint64 now)
+{
+    for (qsizetype i = m_recentSent.size() - 1; i >= 0; --i) {
+        if (now - m_recentSent.at(i).at >= m_echoMs)
+            m_recentSent.removeAt(i);
+    }
 }
 
 void MidiLink::onReceived(const QByteArray &message)
@@ -236,10 +308,12 @@ void MidiLink::onReceived(const QByteArray &message)
     if (type != 0xC0)
         return;
 
-    // Program Change completes the triplet. Without a prior Bank Select the
-    // D-05 stays in its current group, so fall back to our current group.
+    // Program Change completes the triplet and consumes the bank state. Without
+    // a prior Bank Select the D-05 stays in its current group, so fall back to
+    // our current group.
     const int msb = m_rxMsb < 0 ? PatchAddress::BankSelectMsb : m_rxMsb;
     int lsb = m_rxLsb;
+    m_rxMsb = m_rxLsb = -1;
     if (lsb < 0 && m_current)
         lsb = m_current->group();
     if (msb != PatchAddress::BankSelectMsb || lsb < 0 || d1 > 63)
@@ -247,8 +321,11 @@ void MidiLink::onReceived(const QByteArray &message)
     const auto addr = PatchAddress::fromParts(lsb, d1 / 8 + 1, d1 % 8 + 1);
     if (!addr)
         return;
-    if (m_lastSent && *m_lastSent == addr->midiTriplet() && m_clock() - m_lastSentAt < m_echoMs)
-        return;  // our own send looped back
+    pruneSent(m_clock());
+    for (const SentEntry &e : std::as_const(m_recentSent)) {
+        if (e.triplet == addr->midiTriplet())
+            return;  // our own send looped back
+    }
     if (m_current && *m_current == *addr)
         return;
     m_current = addr;

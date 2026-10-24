@@ -40,7 +40,7 @@ private slots:
         MidiLink link(&f);
         QCOMPARE(link.pollIntervalMs(), 2000);
         QVERIFY(!link.isConnected());
-        QCOMPARE(link.status(), QStringLiteral("Port not found"));
+        QCOMPARE(link.status(), QStringLiteral("No port selected"));
         QVERIFY(!link.isPolling());
         QVERIFY(!link.sendPatch(addr("P1-11")));
         QVERIFY(f.sentMessages().isEmpty());
@@ -211,6 +211,145 @@ private slots:
         QVERIFY(cur.wait(1000));
         QCOMPARE(deliveredOn, QCoreApplication::instance()->thread());
         QCOMPARE(link.current().value(), addr("P2-88"));
+    }
+
+    void inputLossReconnects()
+    {
+        FakeMidiBackend f;
+        MidiLink link(&f);
+        link.setInputPort(QStringLiteral("Fake"));
+        link.setFollowEnabled(true);
+        QVERIFY(f.isInputOpen());
+        QVERIFY(!link.isPolling());
+        f.setInputPorts({});
+        QVERIFY(!f.isInputOpen());
+        QCOMPARE(link.inputStatus(), QStringLiteral("Port not found"));
+        QVERIFY(link.isPolling());
+        f.setInputPorts({QStringLiteral("Fake D-05 Out")});
+        link.pollNow();
+        QVERIFY(f.isInputOpen());
+        QVERIFY(!link.isPolling());
+    }
+
+    void checkConnectionDetectsSilentLoss()
+    {
+        FakeMidiBackend f;
+        MidiLink link(&f);
+        link.setOutputPort(QStringLiteral("Fake"));
+        link.setInputPort(QStringLiteral("Fake"));
+        link.setFollowEnabled(true);
+        f.setOutputPorts({}, false);
+        f.setInputPorts({}, false);
+        link.checkConnection();
+        QVERIFY(!link.isConnected());
+        QCOMPARE(link.status(), QStringLiteral("Port not found"));
+        QCOMPARE(link.inputStatus(), QStringLiteral("Port not found"));
+        QVERIFY(link.isPolling());
+    }
+
+    void silentOutputRemovalThenSendDrops()
+    {
+        FakeMidiBackend f;
+        MidiLink link(&f);
+        link.setOutputPort(QStringLiteral("Fake"));
+        f.setOutputPorts({}, false);
+        QVERIFY(link.isConnected());  // nobody told us
+        QSignalSpy sent(&link, &MidiLink::sent);
+        QVERIFY(!link.sendPatch(addr("P1-11")));
+        QCOMPARE(sent.count(), 0);
+        QVERIFY(f.sentMessages().isEmpty());
+        QCOMPARE(link.status(), QStringLiteral("Port not found"));
+        QVERIFY(link.isPolling());
+    }
+
+    void portKeyStripsAlsaIds()
+    {
+        QCOMPARE(MidiLink::portKey(QStringLiteral("Hapax:Hapax MIDI 1 24:0")),
+                 QStringLiteral("Hapax:Hapax MIDI 1"));
+        QCOMPARE(MidiLink::portKey(QStringLiteral("Fake D-05 In")), QStringLiteral("Fake D-05 In"));
+        QCOMPARE(MidiLink::portKey(QStringLiteral("Port 3")), QStringLiteral("Port 3"));
+
+        FakeMidiBackend f;
+        f.setOutputPorts({QStringLiteral("Hapax:Hapax MIDI 1 28:0")});
+        MidiLink link(&f);
+        link.setOutputPort(QStringLiteral("Hapax:Hapax MIDI 1 24:0"));
+        QVERIFY(link.isConnected());
+        QCOMPARE(link.connectedPortName(), QStringLiteral("Hapax:Hapax MIDI 1 28:0"));
+        QCOMPARE(link.connectedPortKey(), QStringLiteral("Hapax:Hapax MIDI 1"));
+        QCOMPARE(link.status(), QStringLiteral("Connected to Hapax:Hapax MIDI 1"));
+    }
+
+    void enumerationErrorIsReported()
+    {
+        FakeMidiBackend f;
+        f.setListError(QStringLiteral("boom"));
+        MidiLink link(&f);
+        link.setOutputPort(QStringLiteral("Fake"));
+        QCOMPARE(link.status(), QStringLiteral("Error: boom"));
+        QVERIFY(link.isPolling());
+        f.setListError(QString());
+        link.pollNow();
+        QVERIFY(link.isConnected());
+        f.setListError(QStringLiteral("bad"));
+        QVERIFY(!link.sendPatch(addr("P1-11")));  // checkConnection drops on error
+        QCOMPARE(link.status(), QStringLiteral("Error: bad"));
+    }
+
+    void echoCoversEverySendInWindow()
+    {
+        FakeMidiBackend f;
+        MidiLink link(&f);
+        qint64 now = 0;
+        link.setClock([&now] { return now; });
+        link.setOutputPort(QStringLiteral("Fake"));
+        link.setInputPort(QStringLiteral("Fake"));
+        link.setFollowEnabled(true);
+        QVERIFY(link.sendPatch(addr("P1-11")));  // A at 0
+        now = 100;
+        QVERIFY(link.sendPatch(addr("P2-22")));  // B at 100
+        now = 150;
+        QSignalSpy cur(&link, &MidiLink::currentChanged);
+        inject(f, 1, 8, 0);  // echo of A
+        QCOMPARE(cur.count(), 0);
+        QCOMPARE(link.current().value(), addr("P2-22"));
+    }
+
+    void staleBankStateIsCleared()
+    {
+        FakeMidiBackend f;
+        MidiLink link(&f);
+        link.setInputPort(QStringLiteral("Fake"));
+        link.setFollowEnabled(true);
+        QSignalSpy cur(&link, &MidiLink::currentChanged);
+        // foreign MSB, then PC: ignored and consumed
+        f.injectReceived(bytes({0xB0, 0, 5}));
+        f.injectReceived(bytes({0xB0, 32, 3}));
+        f.injectReceived(bytes({0xC0, 1}));
+        QCoreApplication::processEvents();
+        QCOMPARE(cur.count(), 0);
+        inject(f, 1, 10, 28);
+        QCOMPARE(cur.count(), 1);
+        QCOMPARE(link.current().value(), addr("P3-45"));
+        // bare PC after a consumed triplet uses the current group (P3)
+        f.injectReceived(bytes({0xC0, 0}));
+        QCoreApplication::processEvents();
+        QCOMPARE(link.current().value(), addr("P3-11"));
+    }
+
+    void malformedInputIgnored()
+    {
+        FakeMidiBackend f;
+        MidiLink link(&f);
+        link.setInputPort(QStringLiteral("Fake"));
+        link.setFollowEnabled(true);
+        QSignalSpy cur(&link, &MidiLink::currentChanged);
+        inject(f, 1, 14, 0);  // lsb >= 14
+        QCOMPARE(cur.count(), 0);
+        f.injectReceived(bytes({0xB0, 32}));  // CC with missing data byte
+        f.injectReceived(bytes({0xC0, 5}));   // bare PC, no current patch
+        QCoreApplication::processEvents();
+        QCOMPARE(cur.count(), 0);
+        QVERIFY(!link.current().has_value());
     }
 
     void openFailureIsStatusNotCrash()

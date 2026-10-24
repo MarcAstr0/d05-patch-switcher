@@ -11,8 +11,25 @@ FakeMidiBackend::FakeMidiBackend(QObject *parent)
 {
 }
 
-QStringList FakeMidiBackend::outputPortNames() { return m_outputs; }
-QStringList FakeMidiBackend::inputPortNames() { return m_inputs; }
+QStringList FakeMidiBackend::outputPortNames(QString *err)
+{
+    if (!m_listError.isEmpty()) {
+        if (err)
+            *err = m_listError;
+        return {};
+    }
+    return m_outputs;
+}
+
+QStringList FakeMidiBackend::inputPortNames(QString *err)
+{
+    if (!m_listError.isEmpty()) {
+        if (err)
+            *err = m_listError;
+        return {};
+    }
+    return m_inputs;
+}
 
 bool FakeMidiBackend::openOutput(const QString &name, QString *error)
 {
@@ -65,20 +82,24 @@ bool FakeMidiBackend::send(const QByteArray &message, QString *error)
     return true;
 }
 
-void FakeMidiBackend::setOutputPorts(const QStringList &names)
+void FakeMidiBackend::setOutputPorts(const QStringList &names, bool notify)
 {
     m_outputs = names;
     if (m_outOpen && !m_outputs.contains(m_outName)) {
         closeOutput();
-        emit outputLost();
+        if (notify)
+            emit outputLost();
     }
 }
 
-void FakeMidiBackend::setInputPorts(const QStringList &names)
+void FakeMidiBackend::setInputPorts(const QStringList &names, bool notify)
 {
     m_inputs = names;
-    if (m_inOpen && !m_inputs.contains(m_inName))
+    if (m_inOpen && !m_inputs.contains(m_inName)) {
         closeInput();
+        if (notify)
+            emit inputLost();
+    }
 }
 
 void FakeMidiBackend::injectReceived(const QByteArray &message)

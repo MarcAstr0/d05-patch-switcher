@@ -3,6 +3,7 @@
 #include "core/PatchAddress.h"
 
 #include <QObject>
+#include <QList>
 #include <QString>
 #include <QTimer>
 
@@ -35,7 +36,11 @@ public:
     int channel() const { return m_channel; }
 
     bool isConnected() const { return m_connected; }
+    // Full name as the OS lists it right now.
     QString connectedPortName() const { return m_connectedName; }
+    // Name without the trailing ALSA "client:port" numbers; persist this.
+    QString connectedPortKey() const { return portKey(m_connectedName); }
+    static QString portKey(const QString &name);
     QString status() const { return m_status; }
     QString inputStatus() const { return m_inputStatus; }
     std::optional<PatchAddress> current() const { return m_current; }
@@ -49,6 +54,13 @@ public:
     // Re-enumerates and tries to (re)connect whatever is wanted but not open.
     // The poll timer calls this; tests call it directly.
     void pollNow();
+    // Re-enumerates and drops any open port that is no longer listed (status
+    // updated, polling started). sendPatch calls it first; the UI calls it on
+    // window activation. There is deliberately no timer while connected.
+public slots:
+    void checkConnection();
+
+public:
     bool isPolling() const { return m_timer.isActive(); }
     int pollIntervalMs() const { return m_timer.interval(); }
 
@@ -69,12 +81,15 @@ signals:
 private slots:
     void onReceived(const QByteArray &message);
     void onOutputLost();
+    void onInputLost();
 
 private:
     bool connectOutput();
     bool applyInput();
     void updatePolling();
     void setStatus(const QString &s);
+    void dropInput(const QString &status);
+    void pruneSent(qint64 now);
     void dropOutput(const QString &status);
     bool outputWanted() const { return !m_outName.isEmpty(); }
     bool inputWanted() const { return m_follow && !m_inName.isEmpty(); }
@@ -85,6 +100,7 @@ private:
     QString m_outName;
     QString m_inName;
     QString m_connectedName;
+    QString m_connectedInName;
     QString m_status;
     QString m_inputStatus;
     int m_channel = 1;
@@ -92,8 +108,11 @@ private:
     bool m_follow = false;
     bool m_connected = false;
     std::optional<PatchAddress> m_current;
-    std::optional<PatchAddress::MidiTriplet> m_lastSent;
-    qint64 m_lastSentAt = 0;
+    struct SentEntry {
+        PatchAddress::MidiTriplet triplet;
+        qint64 at;
+    };
+    QList<SentEntry> m_recentSent;  // sends within the echo window
     int m_rxMsb = -1;
     int m_rxLsb = -1;
 };

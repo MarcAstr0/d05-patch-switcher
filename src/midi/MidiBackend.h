@@ -19,9 +19,11 @@ public:
     using QObject::QObject;
     ~MidiBackend() override = default;
 
-    // Port names as the OS reports them right now (enumerates each call).
-    virtual QStringList outputPortNames() = 0;
-    virtual QStringList inputPortNames() = 0;
+    // Port names as the OS reports them right now (enumerates each call). If
+    // enumeration fails the list is empty and *err (if given) holds the text;
+    // *err is left empty on success.
+    virtual QStringList outputPortNames(QString *err) = 0;
+    virtual QStringList inputPortNames(QString *err) = 0;
 
     // Open the first port whose name equals `name` exactly.
     virtual bool openOutput(const QString &name, QString *error) = 0;
@@ -41,6 +43,8 @@ signals:
     void received(const QByteArray &message);
     // The open output port disappeared (only backends that can tell emit this).
     void outputLost();
+    // Same for the open input port.
+    void inputLost();
 };
 
 }  // namespace d05

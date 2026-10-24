@@ -2,6 +2,8 @@
 
 #include "midi/MidiBackend.h"
 
+#include <QMutex>
+
 #include <memory>
 
 class RtMidiIn;
@@ -17,8 +19,8 @@ public:
     explicit RtMidiBackend(QObject *parent = nullptr);
     ~RtMidiBackend() override;
 
-    QStringList outputPortNames() override;
-    QStringList inputPortNames() override;
+    QStringList outputPortNames(QString *err) override;
+    QStringList inputPortNames(QString *err) override;
     bool openOutput(const QString &name, QString *error) override;
     void closeOutput() override;
     bool isOutputOpen() const override;
@@ -27,7 +29,17 @@ public:
     bool isInputOpen() const override;
     bool send(const QByteArray &message, QString *error) override;
 
+    // Error sink fed by RtMidi's error callback (may run on RtMidi's thread).
+    struct ErrorSink {
+        QMutex mutex;
+        QString text;
+        void record(const QString &t);
+        QString take();
+    };
+
 private:
+    ErrorSink m_outErrors;
+    ErrorSink m_inErrors;
     std::unique_ptr<RtMidiOut> m_out;
     std::unique_ptr<RtMidiIn> m_in;
     QString m_initError;
