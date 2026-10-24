@@ -36,6 +36,11 @@ public:
     void setChannel(int channel);  // clamped to 1..16
     int channel() const { return m_channel; }
 
+    // The OS's port lists right now (the Settings dialog's source; it never touches the
+    // backend). On failure the list is empty and *err holds the text; *err is cleared on success.
+    QStringList outputPortNames(QString *err) const;
+    QStringList inputPortNames(QString *err) const;
+
     bool isConnected() const { return m_connected; }
     // Full name as the OS lists it right now.
     QString connectedPortName() const { return m_connectedName; }

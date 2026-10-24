@@ -46,6 +46,27 @@ private slots:
         QVERIFY(f.sentMessages().isEmpty());
     }
 
+    void listsPortsThroughTheLink()
+    {
+        FakeMidiBackend f;
+        MidiLink link(&f);
+        QString err = QStringLiteral("stale");
+        QCOMPARE(link.outputPortNames(&err), QStringList{QStringLiteral("Fake D-05 In")});
+        QVERIFY(err.isEmpty());
+        QCOMPARE(link.inputPortNames(&err), QStringList{QStringLiteral("Fake D-05 Out")});
+        QVERIFY(err.isEmpty());
+        f.setOutputPorts({QStringLiteral("A"), QStringLiteral("B")}, false);
+        QCOMPARE(link.outputPortNames(nullptr).size(), 2);  // null err is fine
+        f.setListError(QStringLiteral("boom"));
+        QVERIFY(link.outputPortNames(&err).isEmpty());
+        QCOMPARE(err, QStringLiteral("boom"));
+        QVERIFY(link.inputPortNames(&err).isEmpty());
+        QCOMPARE(err, QStringLiteral("boom"));
+        // Listing opens nothing and changes no state.
+        QVERIFY(!link.isConnected());
+        QCOMPARE(link.status(), QStringLiteral("No port selected"));
+    }
+
     void connectBySubstring()
     {
         FakeMidiBackend f;

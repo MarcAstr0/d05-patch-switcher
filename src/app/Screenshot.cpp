@@ -102,7 +102,7 @@ int runScreenshot(const CliOptions &opts)
         AppSettings::Values values;
         values.outputPort = QStringLiteral("Fake D-05 In");
         values.resendOnConnect = true;
-        SettingsDialog dialog(backend, link, values);
+        SettingsDialog dialog(link, values);
         dialog.show();
         dialog.activateWindow();
         QApplication::processEvents();

@@ -57,6 +57,24 @@ MidiLink::MidiLink(MidiBackend *backend, QObject *parent)
     connect(m_backend, &MidiBackend::inputLost, this, &MidiLink::onInputLost);
 }
 
+QStringList MidiLink::outputPortNames(QString *err) const
+{
+    QString e;
+    const QStringList list = m_backend->outputPortNames(&e);
+    if (err)
+        *err = e;
+    return list;
+}
+
+QStringList MidiLink::inputPortNames(QString *err) const
+{
+    QString e;
+    const QStringList list = m_backend->inputPortNames(&e);
+    if (err)
+        *err = e;
+    return list;
+}
+
 void MidiLink::setStatus(const QString &s)
 {
     if (s == m_status)

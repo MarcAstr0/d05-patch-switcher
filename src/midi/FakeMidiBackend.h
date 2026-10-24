@@ -31,6 +31,8 @@ public:
     // Make enumeration fail with this text (empty = work again).
     void setListError(const QString &text) { m_listError = text; }
     void setFailOpen(bool fail) { m_failOpen = fail; }
+    // Sends fail ("send failed") while the port itself stays open.
+    void setFailSend(bool fail) { m_failSend = fail; }
     const QList<QByteArray> &sentMessages() const { return m_sent; }
     void clearSent() { m_sent.clear(); }
     QString openOutputName() const { return m_outName; }
@@ -49,6 +51,7 @@ private:
     bool m_outOpen = false;
     bool m_inOpen = false;
     bool m_failOpen = false;
+    bool m_failSend = false;
     bool m_printSent = false;
 };
 

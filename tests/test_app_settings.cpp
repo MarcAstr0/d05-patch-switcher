@@ -132,6 +132,21 @@ private slots:
         QCOMPARE(AppSettings(path).channel(), 4);
     }
 
+    void reportsAFailedWrite()
+    {
+        QTemporaryDir dir;
+        QFile blocker(dir.filePath(QStringLiteral("afile")));
+        QVERIFY(blocker.open(QIODevice::WriteOnly));
+        blocker.close();
+        AppSettings bad(dir.filePath(QStringLiteral("afile/settings.ini")));
+        QVERIFY(!bad.writeFailed());
+        bad.setChannel(5);
+        QVERIFY(bad.writeFailed());
+        AppSettings good(dir.filePath(QStringLiteral("settings.ini")));
+        good.setChannel(5);
+        QVERIFY(!good.writeFailed());
+    }
+
     void defaultPathHonoursConfigDir()
     {
         QTemporaryDir dir;

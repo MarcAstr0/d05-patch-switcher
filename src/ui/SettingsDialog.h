@@ -14,7 +14,6 @@ class QSpinBox;
 
 namespace d05 {
 
-class MidiBackend;
 class MidiLink;
 class SectionRule;
 
@@ -27,15 +26,16 @@ class SectionRule;
 // backend's port list: a port that is listed reads "Connected to <port>" (it will be
 // opened when the values are applied), a port that is not reads "Port not found", a failed
 // enumeration reads "Error: <text>". For the port that is already open the link's own
-// status is shown, so a real open error is visible. The backend is used here only to list
-// ports; nothing is opened or sent through it.
+// status is shown, so a real open error is visible. The line and TEST follow the link's own
+// status and connection changes while the dialog is open (a failed TEST shows its error).
+// Ports are listed through MidiLink; nothing is opened or sent from here.
 class SettingsDialog : public QDialog {
     Q_OBJECT
 public:
     static constexpr int ClientWidth = 520;
     static constexpr int ClientHeight = 436;
 
-    SettingsDialog(MidiBackend &backend, const MidiLink &link, const AppSettings::Values &initial,
+    SettingsDialog(const MidiLink &link, const AppSettings::Values &initial,
                    QWidget *parent = nullptr);
 
     // What the controls hold now. Ports are keys (no ALSA client:port numbers).
@@ -70,7 +70,6 @@ private:
     void updateStatus();
     void updateEnabled();
 
-    MidiBackend &m_backend;
     const MidiLink &m_link;
     AppSettings::Values m_initial;
     bool m_testPressed = false;

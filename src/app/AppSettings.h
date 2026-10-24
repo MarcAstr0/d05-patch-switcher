@@ -41,6 +41,8 @@ public:
     explicit AppSettings(const QString &path = QString());
 
     QString path() const { return m_settings.fileName(); }
+    // True when the last write to the file failed (read-only disk, bad path).
+    bool writeFailed() const { return m_writeFailed; }
 
     QString outputPort() const;
     void setOutputPort(const QString &name);  // stored as a key
@@ -58,8 +60,8 @@ public:
     Values values() const;
     void setValues(const Values &v);  // one write
 
-    // The patch that was current when the app last sent or followed one; restored
-    // (without sending) at start so resend-on-connect resends the right patch.
+    // The patch that was current when the app was last closed; restored (without sending)
+    // at start so resend-on-connect resends the right patch.
     std::optional<PatchAddress> lastPatch() const;
     void setLastPatch(const PatchAddress &a);
 
@@ -71,6 +73,7 @@ private:
     void flush();
 
     QSettings m_settings;
+    bool m_writeFailed = false;
 };
 
 }  // namespace d05

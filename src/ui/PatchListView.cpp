@@ -201,6 +201,8 @@ void PatchListView::mouseReleaseEvent(QMouseEvent *event)
 
 void PatchListView::keyPressEvent(QKeyEvent *event)
 {
+    if (!event->isAutoRepeat())
+        m_repeatKey = 0;  // a fresh press (this key or any other) ends a stale hold
     if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
         && (event->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier) {
         if (currentIndex().isValid())
@@ -220,7 +222,7 @@ void PatchListView::keyPressEvent(QKeyEvent *event)
     const QModelIndex after = currentIndex();
     if (after.isValid() && after != before) {
         if (event->isAutoRepeat())
-            m_repeatMoved = true;
+            m_repeatKey = event->key();
         else
             emit highlightMovedByKey(after);
     }
@@ -229,11 +231,17 @@ void PatchListView::keyPressEvent(QKeyEvent *event)
 void PatchListView::keyReleaseEvent(QKeyEvent *event)
 {
     QListView::keyReleaseEvent(event);
-    if (m_repeatMoved && !event->isAutoRepeat()) {
-        m_repeatMoved = false;
+    if (!event->isAutoRepeat() && m_repeatKey != 0 && event->key() == m_repeatKey) {
+        m_repeatKey = 0;
         if (currentIndex().isValid())
             emit highlightMovedByKey(currentIndex());
     }
+}
+
+void PatchListView::focusOutEvent(QFocusEvent *event)
+{
+    m_repeatKey = 0;  // the release will go elsewhere
+    QListView::focusOutEvent(event);
 }
 
 }  // namespace d05

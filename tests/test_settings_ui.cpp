@@ -69,7 +69,7 @@ struct Rig {
         link = std::make_unique<MidiLink>(&backend);
         settings = std::make_unique<AppSettings>(iniPath);
         w = std::make_unique<MainWindow>(catalog, *library, *link);
-        w->setServices(settings.get(), &backend);
+        w->setServices(settings.get());
         w->applySettings(start);
     }
     ~Rig()
@@ -89,6 +89,14 @@ struct Rig {
     }
     const QList<QByteArray> &sent() const { return backend.sentMessages(); }
     AppSettings::Values saved() const { return AppSettings(iniPath).values(); }
+    // Writes `v` as the saved settings (the dialog starts from these).
+    void persist(const AppSettings::Values &v) { settings->setValues(v); }
+    void dropAndReturn()
+    {
+        backend.setOutputPorts({});
+        backend.setOutputPorts({kOut});
+        link->pollNow();
+    }
 
     SettingsDialog *openDialog()
     {
@@ -167,6 +175,7 @@ private slots:
         v.autoSend = true;
         v.resendOnConnect = true;
         Rig r(v);
+        r.persist(v);
         SettingsDialog *d = r.openDialog();
         QCOMPARE(d->values(), v);
         QCOMPARE(d->channelSpin()->value(), 5);
@@ -285,6 +294,7 @@ private slots:
     void testIsDisabledWhileThePortIsMissing()
     {
         Rig r(values(QStringLiteral("Not There")));
+        r.persist(values(QStringLiteral("Not There")));
         SettingsDialog *d = r.openDialog();
         QCOMPARE(d->connectionText(), QStringLiteral("Port not found"));
         QCOMPARE(d->connectionState(), QStringLiteral("error"));
@@ -314,6 +324,7 @@ private slots:
     void connectionLineReportsAnOpenError()
     {
         Rig r(values(kOut));
+        r.persist(values(kOut));
         r.backend.setFailOpen(true);
         r.link->setOutputPort(kOut);  // reconnect: the open now fails
         QVERIFY(!r.link->isConnected());
@@ -440,7 +451,7 @@ private slots:
         MidiLink link(&backend);
         AppSettings settings(dir.filePath(QStringLiteral("settings.ini")));
         MainWindow w(catalog, lib, link);
-        w.setServices(&settings, &backend);
+        w.setServices(&settings);
         w.setCurrent(addr("U4-72"));  // as main.cpp restores the last patch: no send
         QVERIFY(backend.sentMessages().isEmpty());
         AppSettings::Values v = values(kOut);
@@ -822,7 +833,7 @@ private slots:
             MidiLink link(&backend);
             AppSettings settings(ini);
             MainWindow w(catalog, lib, link);
-            w.setServices(&settings, &backend);
+            w.setServices(&settings);
             CliOptions o;
             o.port = QStringLiteral("Fake");
             o.channel = 11;
@@ -844,9 +855,318 @@ private slots:
     {
         Rig r;
         QVERIFY(r.show());
-        QVERIFY(!r.settings->lastPatch());
         QVERIFY(r.link->sendPatch(addr("P2-33")));
+        QVERIFY(r.w->current() == addr("P2-33"));
+        QVERIFY(!AppSettings(r.iniPath).lastPatch());  // not written per send
+        r.w->close();
+        QVERIFY(AppSettings(r.iniPath).lastPatch());
         QCOMPARE(AppSettings(r.iniPath).lastPatch().value(), addr("P2-33"));
+    }
+
+    void lastPatchIsWrittenOnDestruction()
+    {
+        QTemporaryDir dir;
+        Paths::setOverride(dir.path());
+        const QString ini = dir.filePath(QStringLiteral("settings.ini"));
+        {
+            PatchCatalog catalog;
+            Library lib(catalog, dir.filePath(QStringLiteral("library.json")));
+            FakeMidiBackend backend;
+            MidiLink link(&backend);
+            AppSettings settings(ini);
+            MainWindow w(catalog, lib, link);
+            w.setServices(&settings);
+            w.applySettings(values(kOut));
+            w.show();
+            QVERIFY(QTest::qWaitForWindowActive(&w));
+            QVERIFY(link.sendPatch(addr("U3-45")));
+            QVERIFY(!AppSettings(ini).lastPatch());
+        }
+        QCOMPARE(AppSettings(ini).lastPatch().value(), addr("U3-45"));
+        Paths::setOverride(QString());
+    }
+
+    void followedPatchIsNotWrittenPerChange()
+    {
+        Rig r(followValues());
+        QVERIFY(r.show());
+        r.injectPatch(10, 28);
+        QVERIFY(!QFile::exists(r.iniPath));
+    }
+
+    void aFailedSettingsWriteIsReportedOnce()
+    {
+        QTemporaryDir dir;
+        QFile blocker(dir.filePath(QStringLiteral("afile")));
+        QVERIFY(blocker.open(QIODevice::WriteOnly));
+        blocker.close();
+        Rig r;
+        AppSettings bad(dir.filePath(QStringLiteral("afile/settings.ini")));  // a file where a directory is needed
+        r.w->setServices(&bad);
+        QVERIFY(r.w->message().isEmpty());
+        r.w->setAutoSend(true);
+        QVERIFY(bad.writeFailed());
+        QCOMPARE(r.w->message(), QStringLiteral("Settings could not be saved"));
+        r.w->showMessage(QStringLiteral("something else"));
+        r.w->setAutoSend(false);
+        QCOMPARE(r.w->message(), QStringLiteral("something else"));  // not repeated
+        r.w->setServices(nullptr);
+    }
+
+    // ------------------------------------------------------------------ fix round
+
+    void staleHeldKeyDoesNotSendOnALaterRelease()
+    {
+        AppSettings::Values v = values(kOut);
+        v.autoSend = true;
+        Rig r(v);
+        QVERIFY(r.show());
+        PatchListView *list = r.w->list();
+        list->setFocus();
+        const auto press = [&](Qt::Key k, bool repeat) {
+            QKeyEvent e(QEvent::KeyPress, k, Qt::NoModifier, QString(), repeat);
+            QApplication::sendEvent(list, &e);
+        };
+        const auto release = [&](Qt::Key k) {
+            QKeyEvent e(QEvent::KeyRelease, k, Qt::NoModifier);
+            QApplication::sendEvent(list, &e);
+        };
+        // Hold Down, lose focus mid-hold, a different key is released later: nothing sent.
+        press(Qt::Key_Down, false);
+        press(Qt::Key_Down, true);
+        press(Qt::Key_Down, true);
+        r.backend.clearSent();
+        r.w->searchField()->setFocus();
+        list->setFocus();
+        release(Qt::Key_Return);
+        release(Qt::Key_Shift);
+        release(Qt::Key_Down);
+        QVERIFY(r.sent().isEmpty());
+        // Tap Shift mid-hold: the hold is over; releasing Down sends nothing.
+        press(Qt::Key_Down, false);
+        press(Qt::Key_Down, true);
+        r.backend.clearSent();
+        press(Qt::Key_Shift, false);
+        release(Qt::Key_Shift);
+        release(Qt::Key_Down);
+        QVERIFY(r.sent().isEmpty());
+        // A normal hold still sends its last row on the release of the same key.
+        press(Qt::Key_Down, false);
+        press(Qt::Key_Down, true);
+        r.backend.clearSent();
+        release(Qt::Key_Down);
+        QCOMPARE(r.sent().size(), 3);
+    }
+
+    void staleHeldKeyInTheSearchFieldDoesNotDoubleSend()
+    {
+        AppSettings::Values v = values(kOut);
+        v.autoSend = true;
+        Rig r(v);
+        QVERIFY(r.show());
+        QLineEdit *f = r.w->searchField();
+        f->setFocus();
+        QKeyEvent first(QEvent::KeyPress, Qt::Key_Down, Qt::NoModifier);
+        QApplication::sendEvent(f, &first);
+        QKeyEvent rep(QEvent::KeyPress, Qt::Key_Down, Qt::NoModifier, QString(), true);
+        QApplication::sendEvent(f, &rep);
+        r.w->list()->setFocus();  // focus leaves mid-hold
+        f->setFocus();
+        r.backend.clearSent();
+        QKeyEvent rel(QEvent::KeyRelease, Qt::Key_Down, Qt::NoModifier);
+        QApplication::sendEvent(f, &rel);
+        QVERIFY(r.sent().isEmpty());
+        QTest::keyClick(f, Qt::Key_Down);  // a plain tap: exactly one send
+        QCOMPARE(r.sent().size(), 3);
+        // Another key's release never sends either.
+        QApplication::sendEvent(f, &rep);
+        r.backend.clearSent();
+        QKeyEvent other(QEvent::KeyPress, Qt::Key_Shift, Qt::NoModifier);
+        QApplication::sendEvent(f, &other);
+        QApplication::sendEvent(f, &rel);
+        QVERIFY(r.sent().isEmpty());
+    }
+
+    void settingsOkNeverPersistsCliOverrides()
+    {
+        Rig r(values(kOut, 9));  // this run: --channel 9
+        AppSettings::Values saved = values(kOut, 4);
+        r.persist(saved);
+        QCOMPARE(r.link->channel(), 9);
+        SettingsDialog *d = r.openDialog();
+        QCOMPARE(d->channelSpin()->value(), 4);  // the dialog shows the saved channel
+        d->resendCheck()->setChecked(true);
+        QTest::mouseClick(d->okButton(), Qt::LeftButton);
+        QTRY_VERIFY(!r.w->settingsDialog());
+        const AppSettings::Values after = r.saved();
+        QCOMPARE(after.channel, 4);
+        QCOMPARE(after.outputPort, kOut);
+        QVERIFY(after.resendOnConnect);
+    }
+
+    void settingsOkDoesNotKeepAnOverridePort()
+    {
+        Rig r(AppSettings::Values{});
+        r.backend.setOutputPorts({kOut, QStringLiteral("Saved Out")}, false);
+        r.w->applySettings(values(kOut));  // this run: --port "Fake D-05 In"
+        r.persist(values(QStringLiteral("Saved Out"), 2));
+        SettingsDialog *d = r.openDialog();
+        QCOMPARE(d->outputCombo()->currentText(), QStringLiteral("Saved Out"));
+        d->autoSendCheck()->setChecked(true);
+        QTest::mouseClick(d->okButton(), Qt::LeftButton);
+        QTRY_VERIFY(!r.w->settingsDialog());
+        QCOMPARE(r.saved().outputPort, QStringLiteral("Saved Out"));
+        QCOMPARE(r.saved().channel, 2);
+    }
+
+    void aFailedResendIsNotRetriedOnEveryReconnect()
+    {
+        AppSettings::Values v = values(kOut);
+        v.resendOnConnect = true;
+        Rig r(v);
+        QCOMPARE(r.sent().size(), 3);
+        r.backend.clearSent();
+        r.backend.setFailSend(true);
+        r.backend.setOutputPorts({});
+        r.backend.setOutputPorts({kOut});
+        r.link->pollNow();  // reconnects; the resend fails and drops the port again
+        QVERIFY(!r.link->isConnected());
+        r.backend.setFailSend(false);
+        r.link->pollNow();  // reconnects: blocked, so no second attempt
+        QVERIFY(r.link->isConnected());
+        QVERIFY(r.sent().isEmpty());
+        r.link->pollNow();
+        r.dropAndReturn();
+        QVERIFY(r.sent().isEmpty());
+        // A send that works lifts the block.
+        r.w->step(1);
+        QCOMPARE(r.sent().size(), 3);
+        r.backend.clearSent();
+        r.dropAndReturn();
+        QCOMPARE(r.sent().size(), 3);
+    }
+
+    void changingSettingsLiftsAFailedResendBlock()
+    {
+        AppSettings::Values v = values(kOut);
+        v.resendOnConnect = true;
+        Rig r(v);
+        r.backend.clearSent();
+        r.backend.setFailSend(true);
+        r.dropAndReturn();  // resend fails
+        r.backend.setFailSend(false);
+        r.dropAndReturn();
+        QVERIFY(r.sent().isEmpty());
+        r.w->applySettings(v);  // settings applied again: the block is gone
+        r.dropAndReturn();
+        QCOMPARE(r.sent().size(), 3);
+    }
+
+    void resendAndTestAreNotRecentsEntries()
+    {
+        AppSettings::Values v = values(kOut);
+        v.resendOnConnect = true;
+        Rig r(v);
+        QCOMPARE(r.sent().size(), 3);  // the start-up resend
+        QVERIFY(r.library->recents().isEmpty());
+        QVERIFY(r.w->display()->sentActive());  // it still flashes SENT
+        r.dropAndReturn();
+        QVERIFY(r.library->recents().isEmpty());
+        SettingsDialog *d = r.openDialog();
+        QTest::mouseClick(d->testButton(), Qt::LeftButton);
+        QVERIFY(r.library->recents().isEmpty());
+        QVERIFY(r.w->display()->sentActive());
+        d->reject();
+        // A real selection still is one.
+        r.w->step(1);
+        QCOMPARE(r.library->recents().size(), 1);
+    }
+
+    void dialogFollowsTheLinkWhileOpen()
+    {
+        Rig r;
+        r.persist(values(kOut));
+        SettingsDialog *d = r.openDialog();
+        QVERIFY(d->testButton()->isEnabled());
+        r.backend.setFailSend(true);
+        QTest::mouseClick(d->testButton(), Qt::LeftButton);
+        QCOMPARE(d->connectionText(), QStringLiteral("Error: send failed"));
+        QCOMPARE(d->connectionState(), QStringLiteral("error"));
+        QVERIFY(!d->testButton()->isEnabled());
+        d->reject();
+    }
+
+    void linkErrorIsAttributedWithTheLinksMatching()
+    {
+        Rig r(AppSettings::Values{});
+        r.backend.setOutputPorts({QStringLiteral("Boutique:Boutique MIDI 1 24:0")}, false);
+        r.backend.setFailOpen(true);
+        r.w->applySettings(values(QStringLiteral("bout")));  // --port bout
+        QVERIFY(!r.link->isConnected());
+        r.persist(values(QStringLiteral("Boutique:Boutique MIDI 1")));
+        SettingsDialog *d = r.openDialog();
+        QCOMPARE(d->connectionText(), QStringLiteral("Error: open failed"));
+        d->reject();
+    }
+
+    void cancelStillProcessesAConnectThatHappenedWhileOpen()
+    {
+        AppSettings::Values v = values(kOut);
+        v.resendOnConnect = true;
+        Rig r(v);
+        r.backend.clearSent();
+        SettingsDialog *d = r.openDialog();
+        r.dropAndReturn();  // reconnects while the dialog is open
+        QVERIFY(r.sent().isEmpty());  // decided when it closes
+        d->resendCheck()->setChecked(false);  // unchecking in the dialog does not matter on Cancel
+        QTest::mouseClick(d->cancelButton(), Qt::LeftButton);
+        QTRY_VERIFY(!r.w->settingsDialog());
+        QCOMPARE(r.sent(), MidiLink::patchMessages(addr("P1-11"), 1));
+        // With the option off there is nothing to resend.
+        Rig off;
+        SettingsDialog *d2 = off.openDialog();
+        off.dropAndReturn();
+        d2->reject();
+        QVERIFY(off.sent().isEmpty());
+    }
+
+    void cancelAfterATestPortSwitchRestoresAndResends()
+    {
+        AppSettings::Values v = values(kOut);
+        v.resendOnConnect = true;
+        Rig r(v);
+        r.backend.setOutputPorts({kOut, QStringLiteral("Other Out")}, false);
+        r.backend.clearSent();
+        SettingsDialog *d = r.openDialog();
+        d->outputCombo()->setCurrentIndex(d->outputCombo()->findText(QStringLiteral("Other Out")));
+        QTest::mouseClick(d->testButton(), Qt::LeftButton);
+        QCOMPARE(r.sent().size(), 3);
+        QTest::mouseClick(d->cancelButton(), Qt::LeftButton);
+        QTRY_VERIFY(!r.w->settingsDialog());
+        QCOMPARE(r.link->connectedPortKey(), kOut);
+        QCOMPARE(r.sent().size(), 6);  // the TEST, then the restored port gets the patch
+    }
+
+    void aReconnectAfterTestVoidsTheOkSuppression()
+    {
+        Rig r;
+        SettingsDialog *d = r.openDialog();
+        d->resendCheck()->setChecked(true);
+        QTest::mouseClick(d->testButton(), Qt::LeftButton);
+        QCOMPARE(r.sent().size(), 3);
+        r.dropAndReturn();  // the synth was power-cycled after the TEST
+        QTest::mouseClick(d->okButton(), Qt::LeftButton);
+        QTRY_VERIFY(!r.w->settingsDialog());
+        QCOMPARE(r.sent().size(), 6);
+    }
+
+    void applyingTheSameInputDoesNotReopenIt()
+    {
+        Rig r(followValues());
+        r.inject({0xB0, 0x20, 10});  // half a triplet: LSB for P3
+        r.w->applySettings(followValues());
+        r.inject({0xC0, 28});  // reopening the input would have dropped the LSB
+        QCOMPARE(r.w->current(), addr("P3-45"));
     }
 
     void geometryIsSavedOnClose()

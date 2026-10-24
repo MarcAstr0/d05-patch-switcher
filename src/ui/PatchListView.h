@@ -44,8 +44,9 @@ signals:
     void rowClicked(const QModelIndex &index);
     // The keyboard moved the highlight (arrows, Home, End, ...): the cue for auto-send.
     // Never emitted for the mouse or for programmatic moves. While a key auto-repeats only
-    // the first step is reported; the final row is reported when the key is released, so a
-    // held arrow streams nothing at the synth.
+    // the first step is reported; the final row is reported when that same key is released
+    // (not on any other key's release, not after focus left the list), so a held arrow
+    // streams nothing at the synth.
     void highlightMovedByKey(const QModelIndex &index);
 
 protected:
@@ -56,6 +57,7 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
+    void focusOutEvent(QFocusEvent *event) override;
     bool edit(const QModelIndex &index, EditTrigger trigger, QEvent *event) override;
 
 private:
@@ -68,7 +70,7 @@ private:
     bool starHit(const QPoint &pos, QModelIndex *index) const;
     QPersistentModelIndex m_editIndex;
     std::optional<PatchAddress> m_pressAddress;  // the row of the last left press
-    bool m_repeatMoved = false;     // the highlight moved on auto-repeat; report it on release
+    int m_repeatKey = 0;  // the navigation key whose auto-repeat moved the highlight; report on its release
     bool m_swallowRelease = false;  // the release after a double-click or a star press
     QString m_title;
     QString m_note;

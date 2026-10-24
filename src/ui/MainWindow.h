@@ -27,7 +27,6 @@ class BankGrid;
 class DisplayWidget;
 class GroupBar;
 class Library;
-class MidiBackend;
 class MidiLink;
 class Nameplate;
 class PanelButton;
@@ -63,10 +62,9 @@ public:
     // Re-reads port, channel and connection from the MidiLink into the status bar and display.
     void refreshConnection();
 
-    // `settings` is where OK, the AUTO SEND toggle, the last patch and the window geometry are
-    // saved; `backend` is used by the Settings dialog to list ports (never to send). Both may
-    // be null (the Settings action then says it is not available).
-    void setServices(AppSettings *settings, MidiBackend *backend);
+    // `settings` is where OK, the AUTO SEND toggle, the last patch (on quit) and the window
+    // geometry are saved. May be null (the Settings action then says it is not available).
+    void setServices(AppSettings *settings);
     // Puts `values` into effect: channel, ports, follow, auto-send, resend-on-connect. Does not save.
     void applySettings(const AppSettings::Values &values);
     // The values in effect now (the open output as its port key).
@@ -159,7 +157,9 @@ private:
     void onSettingsAccepted(SettingsDialog *dialog);
     void onSettingsRejected();
     bool sameOutput(const QString &port) const;
-    void saveGeometryNow();
+    void saveStateNow();
+    void noteSettingsWrite();
+    bool sendQuiet(const PatchAddress &address);
     void setAutoSend(bool on, bool persist);
     // Stores and closes an open rename editor (before anything resets the list).
     void finishEditing();
@@ -174,17 +174,22 @@ private:
     std::optional<PatchAddress> m_preSearch;
     QString m_startupError;
     QString m_inputLabel;
+    QString m_inputName;  // the input port as last applied (raw, for change detection)
     bool m_firstShow = true;
 
     AppSettings *m_settings = nullptr;
-    MidiBackend *m_backend = nullptr;
     bool m_autoSendOn = false;
     bool m_resendOnConnect = false;
-    bool m_searchRepeatMoved = false;  // Up/Down auto-repeated in the search field
+    int m_searchRepeatKey = 0;  // the Up/Down key whose auto-repeat moved the search field highlight
+    bool m_quietSend = false;   // the send being made is not a user selection: no Recents entry
+    bool m_resendBlocked = false;  // the last resend failed: no more until a send works or settings change
+    int m_connGeneration = 0;      // bumped on every connect and disconnect
+    int m_testedGeneration = -1;   // m_connGeneration when TEST sent
     // Settings dialog session.
     QPointer<SettingsDialog> m_settingsDialog;
     bool m_settingsOpen = false;
     bool m_trialApplied = false;  // TEST changed the live port or channel; Cancel must undo it
+    bool m_writeReported = false;  // the settings-not-saved message was shown
     bool m_connectPending = false;  // the output connected while the dialog was open
     QString m_testedTarget;         // "<port key>/<channel>" of the last TEST
     AppSettings::Values m_snapshot;

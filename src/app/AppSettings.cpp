@@ -41,6 +41,7 @@ void AppSettings::flush()
     // QSettings does not create the directory; a missing config dir must not lose the write.
     QDir().mkpath(QFileInfo(m_settings.fileName()).absolutePath());
     m_settings.sync();
+    m_writeFailed = m_settings.status() != QSettings::NoError;
 }
 
 void AppSettings::store(const QString &k, const QVariant &value)

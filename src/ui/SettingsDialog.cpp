@@ -1,6 +1,5 @@
 #include "ui/SettingsDialog.h"
 
-#include "midi/MidiBackend.h"
 #include "midi/MidiLink.h"
 #include "ui/SectionRule.h"
 #include "ui/Theme.h"
@@ -54,10 +53,8 @@ private:
 
 }  // namespace
 
-SettingsDialog::SettingsDialog(MidiBackend &backend, const MidiLink &link, const AppSettings::Values &initial,
-                               QWidget *parent)
+SettingsDialog::SettingsDialog(const MidiLink &link, const AppSettings::Values &initial, QWidget *parent)
     : QDialog(parent)
-    , m_backend(backend)
     , m_link(link)
     , m_initial(initial)
 {
@@ -175,6 +172,8 @@ void SettingsDialog::buildUi()
     connect(m_refresh, &QPushButton::clicked, this, &SettingsDialog::refreshPorts);
     connect(m_outCombo, &QComboBox::currentIndexChanged, this, [this] { updateStatus(); });
     connect(m_inCombo, &QComboBox::currentIndexChanged, this, [this] { updateEnabled(); });
+    connect(&m_link, &MidiLink::statusChanged, this, [this] { updateStatus(); });
+    connect(&m_link, &MidiLink::connectedChanged, this, [this] { updateStatus(); });
     connect(m_test, &QPushButton::clicked, this, [this] {
         m_testPressed = true;
         emit testRequested(values());
@@ -216,8 +215,8 @@ void SettingsDialog::refreshPorts()
     const QString wantOut = m_outCombo->count() > 0 ? selected(m_outCombo, QString()) : m_initial.outputPort;
     const QString wantIn = m_inCombo->count() > 0 ? selected(m_inCombo, QString()) : m_initial.inputPort;
     QString outErr, inErr;
-    const QStringList outs = m_backend.outputPortNames(&outErr);
-    const QStringList ins = m_backend.inputPortNames(&inErr);
+    const QStringList outs = m_link.outputPortNames(&outErr);
+    const QStringList ins = m_link.inputPortNames(&inErr);
     m_listError = outErr;
     m_outNames = outs;
     fillCombo(m_outCombo, outs, wantOut, false);
@@ -262,8 +261,9 @@ void SettingsDialog::updateStatus()
                && !MidiLink::matchPort(m_outNames, selected).isEmpty()) {
         text = QStringLiteral("Connected to ") + key;
         ok = true;
-    } else if (m_link.status().startsWith(QStringLiteral("Error")) && !m_link.outputPortName().isEmpty()
-               && MidiLink::portKey(m_link.outputPortName()) == key) {
+    } else if (!m_link.isConnected() && m_link.status().startsWith(QStringLiteral("Error"))
+               && !MidiLink::matchPort({selected}, m_link.outputPortName()).isEmpty()) {
+        // The wanted port (matched the way the link matches: "bout" finds "Boutique") failed.
         text = m_link.status();  // the port that is wanted failed to open: say why
     } else if (!MidiLink::matchPort(m_outNames, selected).isEmpty()) {
         // Listed: the port is there to be opened when OK applies (see the class comment).

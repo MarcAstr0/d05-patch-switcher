@@ -76,6 +76,11 @@ bool FakeMidiBackend::send(const QByteArray &message, QString *error)
             *error = QStringLiteral("output port is not open");
         return false;
     }
+    if (m_failSend) {
+        if (error)
+            *error = QStringLiteral("send failed");
+        return false;
+    }
     m_sent.append(message);
     if (m_printSent)
         std::fprintf(stderr, "MIDI out: %s\n", message.toHex(' ').constData());

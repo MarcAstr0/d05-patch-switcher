@@ -4,7 +4,6 @@
 #include "core/Library.h"
 #include "core/PatchCatalog.h"
 #include "core/SearchQuery.h"
-#include "midi/MidiBackend.h"
 #include "midi/MidiLink.h"
 #include "ui/BankGrid.h"
 #include "ui/DisplayWidget.h"
@@ -249,7 +248,7 @@ MainWindow::MainWindow(PatchCatalog &catalog, Library &library, MidiLink &link, 
 MainWindow::~MainWindow()
 {
     if (!m_firstShow)  // shown at least once: remember where it was (Ctrl+Q skips closeEvent on some platforms)
-        saveGeometryNow();
+        saveStateNow();
 }
 
 void MainWindow::buildWidgets()
@@ -562,13 +561,15 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *e)
             m_grid->cancelEntry();
     } else if (watched == m_search && e->type() == QEvent::KeyPress) {
         const auto *ke = static_cast<QKeyEvent *>(e);
+        if (!ke->isAutoRepeat())
+            m_searchRepeatKey = 0;  // a fresh press (this key or any other) ends a stale hold
         if (ke->key() == Qt::Key_Up || ke->key() == Qt::Key_Down) {
             const std::optional<PatchAddress> before = highlighted();
             moveHighlight(ke->key() == Qt::Key_Up ? -1 : 1);
             if (m_autoSendOn && highlighted() != before) {
-                // As in the list: a held key reports only its first step and, on release, its last.
+                // As in the list: a held key reports only its first step and, on its release, its last.
                 if (ke->isAutoRepeat())
-                    m_searchRepeatMoved = true;
+                    m_searchRepeatKey = ke->key();
                 else
                     sendHighlighted();
             }
@@ -576,11 +577,13 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *e)
         }
     } else if (watched == m_search && e->type() == QEvent::KeyRelease) {
         const auto *ke = static_cast<QKeyEvent *>(e);
-        if (m_searchRepeatMoved && !ke->isAutoRepeat() && (ke->key() == Qt::Key_Up || ke->key() == Qt::Key_Down)) {
-            m_searchRepeatMoved = false;
+        if (!ke->isAutoRepeat() && m_searchRepeatKey != 0 && ke->key() == m_searchRepeatKey) {
+            m_searchRepeatKey = 0;
             if (m_autoSendOn)
                 sendHighlighted();
         }
+    } else if (watched == m_search && e->type() == QEvent::FocusOut) {
+        m_searchRepeatKey = 0;  // the release will go elsewhere
     }
     return QMainWindow::eventFilter(watched, e);
 }
@@ -618,11 +621,11 @@ void MainWindow::beginGridEntry()
 void MainWindow::onSent(const PatchAddress &address)
 {
     finishEditing();  // recording the send reorders the Recents view
-    m_library.recordSend(address);
+    if (!m_quietSend)
+        m_library.recordSend(address);  // a resend or a TEST is not a selection
+    m_resendBlocked = false;           // a send worked: resend-on-connect may try again
     applyCurrent(address);
     m_display->flashSent();
-    if (m_settings)
-        m_settings->setLastPatch(address);
 }
 
 // An incoming Bank Select / Program Change moved the current patch (follow, FR-11): every
@@ -632,8 +635,6 @@ void MainWindow::onFollowed(const PatchAddress &address)
     finishEditing();
     applyCurrent(address);
     m_display->flashActivity();
-    if (m_settings)
-        m_settings->setLastPatch(address);
 }
 
 // The current patch changed (sent, followed or restored): every view of it follows.
@@ -941,10 +942,13 @@ void MainWindow::onConnectedChanged(bool connected)
     refreshConnection();
     if (connected)
         noteConnected();
+    else
+        ++m_connGeneration;
 }
 
 void MainWindow::noteConnected()
 {
+    ++m_connGeneration;
     if (m_settingsOpen)
         m_connectPending = true;  // decided when the dialog closes
     else if (m_resendOnConnect)
@@ -963,9 +967,22 @@ void MainWindow::setOutput(const QString &port)
 }
 
 // Resend-on-connect: the output (re)connected, so tell the synth what the app shows, once.
+// A failed resend is not retried on every poll reconnect: it stays blocked until a send works
+// or the settings change.
 void MainWindow::resendCurrent()
 {
-    sendAddress(m_current);
+    if (m_resendBlocked)
+        return;
+    if (!sendQuiet(m_current))
+        m_resendBlocked = true;
+}
+
+bool MainWindow::sendQuiet(const PatchAddress &address)
+{
+    m_quietSend = true;
+    const bool ok = sendAddress(address);
+    m_quietSend = false;
+    return ok;
 }
 
 void MainWindow::notAvailable(const QString &what)
@@ -984,10 +1001,9 @@ void MainWindow::popupSystemMenu()
 
 // ---------------------------------------------------------------------------- settings
 
-void MainWindow::setServices(AppSettings *settings, MidiBackend *backend)
+void MainWindow::setServices(AppSettings *settings)
 {
     m_settings = settings;
-    m_backend = backend;
 }
 
 AppSettings::Values MainWindow::currentSettings() const
@@ -1013,11 +1029,18 @@ bool MainWindow::sameOutput(const QString &port) const
 void MainWindow::applySettings(const AppSettings::Values &v)
 {
     m_resendOnConnect = v.resendOnConnect;
+    m_resendBlocked = false;  // the settings changed
     setAutoSend(v.autoSend, false);
-    m_link.setChannel(v.channel);
+    if (v.channel != m_link.channel())
+        m_link.setChannel(v.channel);
     m_inputLabel = MidiLink::portKey(v.inputPort);
-    m_link.setInputPort(v.inputPort);
-    m_link.setFollowEnabled(v.follow);
+    // Reopen the input only when it actually changed.
+    if (v.inputPort != m_inputName) {
+        m_inputName = v.inputPort;
+        m_link.setInputPort(v.inputPort);
+    }
+    if (v.follow != m_link.followEnabled())
+        m_link.setFollowEnabled(v.follow);
     if (!sameOutput(v.outputPort))
         setOutput(v.outputPort);
     refreshConnection();
@@ -1037,13 +1060,15 @@ void MainWindow::setAutoSend(bool on, bool persist)
         QSignalBlocker block(m_autoSend);  // the toggle may be what called us
         m_autoSend->setChecked(on);
     }
-    if (persist && m_settings)
+    if (persist && m_settings) {
         m_settings->setAutoSend(on);
+        noteSettingsWrite();
+    }
 }
 
 void MainWindow::openSettings()
 {
-    if (!m_settings || !m_backend) {
+    if (!m_settings) {
         notAvailable(QStringLiteral("Settings"));
         return;
     }
@@ -1057,7 +1082,9 @@ void MainWindow::openSettings()
     m_trialApplied = false;
     m_connectPending = false;
     m_testedTarget.clear();
-    auto *dialog = new SettingsDialog(*m_backend, m_link, m_snapshot, this);
+    // The dialog starts from the saved values, never from the run's command-line overrides, so
+    // OK cannot persist an override by accident. The snapshot is the live state, for Cancel.
+    auto *dialog = new SettingsDialog(m_link, m_settings->values(), this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     connect(dialog, &SettingsDialog::testRequested, this, &MainWindow::onSettingsTest);
     connect(dialog, &QDialog::accepted, this, [this, dialog] { onSettingsAccepted(dialog); });
@@ -1075,8 +1102,9 @@ void MainWindow::onSettingsTest(const AppSettings::Values &v)
     if (!sameOutput(v.outputPort))
         setOutput(v.outputPort);
     m_testedTarget = MidiLink::portKey(m_link.connectedPortName()) + QLatin1Char('/') + QString::number(v.channel);
+    m_testedGeneration = m_connGeneration;  // any disconnect or reconnect after this voids it
     refreshConnection();
-    sendAddress(m_current);
+    sendQuiet(m_current);
 }
 
 void MainWindow::onSettingsAccepted(SettingsDialog *dialog)
@@ -1088,10 +1116,11 @@ void MainWindow::onSettingsAccepted(SettingsDialog *dialog)
     m_settingsOpen = false;
     const QString target = MidiLink::portKey(m_link.connectedPortName()) + QLatin1Char('/') + QString::number(v.channel);
     // A TEST to this very port and channel has just put the patch on the synth.
-    const bool justTested = tested && target == m_testedTarget;
+    const bool justTested = tested && target == m_testedTarget && m_connGeneration == m_testedGeneration;
     if (m_connectPending && m_resendOnConnect && m_link.isConnected() && !justTested)
         resendCurrent();
     m_connectPending = false;
+    noteSettingsWrite();
 }
 
 void MainWindow::onSettingsRejected()
@@ -1104,20 +1133,36 @@ void MainWindow::onSettingsRejected()
     }
     m_trialApplied = false;
     m_settingsOpen = false;
+    // A connect that happened while the dialog was open (or the restore itself) still counts,
+    // under the resend setting that was in force when it opened.
+    if (m_connectPending && m_snapshot.resendOnConnect && m_link.isConnected())
+        resendCurrent();
     m_connectPending = false;
 }
 
-void MainWindow::saveGeometryNow()
+// On quit: the geometry and the patch to come back to. Not written per send.
+void MainWindow::saveStateNow()
 {
-    if (m_settings)
-        m_settings->setWindowGeometry(saveGeometry());
+    if (!m_settings)
+        return;
+    m_settings->setLastPatch(m_current);
+    m_settings->setWindowGeometry(saveGeometry());
+    noteSettingsWrite();
+}
+
+// A failed settings write is reported once in the status bar, not on every attempt.
+void MainWindow::noteSettingsWrite()
+{
+    if (m_settings && m_settings->writeFailed() && !m_writeReported) {
+        m_writeReported = true;
+        showMessage(QStringLiteral("Settings could not be saved"));
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    saveGeometryNow();
+    saveStateNow();
     QMainWindow::closeEvent(event);
 }
 
 }  // namespace d05
-
