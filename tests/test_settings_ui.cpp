@@ -406,6 +406,43 @@ private slots:
         Paths::setOverride(QString());
     }
 
+    void dialogButtonsUsePanelLabelFontAndRefreshIs26High()
+    {
+        FakeMidiBackend backend;
+        MidiLink link(&backend);
+        AppSettings::Values v;
+        SettingsDialog d(link, v);
+        d.show();
+        QApplication::processEvents();
+        const QFont want = Theme::font(Theme::Role::PanelLabel);
+        for (QPushButton *b : {d.refreshButton(), d.testButton(), d.cancelButton(), d.okButton()})
+            QCOMPARE(b->font().letterSpacing(), want.letterSpacing());
+        QVERIFY(want.letterSpacing() != 0);
+        // Painted height of REFRESH, unfocused and focused: 26 device-independent px.
+        const auto painted = [&](QPushButton *b) {
+            const QImage img = d.grab().toImage();
+            const qreal dpr = img.devicePixelRatio();
+            const QRect r = b->geometry();
+            const int x = int((r.x() + r.width() / 2) * dpr);
+            const QColor bg = img.pixelColor(x, int((r.y() - 6) * dpr));
+            int first = -1, last = -1;
+            for (int y = int((r.y() - 6) * dpr); y < int((r.bottom() + 6) * dpr); ++y) {
+                if (img.pixelColor(x, y) != bg) {
+                    if (first < 0)
+                        first = y;
+                    last = y;
+                }
+            }
+            return int(qRound((last - first + 1) / dpr));
+        };
+        d.okButton()->setFocus();
+        QApplication::processEvents();
+        QCOMPARE(painted(d.refreshButton()), 26);
+        d.refreshButton()->setFocus();
+        QApplication::processEvents();
+        QCOMPARE(painted(d.refreshButton()), 26);
+    }
+
     // ------------------------------------------------------------------ resend on connect
 
     void resendOnConnectSendsOnceWhenThePortReturns()

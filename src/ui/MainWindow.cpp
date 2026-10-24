@@ -846,6 +846,7 @@ void MainWindow::confirmClearRecents()
     QPushButton *cancel = box->addButton(QStringLiteral("CANCEL"), QMessageBox::RejectRole);
     box->setDefaultButton(cancel);
     box->setEscapeButton(cancel);
+    Theme::applyDialogButtonFonts(box);
     box->setAttribute(Qt::WA_DeleteOnClose);
     connect(clear, &QAbstractButton::clicked, this, [this] {
         finishEditing();

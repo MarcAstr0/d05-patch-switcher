@@ -7,6 +7,7 @@
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
+#include <QRegularExpression>
 #include <QTextStream>
 
 namespace d05::Cli {
@@ -49,9 +50,14 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
                                   QStringLiteral("file"));
     const QCommandLineOption shotState(QStringLiteral("screenshot-state"),
                                        QStringLiteral("State for --screenshot: default, search, favorites, recents, "
-                                                      "disconnected or settings."),
+                                                      "disconnected, settings, nomatch, entry, rename, "
+                                                      "clearrecents or settings-error."),
                                        QStringLiteral("state"));
-    p.addOptions({listPorts, port, inPort, channel, send, fake, configDir, shot, shotState});
+    const QCommandLineOption shotSize(QStringLiteral("screenshot-size"),
+                                      QStringLiteral("Window size for --screenshot, WxH (default 960x560, "
+                                                     "minimum 800x480). Dialog states ignore it."),
+                                      QStringLiteral("WxH"));
+    p.addOptions({listPorts, port, inPort, channel, send, fake, configDir, shot, shotState, shotSize});
 
     auto fail = [&](const QString &text) {
         *message = QCoreApplication::applicationName() + QStringLiteral(": ") + text + QLatin1Char('\n');
@@ -77,6 +83,8 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
     }
     if (p.isSet(shotState) && !p.isSet(shot))
         return fail(QStringLiteral("--screenshot-state needs --screenshot FILE.png"));
+    if (p.isSet(shotSize) && !p.isSet(shot))
+        return fail(QStringLiteral("--screenshot-size needs --screenshot FILE.png"));
     if (p.isSet(shot) && (p.isSet(listPorts) || p.isSet(send)))
         return fail(QStringLiteral("--screenshot cannot be combined with --list-ports or --send"));
     if (!p.positionalArguments().isEmpty())
@@ -104,6 +112,15 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
             return fail(QStringLiteral("--screenshot-state must be one of: %1")
                             .arg(screenshotStates().join(QStringLiteral(", "))));
     }
+    if (p.isSet(shotSize)) {
+        static const QRegularExpression re(QStringLiteral("^(\\d{1,5})x(\\d{1,5})$"));
+        const QRegularExpressionMatch m = re.match(p.value(shotSize));
+        const int w = m.hasMatch() ? m.captured(1).toInt() : 0;
+        const int h = m.hasMatch() ? m.captured(2).toInt() : 0;
+        if (!m.hasMatch() || w < 800 || h < 480 || w > 8000 || h > 8000)
+            return fail(QStringLiteral("--screenshot-size must be WxH, at least 800x480 and at most 8000x8000"));
+        o.screenshotSize = QSize(w, h);
+    }
     if (p.isSet(send)) {
         o.hasSend = true;
         o.sendAddress = p.value(send);
@@ -115,7 +132,9 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
 QStringList screenshotStates()
 {
     return {QStringLiteral("default"),      QStringLiteral("search"),   QStringLiteral("favorites"),
-            QStringLiteral("recents"),      QStringLiteral("disconnected"), QStringLiteral("settings")};
+            QStringLiteral("recents"),      QStringLiteral("disconnected"), QStringLiteral("settings"),
+            QStringLiteral("nomatch"),      QStringLiteral("entry"),        QStringLiteral("rename"),
+            QStringLiteral("clearrecents"), QStringLiteral("settings-error")};
 }
 
 int runListPorts(MidiBackend &backend, QTextStream &out, QTextStream &err)

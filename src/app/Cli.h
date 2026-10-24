@@ -2,6 +2,7 @@
 
 #include "app/AppSettings.h"
 
+#include <QSize>
 #include <QString>
 #include <QStringList>
 
@@ -21,7 +22,8 @@ struct CliOptions {
     int channel = 0;  // 0 = not given
     QString configDir;
     QString screenshotFile;   // --screenshot FILE.png (empty = none)
-    QString screenshotState;  // default | search | favorites | recents | disconnected | settings
+    QString screenshotState;  // see Cli::screenshotStates()
+    QSize screenshotSize{960, 560};  // --screenshot-size WxH, at least 800x480 (main window only)
 
     // True when the run needs no window (--list-ports, --send).
     bool headless() const { return listPorts || hasSend; }

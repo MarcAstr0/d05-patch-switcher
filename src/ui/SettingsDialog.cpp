@@ -98,9 +98,8 @@ void SettingsDialog::buildUi()
     m_refresh = new QPushButton(QStringLiteral("REFRESH"), this);
     m_refresh->setObjectName(QStringLiteral("refreshButton"));
     m_refresh->setAutoDefault(false);
-    // 26 tall like the combo (DESIGN 10.1); the shared dialog-button rule makes buttons 28.
-    m_refresh->setStyleSheet(QStringLiteral("QPushButton { min-height: 24px; max-height: 24px; }"
-                                            "QPushButton:focus { min-height: 22px; max-height: 22px; }"));
+    // 26 tall like the combo: the QSS rule on #refreshButton sets the height (DESIGN 10.1);
+    // the fixed height is kept so the size is right even before the style sheet applies.
     m_refresh->setFixedHeight(26);
     m_refresh->setGeometry(QRect(at(380, 20), QSize(100, 26)));
 
@@ -160,6 +159,8 @@ void SettingsDialog::buildUi()
     m_ok->setObjectName(QStringLiteral("okButton"));
     m_ok->setDefault(true);
     m_ok->setGeometry(QRect(at(kContentW - 100, buttonY), QSize(100, 28)));
+
+    Theme::applyDialogButtonFonts(this);
 
     // Tab order follows the reading order.
     QWidget *order[] = {m_outCombo, m_refresh, m_channel, m_inCombo, m_follow, m_autoSend, m_resend,

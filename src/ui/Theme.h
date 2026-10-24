@@ -4,6 +4,7 @@
 #include <QFont>
 
 class QApplication;
+class QWidget;
 
 namespace d05 {
 
@@ -78,6 +79,10 @@ enum class Role {
 // The font for a role: Inter, pixel size and letter spacing per the table, Medium
 // where the role says so. Cheap to call (cached after the first use).
 QFont font(Role role);
+
+// DESIGN 10.2: QSS cannot set letter spacing, so every QPushButton under `root` (a dialog or
+// message box, with its buttons already added) gets the PanelLabel font. Call before show.
+void applyDialogButtonFonts(QWidget *root);
 
 // One-time setup, call once after the QApplication exists: registers the embedded
 // Inter fonts, sets the application font (Inter Regular 13 px), the QPalette from

@@ -77,7 +77,14 @@ private slots:
         int code = 0;
         QCOMPARE(Cli::parse(argv({"--screenshot", "a.png"}), &o, &msg, &code), Cli::ParseStatus::Run);
         QCOMPARE(o.screenshotState, QStringLiteral("default"));
-        QCOMPARE(Cli::screenshotStates().size(), 6);
+        QCOMPARE(Cli::screenshotStates().size(), 11);
+        QCOMPARE(o.screenshotSize, QSize(960, 560));
+        QCOMPARE(Cli::parse(argv({"--screenshot", "a.png", "--screenshot-size", "800x480"}), &o, &msg, &code),
+                 Cli::ParseStatus::Run);
+        QCOMPARE(o.screenshotSize, QSize(800, 480));
+        QCOMPARE(Cli::parse(argv({"--screenshot", "a.png", "--screenshot-size", "1300x700"}), &o, &msg, &code),
+                 Cli::ParseStatus::Run);
+        QCOMPARE(o.screenshotSize, QSize(1300, 700));
     }
 
     void usageErrors_data()
@@ -91,6 +98,11 @@ private slots:
         QTest::newRow("screenshot bad state") << argv({"--screenshot", "a.png", "--screenshot-state", "bogus"});
         QTest::newRow("screenshot state alone") << argv({"--screenshot-state", "search"});
         QTest::newRow("screenshot with send") << argv({"--screenshot", "a.png", "--send", "P1-11"});
+        QTest::newRow("size too small") << argv({"--screenshot", "a.png", "--screenshot-size", "799x480"});
+        QTest::newRow("size too short") << argv({"--screenshot", "a.png", "--screenshot-size", "800x479"});
+        QTest::newRow("size malformed") << argv({"--screenshot", "a.png", "--screenshot-size", "800"});
+        QTest::newRow("size text") << argv({"--screenshot", "a.png", "--screenshot-size", "axb"});
+        QTest::newRow("size alone") << argv({"--screenshot-size", "900x600"});
         QTest::newRow("missing value") << argv({"--port"});
     }
     void usageErrors()

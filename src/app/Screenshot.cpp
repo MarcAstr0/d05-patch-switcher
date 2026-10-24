@@ -6,6 +6,7 @@
 #include "core/SearchQuery.h"
 #include "midi/FakeMidiBackend.h"
 #include "midi/MidiLink.h"
+#include "ui/BankGrid.h"
 #include "ui/DisplayWidget.h"
 #include "ui/MainWindow.h"
 #include "ui/PanelButton.h"
@@ -14,6 +15,8 @@
 
 #include <QApplication>
 #include <QLineEdit>
+#include <QMessageBox>
+#include <QPainter>
 #include <QPixmap>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -88,6 +91,8 @@ int runScreenshot(const CliOptions &opts)
     window.setCurrent(current);
     if (state == QLatin1String("search")) {
         window.searchField()->setText(QStringLiteral("brass"));
+    } else if (state == QLatin1String("nomatch")) {
+        window.searchField()->setText(QStringLiteral("zzzz"));
     } else if (state == QLatin1String("favorites")) {
         window.viewButton(PatchListModel::View::Favourites)->setChecked(true);
     } else if (state == QLatin1String("recents")) {
@@ -96,11 +101,13 @@ int runScreenshot(const CliOptions &opts)
         window.list()->setFocus();  // the mockup's second frame has the list focused
     }
 
-    if (state == QLatin1String("settings")) {
+    if (state == QLatin1String("settings") || state == QLatin1String("settings-error")) {
         // The dialog alone, as in docs/design/mockup-settings.png: the fake output open, no
-        // input, channel 1, resend-on-connect on.
+        // input, channel 1, resend-on-connect on. The error variant asks for a port the fake
+        // does not have: "Port not found", TEST disabled.
         AppSettings::Values values;
-        values.outputPort = QStringLiteral("Fake D-05 In");
+        values.outputPort = state == QLatin1String("settings") ? QStringLiteral("Fake D-05 In")
+                                                               : QStringLiteral("Hapax MIDI 1");
         values.resendOnConnect = true;
         SettingsDialog dialog(link, values);
         dialog.show();
@@ -115,10 +122,38 @@ int runScreenshot(const CliOptions &opts)
         return Exit::Ok;
     }
 
+    window.resize(opts.screenshotSize);
     window.show();
     window.activateWindow();
     QApplication::processEvents();
-    const QPixmap shot = window.grab();
+    if (state == QLatin1String("entry")) {
+        // A pending grid entry "P3-4_": group P3, bank 4 pressed, awaiting the number.
+        window.bankGrid()->setFocus(Qt::OtherFocusReason);
+        window.bankGrid()->beginEntry(PatchAddress::parse(QStringLiteral("P3-11"))->group());
+        window.bankGrid()->pressBank(4);
+    } else if (state == QLatin1String("rename")) {
+        // The inline editor on U1-11 with a partial name and its n/18 counter.
+        window.list()->setFocus(Qt::OtherFocusReason);
+        const int row = window.model()->rowOf(*PatchAddress::parse(QStringLiteral("U1-11")));
+        window.list()->setCurrentIndex(window.model()->index(row, 0));
+        window.renameHighlighted();
+        QApplication::processEvents();
+        if (auto *editor = window.list()->viewport()->findChild<QLineEdit *>()) {
+            editor->setText(QStringLiteral("Warm Pa"));
+            editor->setCursorPosition(editor->text().size());
+        }
+    } else if (state == QLatin1String("clearrecents")) {
+        window.confirmClearRecents();
+    }
+    QApplication::processEvents();
+    QPixmap shot = window.grab();
+    if (QMessageBox *box = window.clearRecentsBox()) {
+        // The box is its own top-level window: paint it over the window where it sits.
+        const QPoint at = box->mapToGlobal(QPoint()) - window.mapToGlobal(QPoint());
+        const QPixmap boxShot = box->grab();
+        QPainter painter(&shot);
+        painter.drawPixmap(at, boxShot);
+    }
     if (!shot.save(opts.screenshotFile, "PNG")) {
         err << "cannot write " << opts.screenshotFile << Qt::endl;
         return 1;

@@ -437,6 +437,40 @@ private slots:
         QVERIFY(shots[1] != shots[2]);
     }
 
+    void displayLinesForNoMatchAndEntry()
+    {
+        DisplayWidget d;
+        d.setPatch(addr("P1-11"), QStringLiteral("x"), QChar());
+        d.setConnected(true);
+        d.setSearch(true, 0);
+        QVERIFY(d.line2().startsWith(QStringLiteral("NO MATCHES")));
+        d.setSearch(false, 0);
+        d.setDisplayEntryEcho(true);
+        d.setEntry(QStringLiteral("P3-4_"));
+        QVERIFY(d.line1().startsWith(QStringLiteral("P3-4_")));
+    }
+
+    void newScreenshotStatesRender()
+    {
+        QTemporaryDir out;
+        QVERIFY(out.isValid());
+        for (const char *st : {"nomatch", "entry", "rename", "clearrecents", "settings-error"}) {
+            CliOptions o;
+            o.screenshotFile = out.filePath(QString::fromLatin1(st) + QStringLiteral(".png"));
+            o.screenshotState = QString::fromLatin1(st);
+            o.screenshotSize = QSize(800, 480);
+            QCOMPARE(runScreenshot(o), 0);
+            QImage img;
+            QVERIFY(img.load(o.screenshotFile));
+            QVERIFY(img.width() > 0);
+            if (o.screenshotState != QLatin1String("settings-error")) {
+                QCOMPARE(img.width(), int(800 * qApp->devicePixelRatio()));
+                QCOMPARE(img.height(), int(480 * qApp->devicePixelRatio()));
+            }
+        }
+        Paths::setOverride(QString());
+    }
+
     void screenshotProcessExitCodes()
     {
         QTemporaryDir out;
@@ -460,6 +494,12 @@ private slots:
         QCOMPARE(run({QStringLiteral("--screenshot"), png, QStringLiteral("--screenshot-state"),
                       QStringLiteral("nope")}),
                  64);
+        QCOMPARE(run({QStringLiteral("--screenshot"), png, QStringLiteral("--screenshot-size"),
+                      QStringLiteral("799x480")}),
+                 64);
+        QCOMPARE(run({QStringLiteral("--screenshot"), png, QStringLiteral("--screenshot-size"),
+                      QStringLiteral("800x480")}),
+                 0);
     }
 
     void screenshotAtScaleFactor2()

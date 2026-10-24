@@ -5,6 +5,7 @@
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QPalette>
+#include <QPushButton>
 
 namespace d05 {
 namespace Theme {
@@ -129,6 +130,14 @@ bool install(QApplication &app)
     else
         ok = false;
     return ok;
+}
+
+void applyDialogButtonFonts(QWidget *root)
+{
+    const QFont f = font(Role::PanelLabel);
+    const auto buttons = root->findChildren<QPushButton *>();
+    for (QPushButton *b : buttons)
+        b->setFont(f);
 }
 
 }  // namespace Theme
