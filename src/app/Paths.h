@@ -5,7 +5,8 @@
 namespace d05 {
 
 // Where per-user files live. The default is the app-data location
-// (<GenericData>/marcastr0/d05-patch-switcher); `--config-dir` (and tests) override it.
+// (QStandardPaths::AppDataLocation; requires organization "marcastr0" and
+// application "d05-patch-switcher" to be set on QCoreApplication first); `--config-dir` (and tests) override it.
 namespace Paths {
 
 // An empty string clears the override.

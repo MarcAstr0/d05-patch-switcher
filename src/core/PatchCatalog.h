@@ -7,7 +7,11 @@
 #include <QString>
 #include <array>
 
+class TestPatchCatalog;
+
 namespace d05 {
+
+class Library;
 
 // The 896-entry catalogue: preset names and key modes from the embedded TSV,
 // plus an in-memory overlay of user-slot names (fed by the Library in T1.5).
@@ -28,14 +32,8 @@ public:
     // name(a) if non-empty, else the address text.
     QString displayName(const PatchAddress &a) const;
 
-    // User-name overlay. Names are printable ASCII only (0x20..0x7E). Tab, CR, LF and
-    // other whitespace controls become a space; every other character outside that
-    // range is dropped; runs of spaces collapse to one; the result is trimmed, cut to
-    // 18 characters and trimmed again. An empty result clears the name. Returns false
-    // (and changes nothing) for preset addresses.
-    bool setUserName(const PatchAddress &a, const QString &name);
+    // User-name overlay (read side). Mutation goes through Library, the only writer.
     bool hasUserName(const PatchAddress &a) const { return m_userNames.contains(a.catalogueIndex()); }
-    void clearUserNames() { m_userNames.clear(); }
 
     // One step in catalogue order across group boundaries (U8-88 -> P1-11, P1-88 -> P2-11).
     // Clamped: at the ends they return the same address (next(P6-88) == P6-88,
@@ -44,6 +42,17 @@ public:
     static PatchAddress prev(const PatchAddress &a);
 
 private:
+    friend class Library;
+    friend class ::TestPatchCatalog;
+
+    // Names are printable ASCII only (0x20..0x7E). Tab, CR, LF and
+    // other whitespace controls become a space; every other character outside that
+    // range is dropped; runs of spaces collapse to one; the result is trimmed, cut to
+    // 18 characters and trimmed again. An empty result clears the name. Returns false
+    // (and changes nothing) for preset addresses.
+    bool setUserName(const PatchAddress &a, const QString &name);
+    void clearUserNames() { m_userNames.clear(); }
+
     std::array<QString, PatchAddress::CatalogueSize> m_presetNames;
     std::array<QChar, PatchAddress::CatalogueSize> m_modes;
     QHash<int, QString> m_userNames;

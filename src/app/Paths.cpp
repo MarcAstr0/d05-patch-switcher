@@ -20,10 +20,9 @@ QString dataDir()
 {
     if (!g_override.isEmpty())
         return g_override;
-    QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    if (base.isEmpty())
-        base = QDir::homePath();
-    return QDir::cleanPath(base + QStringLiteral("/marcastr0/d05-patch-switcher"));
+    // AppDataLocation needs organization and application names (main.cpp sets them
+    // before any Paths call): <data>/marcastr0/d05-patch-switcher.
+    return QDir::cleanPath(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
 }
 
 QString libraryPath() { return dataDir() + QStringLiteral("/library.json"); }

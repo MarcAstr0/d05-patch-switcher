@@ -9,7 +9,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QSignalBlocker>
 #include <algorithm>
+#include <limits>
 
 namespace d05 {
 
@@ -23,6 +25,7 @@ Library::Library(PatchCatalog &catalog, const QString &path, QObject *parent)
 
 Library::~Library()
 {
+    QSignalBlocker blocker(this);
     flush();
 }
 
@@ -33,60 +36,80 @@ Library::LoadResult Library::load()
     m_catalog.clearUserNames();
     m_brokenPath.clear();
     m_dirty = false;
+    m_blocked = false;
+    m_failing = false;
     m_timer.stop();
 
     QFile f(m_path);
     if (!f.exists())
         return LoadResult::Fresh;
 
+    if (!f.open(QIODevice::ReadOnly)) {
+        m_blocked = true;  // never overwrite what we could not read
+        return LoadResult::Unreadable;
+    }
+
     bool ok = false;
     QVector<PatchAddress> favs;
     QVector<Recent> recents;
     QVector<QPair<PatchAddress, QString>> names;
 
-    if (f.open(QIODevice::ReadOnly)) {
-        QJsonParseError err;
-        const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
-        f.close();
-        if (err.error == QJsonParseError::NoError && doc.isObject()) {
-            const QJsonObject o = doc.object();
-            const QJsonValue ver = o.value(QStringLiteral("version"));
-            const QJsonValue fv = o.value(QStringLiteral("favorites"));
-            const QJsonValue rv = o.value(QStringLiteral("recents"));
-            const QJsonValue nv = o.value(QStringLiteral("userNames"));
-            if (ver.isDouble() && ver.toInt() == FileVersion
-                && (fv.isArray() || fv.isUndefined()) && (rv.isArray() || rv.isUndefined())
-                && (nv.isObject() || nv.isUndefined())) {
-                ok = true;
-                for (const QJsonValue &v : fv.toArray()) {
-                    const auto a = PatchAddress::parse(v.toString());
-                    if (a && !favs.contains(*a))
-                        favs.append(*a);
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    f.close();
+    if (err.error == QJsonParseError::NoError && doc.isObject()) {
+        const QJsonObject o = doc.object();
+        const QJsonValue ver = o.value(QStringLiteral("version"));
+        const QJsonValue fv = o.value(QStringLiteral("favorites"));
+        const QJsonValue rv = o.value(QStringLiteral("recents"));
+        const QJsonValue nv = o.value(QStringLiteral("userNames"));
+        if (ver.isDouble() && ver.toInt() == FileVersion
+            && (fv.isArray() || fv.isUndefined()) && (rv.isArray() || rv.isUndefined())
+            && (nv.isObject() || nv.isUndefined())) {
+            ok = true;
+            for (const QJsonValue &v : fv.toArray()) {
+                const auto a = PatchAddress::parse(v.toString());
+                if (a && !favs.contains(*a))
+                    favs.append(*a);
+            }
+            for (const QJsonValue &v : rv.toArray()) {
+                const QJsonObject e = v.toObject();
+                const auto a = PatchAddress::parse(e.value(QStringLiteral("address")).toString());
+                if (!a)
+                    continue;
+                Recent r;
+                r.address = *a;
+                const double c = e.value(QStringLiteral("count")).toDouble(1.0);
+                r.count = c >= double(std::numeric_limits<int>::max()) ? std::numeric_limits<int>::max()
+                        : c < 1.0 ? 1 : int(c);
+                r.last = QDateTime::fromString(e.value(QStringLiteral("last")).toString(), Qt::ISODate);
+                if (r.last.isValid()) {
+                    if (r.last.timeSpec() == Qt::LocalTime)
+                        r.last.setTimeSpec(Qt::UTC);  // no zone in the text: read as UTC
+                    r.last = r.last.toUTC();
+                } else {
+                    r.last = QDateTime::fromSecsSinceEpoch(0, Qt::UTC);
                 }
-                for (const QJsonValue &v : rv.toArray()) {
-                    const QJsonObject e = v.toObject();
-                    const auto a = PatchAddress::parse(e.value(QStringLiteral("address")).toString());
-                    if (!a || recents.size() >= MaxRecents)
-                        continue;
-                    bool dup = false;
-                    for (const Recent &r : recents)
-                        dup = dup || r.address == *a;
-                    if (dup)
-                        continue;
-                    Recent r;
-                    r.address = *a;
-                    r.count = std::max(1, e.value(QStringLiteral("count")).toInt(1));
-                    r.last = QDateTime::fromString(e.value(QStringLiteral("last")).toString(), Qt::ISODate);
-                    if (!r.last.isValid())
-                        r.last = QDateTime::fromSecsSinceEpoch(0, Qt::UTC);
-                    recents.append(r);
-                }
-                const QJsonObject no = nv.toObject();
-                for (auto it = no.begin(); it != no.end(); ++it) {
-                    const auto a = PatchAddress::parse(it.key());
-                    if (a && a->isUser() && it.value().isString())
-                        names.append({*a, it.value().toString()});
-                }
+                recents.append(r);
+            }
+            std::stable_sort(recents.begin(), recents.end(),
+                             [](const Recent &x, const Recent &y) { return x.last > y.last; });
+            QVector<Recent> kept;
+            for (const Recent &r : recents) {
+                if (kept.size() >= MaxRecents)
+                    break;
+                bool dup = false;
+                for (const Recent &k : kept)
+                    dup = dup || k.address == r.address;
+                if (!dup)
+                    kept.append(r);
+            }
+            recents = kept;
+            const QJsonObject no = nv.toObject();
+            for (auto it = no.begin(); it != no.end(); ++it) {
+                const auto a = PatchAddress::parse(it.key());
+                if (a && a->isUser() && it.value().isString())
+                    names.append({*a, it.value().toString()});
             }
         }
     }
@@ -96,10 +119,11 @@ Library::LoadResult Library::load()
         QString target = m_path + QStringLiteral(".broken-") + stamp;
         for (int i = 2; QFile::exists(target); ++i)
             target = m_path + QStringLiteral(".broken-") + stamp + QStringLiteral("-") + QString::number(i);
-        if (QFile::rename(m_path, target))
-            m_brokenPath = target;
-        else
-            QFile::remove(m_path);  // cannot sideline; do not stay stuck on it
+        if (!QFile::rename(m_path, target)) {
+            m_blocked = true;  // keep the file, do not overwrite it
+            return LoadResult::SidelineFailed;
+        }
+        m_brokenPath = target;
         return LoadResult::Recovered;
     }
 
@@ -144,7 +168,8 @@ void Library::recordSend(const PatchAddress &a, const QDateTime &when)
     int count = 1;
     for (int i = 0; i < m_recents.size(); ++i) {
         if (m_recents[i].address == a) {
-            count = m_recents[i].count + 1;
+            const int old = m_recents[i].count;
+            count = old < std::numeric_limits<int>::max() ? old + 1 : old;  // saturate
             m_recents.remove(i);
             break;
         }
@@ -185,7 +210,22 @@ bool Library::setUserName(const PatchAddress &a, const QString &name)
 void Library::markDirty()
 {
     m_dirty = true;
+    if (m_blocked)
+        return;  // nothing will be written until a later load() succeeds
+    m_timer.setInterval(m_failing ? RetryMs : DebounceMs);
     m_timer.start();  // restarts the single-shot debounce
+}
+
+void Library::fail(const QString &message)
+{
+    const bool first = !m_failing;
+    m_failing = true;
+    if (!m_blocked) {
+        m_timer.setInterval(RetryMs);
+        m_timer.start();
+    }
+    if (first)
+        emit saveFailed(message);
 }
 
 bool Library::flush()
@@ -193,14 +233,22 @@ bool Library::flush()
     m_timer.stop();
     if (!m_dirty)
         return true;
-    if (writeFile()) {
+    if (m_blocked) {
+        fail(QStringLiteral("library.json could not be read at start; not overwriting it"));
+        return false;
+    }
+    QString error;
+    if (writeFile(&error)) {
         m_dirty = false;
+        m_failing = false;
+        emit saved();
         return true;
     }
+    fail(error);
     return false;
 }
 
-bool Library::writeFile()
+bool Library::writeFile(QString *error)
 {
     QJsonObject o;
     o.insert(QStringLiteral("version"), FileVersion);
@@ -230,17 +278,17 @@ bool Library::writeFile()
 
     const QString dir = QFileInfo(m_path).absolutePath();
     if (!QDir().mkpath(dir)) {
-        emit saveFailed(QStringLiteral("Cannot create ") + dir);
+        *error = QStringLiteral("Cannot create ") + dir;
         return false;
     }
     QSaveFile out(m_path);
     if (!out.open(QIODevice::WriteOnly)) {
-        emit saveFailed(out.errorString());
+        *error = out.errorString();
         return false;
     }
     out.write(QJsonDocument(o).toJson(QJsonDocument::Indented));
     if (!out.commit()) {
-        emit saveFailed(out.errorString());
+        *error = out.errorString();
         return false;
     }
     return true;
