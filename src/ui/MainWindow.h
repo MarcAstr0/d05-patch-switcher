@@ -108,6 +108,13 @@ public:
     // Null once the box is closed and deleted (deletion can lag behind closing).
     QDialog *clearRecentsBox() const { return m_clearBox.data(); }
 
+    // F1: opens the shortcut sheet (DESIGN 10.3), or closes it when it is open. Sends nothing.
+    void toggleShortcuts();
+    QDialog *shortcutsDialog() const { return m_shortcutsBox.data(); }
+    // The About box (DESIGN 10.4), version from QCoreApplication::applicationVersion().
+    void openAbout();
+    QDialog *aboutDialog() const { return m_aboutBox.data(); }
+
     // Sends and selects the highlighted patch (Enter).
     void sendHighlighted();
     // One step in catalogue order, then send (PgUp/PgDn, PREV/NEXT).
@@ -222,6 +229,8 @@ private:
     QWidget *m_statusStrip = nullptr;
     QMenuBar *m_nativeMenuBar = nullptr;  // macOS only
     QPointer<QDialog> m_clearBox;
+    QPointer<QDialog> m_shortcutsBox;
+    QPointer<QDialog> m_aboutBox;
     std::optional<PatchAddress> m_lastHighlight;  // the last highlight seen before a reset
 };
 

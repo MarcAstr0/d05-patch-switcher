@@ -51,7 +51,7 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
     const QCommandLineOption shotState(QStringLiteral("screenshot-state"),
                                        QStringLiteral("State for --screenshot: default, search, favorites, recents, "
                                                       "disconnected, settings, nomatch, entry, rename, "
-                                                      "clearrecents or settings-error."),
+                                                      "clearrecents, settings-error, shortcuts, about or firstrun."),
                                        QStringLiteral("state"));
     const QCommandLineOption shotSize(QStringLiteral("screenshot-size"),
                                       QStringLiteral("Window size for --screenshot, WxH (default 960x560, "
@@ -134,7 +134,8 @@ QStringList screenshotStates()
     return {QStringLiteral("default"),      QStringLiteral("search"),   QStringLiteral("favorites"),
             QStringLiteral("recents"),      QStringLiteral("disconnected"), QStringLiteral("settings"),
             QStringLiteral("nomatch"),      QStringLiteral("entry"),        QStringLiteral("rename"),
-            QStringLiteral("clearrecents"), QStringLiteral("settings-error")};
+            QStringLiteral("clearrecents"), QStringLiteral("settings-error"), QStringLiteral("shortcuts"),
+            QStringLiteral("about"),        QStringLiteral("firstrun")};
 }
 
 int runListPorts(MidiBackend &backend, QTextStream &out, QTextStream &err)

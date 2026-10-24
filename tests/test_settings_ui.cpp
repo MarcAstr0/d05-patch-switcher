@@ -561,8 +561,10 @@ private slots:
 
     void startupWithNoPortIsDisconnected()
     {
+        // No port was ever configured: the first-run hint stands in for NO MIDI OUTPUT (T5.1).
         Rig r(AppSettings::Values{});
-        QVERIFY(r.w->display()->line2().startsWith(QStringLiteral("NO MIDI OUTPUT")));
+        QVERIFY(r.w->display()->line2().startsWith(QStringLiteral("OPEN SETTINGS: ")));
+        QVERIFY(!r.link->isConnected());
         QVERIFY(r.sent().isEmpty());
     }
 

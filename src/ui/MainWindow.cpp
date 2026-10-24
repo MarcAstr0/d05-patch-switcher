@@ -5,6 +5,7 @@
 #include "core/PatchCatalog.h"
 #include "core/SearchQuery.h"
 #include "midi/MidiLink.h"
+#include "ui/AboutDialog.h"
 #include "ui/BankGrid.h"
 #include "ui/DisplayWidget.h"
 #include "ui/GroupBar.h"
@@ -12,6 +13,8 @@
 #include "ui/PanelButton.h"
 #include "ui/PatchDelegate.h"
 #include "ui/PatchListView.h"
+#include "ui/Shortcuts.h"
+#include "ui/ShortcutsDialog.h"
 #include "ui/Theme.h"
 
 #include <QAction>
@@ -405,9 +408,11 @@ void MainWindow::buildWidgets()
 
 void MainWindow::buildActions()
 {
-    const auto make = [this](const QString &name, const QString &text, const QKeySequence &key, auto slot) {
+    // Keys come from the one table the shortcut sheet is generated from (ui/Shortcuts).
+    const auto make = [this](const QString &name, const QString &text, auto slot) {
         auto *a = new QAction(text, this);
         a->setObjectName(name);
+        const QKeySequence key = Shortcuts::key(name);
         if (!key.isEmpty())
             a->setShortcut(key);
         a->setShortcutContext(Qt::WindowShortcut);
@@ -416,46 +421,34 @@ void MainWindow::buildActions()
         return a;
     };
 
-    make(QStringLiteral("actionFocusSearch"), QStringLiteral("Find"), QKeySequence(Qt::Key_Slash), [this] { focusSearch(); });
-    make(QStringLiteral("actionFocusSearchCtrlF"), QStringLiteral("Find"), QKeySequence(Qt::CTRL | Qt::Key_F),
-         [this] { focusSearch(); });
-    make(QStringLiteral("actionEscape"), QStringLiteral("Clear search"), QKeySequence(Qt::Key_Escape), [this] { onEscape(); });
+    make(QStringLiteral("actionFocusSearch"), QStringLiteral("Find"), [this] { focusSearch(); });
+    make(QStringLiteral("actionFocusSearchCtrlF"), QStringLiteral("Find"), [this] { focusSearch(); });
+    make(QStringLiteral("actionEscape"), QStringLiteral("Clear search"), [this] { onEscape(); });
     // Every trigger sends MIDI: holding the key must not stream patches at the synth.
-    make(QStringLiteral("actionPrev"), QStringLiteral("Previous patch"), QKeySequence(Qt::Key_PageUp), [this] { step(-1); })
+    make(QStringLiteral("actionPrev"), QStringLiteral("Previous patch"), [this] { step(-1); })
         ->setAutoRepeat(false);
-    make(QStringLiteral("actionNext"), QStringLiteral("Next patch"), QKeySequence(Qt::Key_PageDown), [this] { step(1); })
+    make(QStringLiteral("actionNext"), QStringLiteral("Next patch"), [this] { step(1); })
         ->setAutoRepeat(false);
-    make(QStringLiteral("actionGridEntry"), QStringLiteral("Enter bank and number"), QKeySequence(Qt::CTRL | Qt::Key_G),
-         [this] { beginGridEntry(); });
-    make(QStringLiteral("actionViewAll"), QStringLiteral("All"), QKeySequence(Qt::CTRL | Qt::Key_1),
-         [this] { m_viewAll->setChecked(true); });
-    make(QStringLiteral("actionViewFavourites"), QStringLiteral("Favourites"), QKeySequence(Qt::CTRL | Qt::Key_2),
-         [this] { m_viewFav->setChecked(true); });
-    make(QStringLiteral("actionViewRecents"), QStringLiteral("Recents"), QKeySequence(Qt::CTRL | Qt::Key_3),
-         [this] { m_viewRecent->setChecked(true); });
-    make(QStringLiteral("actionToggleFavourite"), QStringLiteral("Toggle favourite"), QKeySequence(Qt::CTRL | Qt::Key_D),
-         [this] { toggleHighlightedFavorite(); })
+    make(QStringLiteral("actionGridEntry"), QStringLiteral("Enter bank and number"), [this] { beginGridEntry(); });
+    make(QStringLiteral("actionViewAll"), QStringLiteral("All"), [this] { m_viewAll->setChecked(true); });
+    make(QStringLiteral("actionViewFavourites"), QStringLiteral("Favourites"), [this] { m_viewFav->setChecked(true); });
+    make(QStringLiteral("actionViewRecents"), QStringLiteral("Recents"), [this] { m_viewRecent->setChecked(true); });
+    make(QStringLiteral("actionToggleFavourite"), QStringLiteral("Toggle favourite"), [this] { toggleHighlightedFavorite(); })
         ->setAutoRepeat(false);
-    make(QStringLiteral("actionRename"), QStringLiteral("Rename"), QKeySequence(Qt::Key_F2), [this] { renameHighlighted(); })
+    make(QStringLiteral("actionRename"), QStringLiteral("Rename"), [this] { renameHighlighted(); })
         ->setAutoRepeat(false);
-    make(QStringLiteral("actionAutoSend"), QStringLiteral("Auto-send"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A),
-         [this] { setAutoSend(!m_autoSendOn); })
+    make(QStringLiteral("actionAutoSend"), QStringLiteral("Auto-send"), [this] { setAutoSend(!m_autoSendOn); })
         ->setAutoRepeat(false);
 
     // The system menu (DESIGN 8.2). The actions carry their shortcuts, so they are the
     // window's shortcuts for Settings, the sheet and Quit.
     m_systemMenu = new QMenu(this);
     m_systemMenu->setObjectName(QStringLiteral("systemMenu"));
-    auto *settings = make(QStringLiteral("actionSettings"), QStringLiteral("Settings..."),
-                          QKeySequence(Qt::CTRL | Qt::Key_Comma), [this] { openSettings(); });
-    auto *sheet = make(QStringLiteral("actionShortcuts"), QStringLiteral("Keyboard Shortcuts"), QKeySequence(Qt::Key_F1),
-                       [this] { notAvailable(QStringLiteral("The shortcut sheet")); });
-    auto *clear = make(QStringLiteral("actionClearRecents"), QStringLiteral("Clear Recents..."), QKeySequence(),
-                       [this] { confirmClearRecents(); });
-    auto *about = make(QStringLiteral("actionAbout"), QStringLiteral("About D-05 Patch Switcher"), QKeySequence(),
-                       [this] { notAvailable(QStringLiteral("The About box")); });
-    auto *quit = make(QStringLiteral("actionQuit"), QStringLiteral("Quit"), QKeySequence(Qt::CTRL | Qt::Key_Q),
-                      [this] { saveAndQuit(); });
+    auto *settings = make(QStringLiteral("actionSettings"), QStringLiteral("Settings..."), [this] { openSettings(); });
+    auto *sheet = make(QStringLiteral("actionShortcuts"), QStringLiteral("Keyboard Shortcuts"), [this] { toggleShortcuts(); });
+    auto *clear = make(QStringLiteral("actionClearRecents"), QStringLiteral("Clear Recents..."), [this] { confirmClearRecents(); });
+    auto *about = make(QStringLiteral("actionAbout"), QStringLiteral("About D-05 Patch Switcher"), [this] { openAbout(); });
+    auto *quit = make(QStringLiteral("actionQuit"), QStringLiteral("Quit"), [this] { saveAndQuit(); });
     m_systemMenu->addAction(settings);
     m_systemMenu->addAction(sheet);
     m_systemMenu->addAction(clear);
@@ -923,6 +916,28 @@ void MainWindow::confirmClearRecents()
     box->open();
 }
 
+void MainWindow::toggleShortcuts()
+{
+    if (m_shortcutsBox) {
+        m_shortcutsBox->close();
+        return;
+    }
+    auto *box = new ShortcutsDialog(this);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    m_shortcutsBox = box;
+    box->open();
+}
+
+void MainWindow::openAbout()
+{
+    if (m_aboutBox)
+        return;
+    auto *box = new AboutDialog(QCoreApplication::applicationVersion(), this);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    m_aboutBox = box;
+    box->open();
+}
+
 void MainWindow::focusSearch()
 {
     m_search->setFocus(Qt::ShortcutFocusReason);
@@ -959,6 +974,11 @@ void MainWindow::onEntryChanged()
 void MainWindow::updateDisplayConnection()
 {
     m_display->setConnected(m_link.isConnected());
+    // First run (DESIGN 5.2): no output port was ever chosen, so line 2 points at Settings
+    // instead of saying NO MIDI OUTPUT. A configured port that is missing keeps that text.
+    m_display->setFirstRunHint(m_link.outputPortName().isEmpty()
+                                   ? QStringLiteral("OPEN SETTINGS: ") + Shortcuts::settingsHintKey()
+                                   : QString());
 }
 
 void MainWindow::refreshConnection()

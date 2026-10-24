@@ -77,7 +77,7 @@ private slots:
         int code = 0;
         QCOMPARE(Cli::parse(argv({"--screenshot", "a.png"}), &o, &msg, &code), Cli::ParseStatus::Run);
         QCOMPARE(o.screenshotState, QStringLiteral("default"));
-        QCOMPARE(Cli::screenshotStates().size(), 11);
+        QCOMPARE(Cli::screenshotStates().size(), 14);
         QCOMPARE(o.screenshotSize, QSize(960, 560));
         QCOMPARE(Cli::parse(argv({"--screenshot", "a.png", "--screenshot-size", "800x480"}), &o, &msg, &code),
                  Cli::ParseStatus::Run);

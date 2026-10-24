@@ -67,6 +67,9 @@ qt_add_library(d05ui STATIC
     src/ui/PatchDelegate.h  src/ui/PatchDelegate.cpp
     src/ui/PatchListView.h  src/ui/PatchListView.cpp
     src/ui/SettingsDialog.h src/ui/SettingsDialog.cpp
+    src/ui/Shortcuts.h      src/ui/Shortcuts.cpp
+    src/ui/ShortcutsDialog.h src/ui/ShortcutsDialog.cpp
+    src/ui/AboutDialog.h    src/ui/AboutDialog.cpp
     src/ui/MainWindow.h     src/ui/MainWindow.cpp
     src/app/Screenshot.h    src/app/Screenshot.cpp
 )

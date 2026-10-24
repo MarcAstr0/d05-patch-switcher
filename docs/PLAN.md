@@ -75,9 +75,9 @@ the D-05 display showed. Fixes go back to the builder.
 **Gate G4 (owner).** Download the `.dmg` on the MacBook, run it against the real rig
 (checklist steps 3–5). Report.
 
-## M5 · Polish and v1.0.0 ☐
+## M5 · Polish and v1.0.0 ◐
 
-- ☐ **T5.1** `F1` shortcut sheet; About box with version, licence and the trademark notice; first-run hint on the display's second line when no port is configured (`OPEN SETTINGS: CTRL+,`).
+- ☑ **T5.1** `F1` shortcut sheet; About box with version, licence and the trademark notice; first-run hint on the display's second line when no port is configured (`OPEN SETTINGS: CTRL+,`).
 - ☐ **T5.2** Everything the owner reported at G3/G4.
 - ☐ **T5.3** `CHANGELOG.md`; README screenshots from `--screenshot` at 2×.
 - ☐ **R5 Final review** (reviewer + Codex; the foreman may run the agent on Opus).
@@ -117,3 +117,4 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-24, G4 passed (owner, MacBook via the Hapax): v0.9.0 dmg installed and opened after the Gatekeeper step; checklist steps 3 to 5 passed with output `HAPAX Puerto 3`. The Hapax exposes 16 USB virtual ports, routes incoming MIDI through the selected track (input ALL ACTIVE) and rewrites the channel to the track's output channel; Program Change and Bank Select pass. Recorded in `docs/MIDI.md`. First attempt failed only because a different Hapax port was chosen.
 - 2026-10-24, owner: macOS notarization (Developer ID + notarytool + stapler, Apple Developer Program at US$99/year) is deferred; revisit after 2026-11-06. Until then releases stay ad-hoc signed and the README's macOS notes cover first launch. When adopted, the workflow notarizes only when the signing secrets exist, so forks and pull requests still build unsigned.
 - 2026-10-24, foreman (R3, Codex findings after the limit reset): a follow move ends a running SENT flash; input listing/open/loss errors now reach the UI (`MidiLink::inputStatusChanged`); the main window relayouts when the display's size changes on a DPR change. Two visuals were added by the builder without a DESIGN.md slot and are accepted provisionally: an input-error line right of the input combo in Settings (380, 144, 100, 26; type.note, labelRed) and an input `NOT FOUND` marker in the status bar (statusError role). The designer records or revises both in DESIGN.md during M5. R3 now has both reviews.
+- 2026-10-24, foreman (T5.1): the first-run hint reads `CMD+,` on macOS and `CTRL+,` elsewhere, and shows only when no output port was ever configured (a configured but missing port still shows `NO MIDI OUTPUT`). The subset Inter has ⌘ ⇧ ⌥ for macOS key caps; other key symbols fall back to the system font. The Shortcuts sheet layout (wrapping, key column width) goes to the designer.

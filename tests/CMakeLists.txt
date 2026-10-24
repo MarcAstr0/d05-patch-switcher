@@ -48,3 +48,6 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(test_rtmidi_follow PRIVATE rtmidi)
     set_tests_properties(test_rtmidi_follow PROPERTIES SKIP_RETURN_CODE 77 LABELS "hardware-free" TIMEOUT 60)
 endif()
+
+d05_add_test(test_help_ui test_help_ui.cpp)
+target_link_libraries(test_help_ui PRIVATE d05ui Qt6::Widgets)

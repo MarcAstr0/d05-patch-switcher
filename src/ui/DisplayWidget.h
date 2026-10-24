@@ -53,6 +53,9 @@ public:
     // `mode` is 'W', 'D', 'S' or a null QChar.
     void setPatch(const PatchAddress &address, const QString &name, QChar mode);
     void setConnected(bool connected);
+    // First-run hint (DESIGN 5.2): when not empty and no output is open, line 2 shows it
+    // instead of NO MIDI OUTPUT. Empty = off.
+    void setFirstRunHint(const QString &text);
     // Search active with `matchCount` results (FR-12 priority 3); false = no search.
     void setSearch(bool active, int matchCount);
     // The pending grid entry, e.g. "P3-__" or "P3-4_"; empty when none.
@@ -138,6 +141,7 @@ private:
     QString m_name;
     QChar m_mode;
     bool m_connected = false;
+    QString m_firstRunHint;
     bool m_searchActive = false;
     int m_matchCount = 0;
     QString m_entry;

@@ -9,7 +9,9 @@
 #include "ui/BankGrid.h"
 #include "ui/DisplayWidget.h"
 #include "ui/MainWindow.h"
+#include "ui/AboutDialog.h"
 #include "ui/PanelButton.h"
+#include "ui/ShortcutsDialog.h"
 #include "ui/PatchListView.h"
 #include "ui/SettingsDialog.h"
 
@@ -81,7 +83,9 @@ int runScreenshot(const CliOptions &opts)
     link.setChannel(1);
     // "disconnected" asks for a port the fake does not have, as the mockup's "Hapax MIDI 1".
     const bool disconnected = state == QLatin1String("disconnected");
-    link.setOutputPort(disconnected ? QStringLiteral("Hapax MIDI 1") : QStringLiteral("Fake D-05 In"));
+    // "firstrun" has no port configured at all: line 2 shows the OPEN SETTINGS hint.
+    if (state != QLatin1String("firstrun"))
+        link.setOutputPort(disconnected ? QStringLiteral("Hapax MIDI 1") : QStringLiteral("Fake D-05 In"));
 
     PatchAddress current = *PatchAddress::parse(QStringLiteral("P1-11"));
     if (state == QLatin1String("recents") && !library.recents().isEmpty())
@@ -114,6 +118,25 @@ int runScreenshot(const CliOptions &opts)
         dialog.activateWindow();
         QApplication::processEvents();
         const QPixmap shot = dialog.grab();
+        if (!shot.save(opts.screenshotFile, "PNG")) {
+            err << "cannot write " << opts.screenshotFile << Qt::endl;
+            return 1;
+        }
+        library.flush();
+        return Exit::Ok;
+    }
+
+    if (state == QLatin1String("shortcuts") || state == QLatin1String("about")) {
+        // The dialog alone, like the settings states.
+        std::unique_ptr<QDialog> dialog;
+        if (state == QLatin1String("shortcuts"))
+            dialog = std::make_unique<ShortcutsDialog>();
+        else
+            dialog = std::make_unique<AboutDialog>(QCoreApplication::applicationVersion());
+        dialog->show();
+        dialog->activateWindow();
+        QApplication::processEvents();
+        const QPixmap shot = dialog->grab();
         if (!shot.save(opts.screenshotFile, "PNG")) {
             err << "cannot write " << opts.screenshotFile << Qt::endl;
             return 1;

@@ -122,6 +122,15 @@ void DisplayWidget::setPatch(const PatchAddress &address, const QString &name, Q
     recompute();
 }
 
+void DisplayWidget::setFirstRunHint(const QString &text)
+{
+    if (text == m_firstRunHint)
+        return;
+    m_firstRunHint = text;
+    if (!m_connected)
+        recompute();
+}
+
 void DisplayWidget::setConnected(bool connected)
 {
     if (connected == m_connected)
@@ -229,7 +238,7 @@ void DisplayWidget::recompute()
     QString l2;
     bool groupName = false;
     if (!m_connected) {
-        l2 = QStringLiteral("NO MIDI OUTPUT");
+        l2 = m_firstRunHint.isEmpty() ? QStringLiteral("NO MIDI OUTPUT") : m_firstRunHint;
     } else if (m_sent) {
         l2 = QStringLiteral("SENT");
     } else if (m_searchActive) {
