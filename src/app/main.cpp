@@ -110,13 +110,20 @@ int main(int argc, char *argv[])
         return d05::Cli::runSend(opts, *backend, out, err);
     }
 
+    // Screenshots never need a screen: pick the offscreen platform unless the caller chose one.
+    if (opts.wantsScreenshot() && !qEnvironmentVariableIsSet("QT_QPA_PLATFORM"))
+        qputenv("QT_QPA_PLATFORM", "offscreen");
     QApplication app(argc, argv);
     QGuiApplication::setApplicationDisplayName(QStringLiteral("D-05 Patch Switcher"));
-    d05::Theme::install(app);
+    const bool themeOk = d05::Theme::install(app);
+    if (!themeOk)
+        QTextStream(stderr) << "warning: a font or the style sheet could not be loaded from the resources\n";
     if (!opts.configDir.isEmpty())
         d05::Paths::setOverride(opts.configDir);
-    if (opts.wantsScreenshot())
-        return d05::runScreenshot(opts);
+    if (opts.wantsScreenshot()) {
+        const int rc = d05::runScreenshot(opts);
+        return rc != 0 ? rc : (themeOk ? 0 : 1);
+    }
     // M3 wires the MIDI backend (--fake-midi or RtMidi) into the main window; the
     // scaffold creates none, so no ALSA client appears at start.
 

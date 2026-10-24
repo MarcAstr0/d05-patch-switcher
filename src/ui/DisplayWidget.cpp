@@ -5,6 +5,7 @@
 
 #include <QPaintEvent>
 #include <QPainter>
+#include <QWindow>
 #include <QtMath>
 
 #include <atomic>
@@ -110,6 +111,13 @@ void DisplayWidget::setConnected(bool connected)
     if (connected == m_connected)
         return;
     m_connected = connected;
+    if (!connected && m_sent) {  // a flash makes no sense without an output
+        m_sentTimer.stop();
+        m_sent = false;
+        recompute();
+        emit sentChanged(false);
+        return;
+    }
     recompute();
 }
 
@@ -134,6 +142,8 @@ void DisplayWidget::setEntry(const QString &text)
 
 void DisplayWidget::flashSent()
 {
+    if (!m_connected)
+        return;
     const bool wasOn = m_sent;
     m_sent = true;
     m_sentTimer.start();  // restarts a running timer
@@ -237,16 +247,69 @@ void DisplayWidget::paintCell(QPainter &p, int line, int col, ushort ch)
     p.drawImage(m_dotOffX + 6 * P * col, m_dotOffY + 8 * P * line, m_atlas, glyphIndex(ch) * cw, 0, cw, ch7);
 }
 
+qreal DisplayWidget::currentDpr() const
+{
+    return m_dprOverride > 0 ? m_dprOverride : devicePixelRatioF();
+}
+
+bool DisplayWidget::resourcesStale() const
+{
+    return m_P == 0 || !qFuzzyCompare(currentDpr(), m_dpr) || m_pitchBuilt != m_pitch
+           || m_builtGhost != m_showGhost;
+}
+
+int DisplayWidget::devicePitch(int logicalPitch, qreal dpr)
+{
+    return qMax(1, int(qFloor(logicalPitch * dpr)));
+}
+
+void DisplayWidget::overrideDprForTest(qreal dpr)
+{
+    m_dprOverride = dpr;
+}
+
+void DisplayWidget::rebuildForDprForTest(qreal dpr)
+{
+    m_dprOverride = dpr;
+    ensureResources();
+    update();
+}
+
+void DisplayWidget::watchWindow()
+{
+    QWindow *w = windowHandle();
+    if (!w)
+        return;
+    QObject::disconnect(m_screenConn);
+    m_screenConn = connect(w, &QWindow::screenChanged, this, [this] {
+        ensureResources();
+        update();
+    });
+}
+
+bool DisplayWidget::event(QEvent *e)
+{
+    const bool r = QWidget::event(e);
+    if (e->type() == QEvent::ScreenChangeInternal || e->type() == QEvent::WinIdChange) {
+        watchWindow();
+        if (resourcesStale()) {
+            ensureResources();
+            update();
+        }
+    }
+    return r;
+}
+
 void DisplayWidget::ensureResources()
 {
-    const qreal dpr = devicePixelRatioF();
-    if (m_P != 0 && qFuzzyCompare(dpr, m_dpr) && m_pitchBuilt == m_pitch && m_builtGhost == m_showGhost)
+    if (!resourcesStale())
         return;
+    const qreal dpr = currentDpr();
 
     m_dpr = dpr;
     m_pitchBuilt = m_pitch;
     m_builtGhost = m_showGhost;
-    m_P = qMax(1, int(qFloor(m_pitch * dpr)));
+    m_P = devicePitch(m_pitch, dpr);
     m_g = qMax(1, int(qRound(dpr)));
 
     // Lit field: dot area plus 2P padding all round, rounded up to whole logical px.
@@ -297,13 +360,26 @@ void DisplayWidget::buildAtlas()
 
 void DisplayWidget::showEvent(QShowEvent *event)
 {
+    watchWindow();
     ensureResources();
     QWidget::showEvent(event);
 }
 
 void DisplayWidget::paintEvent(QPaintEvent *)
 {
-    ensureResources();  // a no-op unless the DPR moved (window dragged to another screen)
+    // Paint only blits cached resources. If the DPR moved under us (no screen-change
+    // signal seen yet), rebuild from the event loop and draw the stale frame now.
+    if (resourcesStale() && !m_rebuildQueued) {
+        m_rebuildQueued = true;
+        QMetaObject::invokeMethod(
+            this,
+            [this] {
+                m_rebuildQueued = false;
+                ensureResources();
+                update();
+            },
+            Qt::QueuedConnection);
+    }
     QPainter p(this);
     const int w = width();
     const int h = height();

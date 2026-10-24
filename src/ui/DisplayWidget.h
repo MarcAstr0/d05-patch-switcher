@@ -5,6 +5,7 @@
 #include <QImage>
 #include <QPixmap>
 #include <QString>
+#include <QMetaObject>
 #include <QTimer>
 #include <QWidget>
 
@@ -73,6 +74,14 @@ public:
 
     // Geometry (device pixels), exposed for tests.
     int deviceDot() const { return m_P; }
+    // The device-pixel dot pitch P for a logical pitch and a DPR. The single place
+    // the rule lives (DESIGN 5.1); everything else derives from it.
+    static int devicePitch(int logicalPitch, qreal dpr);
+    // Test hooks: pretend the widget's DPR is `dpr` (0 = use the real one).
+    // overrideDprForTest only records it (the next paint notices the mismatch);
+    // rebuildForDprForTest also rebuilds at once.
+    void overrideDprForTest(qreal dpr);
+    void rebuildForDprForTest(qreal dpr);
     // How many glyph atlases have been built in this process (tests).
     static int atlasBuildCount();
     // The atlas of the current key: 95 glyph cells of 5P x 7P in one row (tests).
@@ -90,10 +99,14 @@ signals:
 protected:
     void paintEvent(QPaintEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    bool event(QEvent *event) override;
 
 private:
     void recompute();
     void ensureResources();
+    qreal currentDpr() const;
+    bool resourcesStale() const;
+    void watchWindow();
     void buildAtlas();
     void paintCell(QPainter &p, int line, int col, ushort ch);
     QString normalised(const QString &s) const;
@@ -117,6 +130,9 @@ private:
     QString m_text[Lines];
 
     // Device-pixel resources, keyed by (P, g, ghost, dpr).
+    qreal m_dprOverride = 0;
+    bool m_rebuildQueued = false;
+    QMetaObject::Connection m_screenConn;
     qreal m_dpr = 0;
     int m_P = 0;
     int m_g = 0;

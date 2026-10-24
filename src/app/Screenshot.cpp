@@ -65,20 +65,32 @@ public:
 
 }  // namespace
 
+namespace {
+// Restores the Paths override that was in force when it was created.
+struct OverrideGuard {
+    QString previous = Paths::overrideDir();
+    ~OverrideGuard() { Paths::setOverride(previous); }
+};
+}  // namespace
+
 int runScreenshot(const CliOptions &opts)
 {
     QTextStream err(stderr);
     const QString &state = opts.screenshotState;
 
+    OverrideGuard guard;
     std::unique_ptr<QTemporaryDir> tmp;
     if (opts.configDir.isEmpty()) {
         tmp = std::make_unique<QTemporaryDir>();
-        if (tmp->isValid())
-            Paths::setOverride(tmp->path());
+        if (!tmp->isValid()) {
+            err << "cannot create a temporary config directory; not touching the real one\n";
+            return 1;
+        }
+        Paths::setOverride(tmp->path());
     }
     PatchCatalog catalog;
     Library library(catalog, Paths::libraryPath());
-    if (tmp && tmp->isValid()) {
+    if (tmp) {
         fillCannedLibrary(library);
     } else {
         library.load();

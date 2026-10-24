@@ -1,5 +1,6 @@
 // Runs the built binary with no display and no Qt platform plugin configured.
 #include <QDir>
+#include <QFileInfo>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QTemporaryDir>
@@ -69,6 +70,17 @@ private slots:
         QVERIFY2(QString(r.out).replace(QStringLiteral("\r\n"), QStringLiteral("\n")) == QStringLiteral("B0 00 57\nB0 20 0A\nC0 1C\n"),
                  qPrintable(r.describe()));
         QVERIFY(QDir(tmp.path()).isEmpty());
+    }
+
+    void screenshotWithNoDisplayEnvironment()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString png = tmp.filePath(QStringLiteral("shot.png"));
+        // run() already unsets QT_QPA_PLATFORM, DISPLAY and WAYLAND_DISPLAY.
+        const Result r = run({QStringLiteral("--screenshot"), png});
+        QVERIFY2(!r.crashed && r.code == 0, qPrintable(r.describe()));
+        QVERIFY2(QFileInfo(png).size() > 0, qPrintable(r.describe()));
     }
 
     void noDisplayExits_data()

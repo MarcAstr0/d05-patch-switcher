@@ -3,6 +3,7 @@
 #include "app/Paths.h"
 #include "app/Screenshot.h"
 #include "core/PatchCatalog.h"
+#include "core/SearchQuery.h"
 #include "ui/DisplayWidget.h"
 #include "ui/GlyphTable.h"
 #include "ui/Theme.h"
@@ -15,6 +16,8 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <cmath>
 
 using namespace d05;
 
@@ -98,7 +101,15 @@ private slots:
         QCOMPARE(qApp->font().pixelSize(), 13);
         QCOMPARE(Theme::font(Theme::Role::Wordmark).pixelSize(), 15);
         QCOMPARE(Theme::font(Theme::Role::Wordmark).letterSpacing(), 3.0);
-        QVERIFY(Theme::mediumByWeight());
+        const QFont medium = Theme::font(Theme::Role::PanelLabel);
+        if (Theme::mediumByWeight()) {
+            QCOMPARE(medium.family(), QStringLiteral("Inter"));
+            QCOMPARE(QFontInfo(medium).weight(), 500);
+        } else {
+            QCOMPARE(medium.family(), QStringLiteral("Inter Medium"));
+            QCOMPARE(medium.weight(), QFont::Normal);
+        }
+        QCOMPARE(medium.pixelSize(), 10);
     }
 
     void geometryByPitch()
@@ -157,6 +168,27 @@ private slots:
             QVERIFY(!DisplayWidget::groupLongName(g).isEmpty());
         QCOMPARE(DisplayWidget::groupLongName(0), QStringLiteral("USER 1"));
         QCOMPARE(DisplayWidget::groupLongName(13), QStringLiteral("PRESET 6: PN-D50-04"));
+    }
+
+    void disconnectClearsSentFlash()
+    {
+        DisplayWidget d;
+        d.setPatch(addr("P1-11"), QStringLiteral("Fantasia"), QLatin1Char('D'));
+        d.flashSent();  // disconnected: nothing happens
+        QVERIFY(!d.sentActive());
+        d.setConnected(true);
+        QSignalSpy spy(&d, &DisplayWidget::sentChanged);
+        d.flashSent();
+        QVERIFY(d.sentActive());
+        d.setConnected(false);
+        QVERIFY(!d.sentActive());
+        QCOMPARE(spy.count(), 2);
+        QVERIFY(!spy.at(1).at(0).toBool());
+        QVERIFY(d.line2().startsWith(QStringLiteral("NO MIDI OUTPUT")));
+        d.setConnected(true);
+        QTest::qWait(500);  // the stopped timer must not fire later
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(d.line2(), pad(QStringLiteral("PRESET 1: ORIGINAL D-50")));
     }
 
     void entryEchoAndKeyModeSwitch()
@@ -227,9 +259,27 @@ private slots:
         QCOMPARE(counter.paints, base);
 
         // A real change repaints.
+        int last = counter.paints;
         d.setSearch(true, 5);
         QTest::qWait(50);
-        QVERIFY(counter.paints > base);
+        QVERIFY(counter.paints > last);
+
+        // So do flash start, flash expiry, pitch change and ghost toggle.
+        last = counter.paints;
+        d.flashSent();
+        QTest::qWait(50);
+        QVERIFY(counter.paints > last);
+        last = counter.paints;
+        QTest::qWait(500);  // expiry
+        QVERIFY(counter.paints > last);
+        last = counter.paints;
+        d.setPitch(4);
+        QTest::qWait(50);
+        QVERIFY(counter.paints > last);
+        last = counter.paints;
+        d.setLcdShowGhost(false);
+        QTest::qWait(50);
+        QVERIFY(counter.paints > last);
     }
 
     void atlasBuiltOncePerPitchAndDpr()
@@ -253,6 +303,48 @@ private slots:
         QCOMPARE(DisplayWidget::atlasBuildCount(), before + 2);
         d.setPitch(4);
         QCOMPARE(DisplayWidget::atlasBuildCount(), before + 2);
+    }
+
+    void dprChangeRebuildsOutsidePaint()
+    {
+        DisplayWidget d;
+        d.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&d));
+        QTest::qWait(30);
+        const int builds = DisplayWidget::atlasBuildCount();
+        const QSize size = d.size();
+        d.overrideDprForTest(2.0);  // the widget now disagrees with its cached resources
+        d.grab();                    // runs paintEvent synchronously
+        QCOMPARE(DisplayWidget::atlasBuildCount(), builds);  // paint rebuilt nothing
+        QCOMPARE(d.size(), size);                            // and resized nothing
+        QTRY_COMPARE(DisplayWidget::atlasBuildCount(), builds + 1);  // queued rebuild
+        QTest::qWait(50);
+        QCOMPARE(DisplayWidget::atlasBuildCount(), builds + 1);      // exactly once
+        QCOMPARE(d.deviceDot(), DisplayWidget::devicePitch(3, 2.0));
+        QCOMPARE(d.atlas().height(), 7 * DisplayWidget::devicePitch(3, 2.0));
+    }
+
+    void fractionalDprGeometry()
+    {
+        // The expected device pitch table is the rule in DESIGN 5.1. It is the same
+        // function the widget uses, so this also pins what the widget derives from it.
+        struct Row { qreal dpr; int p; int P; };
+        const Row table[] = {
+            {1.25, 3, 3}, {1.25, 4, 5}, {1.25, 5, 6},
+            {1.5, 3, 4}, {1.5, 4, 6}, {1.5, 5, 7},
+        };
+        for (const Row &r : table) {
+            QCOMPARE(DisplayWidget::devicePitch(r.p, r.dpr), r.P);
+            DisplayWidget d;
+            d.setPitch(r.p);
+            d.rebuildForDprForTest(r.dpr);
+            QCOMPARE(d.deviceDot(), r.P);
+            QCOMPARE(d.atlas().width(), kGlyphCount * 5 * r.P);
+            QCOMPARE(d.atlas().height(), 7 * r.P);
+            const int fieldW = int(std::ceil(243.0 * r.P / r.dpr));
+            const int fieldH = int(std::ceil(19.0 * r.P / r.dpr));
+            QCOMPARE(d.size(), QSize(fieldW + 38, fieldH + 22));
+        }
     }
 
     void sentFlash()
@@ -279,8 +371,19 @@ private slots:
     {
         QTemporaryDir out;
         QVERIFY(out.isValid());
-        QImage shots[3];
+        PatchCatalog catalog;
+        const PatchAddress p11 = addr("P1-11");
+        int matches = 0;
+        const SearchQuery brass(QStringLiteral("brass"));
+        for (int i = 0; i < PatchAddress::CatalogueSize; ++i) {
+            const PatchAddress a = *PatchAddress::fromCatalogueIndex(i);
+            if (brass.matches(a, catalog.name(a)))
+                ++matches;
+        }
+        QVERIFY(matches > 1);
+
         const QStringList states = {QStringLiteral("default"), QStringLiteral("disconnected"), QStringLiteral("search")};
+        QImage shots[3];
         for (int i = 0; i < 3; ++i) {
             CliOptions o;
             o.screenshotFile = out.filePath(states[i] + QStringLiteral(".png"));
@@ -290,6 +393,22 @@ private slots:
             const qreal dpr = qApp->devicePixelRatio();
             QCOMPARE(shots[i].width(), int(960 * dpr));
             QCOMPARE(shots[i].height(), int(560 * dpr));
+
+            // The display as rendered by a reference widget in the expected state.
+            DisplayWidget ref;
+            ref.setPatch(p11, catalog.name(p11), catalog.mode(p11));
+            ref.setConnected(states[i] != QLatin1String("disconnected"));
+            if (states[i] == QLatin1String("search"))
+                ref.setSearch(true, matches);
+            if (states[i] == QLatin1String("default"))
+                QCOMPARE(ref.line2(), pad(QStringLiteral("PRESET 1: ORIGINAL D-50")));
+            if (states[i] == QLatin1String("disconnected"))
+                QVERIFY(ref.line2().startsWith(QStringLiteral("NO MIDI OUTPUT")));
+            if (states[i] == QLatin1String("search"))
+                QVERIFY(ref.line2().startsWith(QString::number(matches) + QStringLiteral(" MATCHES")));
+            const QImage expected = ref.grab().toImage().convertToFormat(QImage::Format_RGB32);
+            const QRect r(int(16 * dpr), int(46 * dpr), expected.width(), expected.height());
+            QCOMPARE(shots[i].copy(r).convertToFormat(QImage::Format_RGB32), expected);
         }
         Paths::setOverride(QString());
         QVERIFY(shots[0] != shots[1]);
