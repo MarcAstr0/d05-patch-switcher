@@ -1,5 +1,7 @@
 #pragma once
 
+#include "app/AppSettings.h"
+
 #include <QString>
 #include <QStringList>
 
@@ -51,10 +53,19 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
 // --list-ports: both lists on `out`. Exit::Ok or Exit::MidiError (text on `err`).
 int runListPorts(MidiBackend &backend, QTextStream &out, QTextStream &err);
 
+// The settings this run starts with (FR-15): the saved values, with --port, --in-port and
+// --channel overriding them for this run only. With --fake-midi and no --port the output
+// is the fake backend's "Fake D-05 In" (a saved real port cannot exist there). Nothing is
+// written: overrides are never persisted.
+AppSettings::Values startupValues(const AppSettings &saved, const CliOptions &opts);
+
 // --send: opens the output port (exact, then case-insensitive substring match;
 // with the fake backend and no --port, its first port), sends the patch, prints
 // the three messages in hex on `out`. Returns an Exit code; diagnostics on `err`.
-int runSend(const CliOptions &opts, MidiBackend &backend, QTextStream &out, QTextStream &err);
+// When --port / --channel are absent the saved port and channel (`saved`, may be null)
+// are used; the port falls back to the saved one except with --fake-midi.
+int runSend(const CliOptions &opts, MidiBackend &backend, QTextStream &out, QTextStream &err,
+            const AppSettings *saved = nullptr);
 
 }  // namespace Cli
 }  // namespace d05

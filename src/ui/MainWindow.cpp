@@ -4,6 +4,7 @@
 #include "core/Library.h"
 #include "core/PatchCatalog.h"
 #include "core/SearchQuery.h"
+#include "midi/MidiBackend.h"
 #include "midi/MidiLink.h"
 #include "ui/BankGrid.h"
 #include "ui/DisplayWidget.h"
@@ -18,6 +19,7 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QButtonGroup>
+#include <QCloseEvent>
 #include <QEvent>
 #include <QFontMetrics>
 #include <QFrame>
@@ -31,6 +33,7 @@
 #include <QPushButton>
 #include <QPainter>
 #include <QScrollBar>
+#include <QSignalBlocker>
 #include <QStatusBar>
 #include <QStyle>
 
@@ -243,7 +246,11 @@ MainWindow::MainWindow(PatchCatalog &catalog, Library &library, MidiLink &link, 
     m_search->setFocus();
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow()
+{
+    if (!m_firstShow)  // shown at least once: remember where it was (Ctrl+Q skips closeEvent on some platforms)
+        saveGeometryNow();
+}
 
 void MainWindow::buildWidgets()
 {
@@ -278,6 +285,7 @@ void MainWindow::buildWidgets()
 
     m_autoSend = new PanelButton(PanelButton::Kind::Led, m_central);
     m_autoSend->setObjectName(QStringLiteral("autoSendButton"));
+    m_autoSend->setCheckable(true);  // the LED follows the checked state (DESIGN 6.5)
     m_system = new PanelButton(PanelButton::Kind::Plain, m_central);
     m_system->setObjectName(QStringLiteral("systemButton"));
 
@@ -349,7 +357,8 @@ void MainWindow::buildWidgets()
         if (on)
             onViewToggled();
     });
-    connect(m_autoSend, &QAbstractButton::clicked, this, [this] { notAvailable(QStringLiteral("Auto-send")); });
+    connect(m_autoSend, &QAbstractButton::toggled, this, [this](bool on) { setAutoSend(on); });
+    connect(m_list, &PatchListView::highlightMovedByKey, this, &MainWindow::onHighlightMovedByKey);
     connect(m_system, &QAbstractButton::clicked, this, &MainWindow::popupSystemMenu);
 
     connect(m_groupBar, &GroupBar::groupPressed, this, [this](int group) {
@@ -360,11 +369,8 @@ void MainWindow::buildWidgets()
     connect(m_grid, &BankGrid::entryChanged, this, &MainWindow::onEntryChanged);
 
     connect(&m_link, &MidiLink::sent, this, &MainWindow::onSent);
-    connect(&m_link, &MidiLink::currentChanged, this, &MainWindow::applyCurrent);
-    connect(&m_link, &MidiLink::connectedChanged, this, [this](bool) {
-        updateDisplayConnection();
-        refreshConnection();
-    });
+    connect(&m_link, &MidiLink::currentChanged, this, &MainWindow::onFollowed);
+    connect(&m_link, &MidiLink::connectedChanged, this, &MainWindow::onConnectedChanged);
     connect(&m_link, &MidiLink::statusChanged, this, [this](const QString &status) {
         if (status.startsWith(QStringLiteral("Error")))
             showMessage(status);
@@ -413,14 +419,15 @@ void MainWindow::buildActions()
     make(QStringLiteral("actionRename"), QStringLiteral("Rename"), QKeySequence(Qt::Key_F2), [this] { renameHighlighted(); })
         ->setAutoRepeat(false);
     make(QStringLiteral("actionAutoSend"), QStringLiteral("Auto-send"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A),
-         [this] { notAvailable(QStringLiteral("Auto-send")); });
+         [this] { setAutoSend(!m_autoSendOn); })
+        ->setAutoRepeat(false);
 
     // The system menu (DESIGN 8.2). The actions carry their shortcuts, so they are the
     // window's shortcuts for Settings, the sheet and Quit.
     m_systemMenu = new QMenu(this);
     m_systemMenu->setObjectName(QStringLiteral("systemMenu"));
     auto *settings = make(QStringLiteral("actionSettings"), QStringLiteral("Settings..."),
-                          QKeySequence(Qt::CTRL | Qt::Key_Comma), [this] { notAvailable(QStringLiteral("Settings")); });
+                          QKeySequence(Qt::CTRL | Qt::Key_Comma), [this] { openSettings(); });
     auto *sheet = make(QStringLiteral("actionShortcuts"), QStringLiteral("Keyboard Shortcuts"), QKeySequence(Qt::Key_F1),
                        [this] { notAvailable(QStringLiteral("The shortcut sheet")); });
     auto *clear = make(QStringLiteral("actionClearRecents"), QStringLiteral("Clear Recents..."), QKeySequence(),
@@ -554,10 +561,25 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *e)
         if (w && w->window() == this && w != m_grid && !m_grid->isAncestorOf(w))
             m_grid->cancelEntry();
     } else if (watched == m_search && e->type() == QEvent::KeyPress) {
-        const int key = static_cast<QKeyEvent *>(e)->key();
-        if (key == Qt::Key_Up || key == Qt::Key_Down) {
-            moveHighlight(key == Qt::Key_Up ? -1 : 1);
+        const auto *ke = static_cast<QKeyEvent *>(e);
+        if (ke->key() == Qt::Key_Up || ke->key() == Qt::Key_Down) {
+            const std::optional<PatchAddress> before = highlighted();
+            moveHighlight(ke->key() == Qt::Key_Up ? -1 : 1);
+            if (m_autoSendOn && highlighted() != before) {
+                // As in the list: a held key reports only its first step and, on release, its last.
+                if (ke->isAutoRepeat())
+                    m_searchRepeatMoved = true;
+                else
+                    sendHighlighted();
+            }
             return true;
+        }
+    } else if (watched == m_search && e->type() == QEvent::KeyRelease) {
+        const auto *ke = static_cast<QKeyEvent *>(e);
+        if (m_searchRepeatMoved && !ke->isAutoRepeat() && (ke->key() == Qt::Key_Up || ke->key() == Qt::Key_Down)) {
+            m_searchRepeatMoved = false;
+            if (m_autoSendOn)
+                sendHighlighted();
         }
     }
     return QMainWindow::eventFilter(watched, e);
@@ -599,6 +621,19 @@ void MainWindow::onSent(const PatchAddress &address)
     m_library.recordSend(address);
     applyCurrent(address);
     m_display->flashSent();
+    if (m_settings)
+        m_settings->setLastPatch(address);
+}
+
+// An incoming Bank Select / Program Change moved the current patch (follow, FR-11): every
+// view follows, the activity LED blinks, and nothing is sent, so auto-send cannot fire.
+void MainWindow::onFollowed(const PatchAddress &address)
+{
+    finishEditing();
+    applyCurrent(address);
+    m_display->flashActivity();
+    if (m_settings)
+        m_settings->setLastPatch(address);
 }
 
 // The current patch changed (sent, followed or restored): every view of it follows.
@@ -894,6 +929,45 @@ QString MainWindow::message() const
     return static_cast<StatusStrip *>(m_statusStrip)->fullMessage;
 }
 
+void MainWindow::onHighlightMovedByKey()
+{
+    if (m_autoSendOn)
+        sendHighlighted();
+}
+
+void MainWindow::onConnectedChanged(bool connected)
+{
+    updateDisplayConnection();
+    refreshConnection();
+    if (connected)
+        noteConnected();
+}
+
+void MainWindow::noteConnected()
+{
+    if (m_settingsOpen)
+        m_connectPending = true;  // decided when the dialog closes
+    else if (m_resendOnConnect)
+        resendCurrent();
+}
+
+// Opens `port` as the output. MidiLink only signals a change of connected state, but moving
+// from one open port to another is a connect too (resend-on-connect), so it is noted here.
+void MainWindow::setOutput(const QString &port)
+{
+    const bool was = m_link.isConnected();
+    const QString before = MidiLink::portKey(m_link.connectedPortName());
+    m_link.setOutputPort(port);
+    if (was && m_link.isConnected() && MidiLink::portKey(m_link.connectedPortName()) != before)
+        noteConnected();
+}
+
+// Resend-on-connect: the output (re)connected, so tell the synth what the app shows, once.
+void MainWindow::resendCurrent()
+{
+    sendAddress(m_current);
+}
+
 void MainWindow::notAvailable(const QString &what)
 {
     showMessage(what + QStringLiteral(" is not available yet"));
@@ -908,4 +982,142 @@ void MainWindow::popupSystemMenu()
     m_systemMenu->popup(QPoint(faceBottomRight.x() - w, faceBottomRight.y()));
 }
 
+// ---------------------------------------------------------------------------- settings
+
+void MainWindow::setServices(AppSettings *settings, MidiBackend *backend)
+{
+    m_settings = settings;
+    m_backend = backend;
+}
+
+AppSettings::Values MainWindow::currentSettings() const
+{
+    AppSettings::Values v;
+    v.outputPort = m_link.isConnected() ? m_link.connectedPortKey() : MidiLink::portKey(m_link.outputPortName());
+    v.inputPort = m_inputLabel;
+    v.channel = m_link.channel();
+    v.autoSend = m_autoSendOn;
+    v.follow = m_link.followEnabled();
+    v.resendOnConnect = m_resendOnConnect;
+    return v;
+}
+
+bool MainWindow::sameOutput(const QString &port) const
+{
+    return m_link.isConnected() && !port.isEmpty()
+           && MidiLink::portKey(m_link.connectedPortName()).compare(MidiLink::portKey(port), Qt::CaseInsensitive) == 0;
+}
+
+// Order matters for resend-on-connect: the flag and the channel are in place before the
+// output opens, so the connect that this call causes resends on the new channel.
+void MainWindow::applySettings(const AppSettings::Values &v)
+{
+    m_resendOnConnect = v.resendOnConnect;
+    setAutoSend(v.autoSend, false);
+    m_link.setChannel(v.channel);
+    m_inputLabel = MidiLink::portKey(v.inputPort);
+    m_link.setInputPort(v.inputPort);
+    m_link.setFollowEnabled(v.follow);
+    if (!sameOutput(v.outputPort))
+        setOutput(v.outputPort);
+    refreshConnection();
+}
+
+void MainWindow::setAutoSend(bool on)
+{
+    setAutoSend(on, true);
+}
+
+void MainWindow::setAutoSend(bool on, bool persist)
+{
+    if (on == m_autoSendOn)
+        return;
+    m_autoSendOn = on;
+    {
+        QSignalBlocker block(m_autoSend);  // the toggle may be what called us
+        m_autoSend->setChecked(on);
+    }
+    if (persist && m_settings)
+        m_settings->setAutoSend(on);
+}
+
+void MainWindow::openSettings()
+{
+    if (!m_settings || !m_backend) {
+        notAvailable(QStringLiteral("Settings"));
+        return;
+    }
+    if (m_settingsDialog) {
+        m_settingsDialog->raise();
+        m_settingsDialog->activateWindow();
+        return;
+    }
+    m_snapshot = currentSettings();
+    m_settingsOpen = true;
+    m_trialApplied = false;
+    m_connectPending = false;
+    m_testedTarget.clear();
+    auto *dialog = new SettingsDialog(*m_backend, m_link, m_snapshot, this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dialog, &SettingsDialog::testRequested, this, &MainWindow::onSettingsTest);
+    connect(dialog, &QDialog::accepted, this, [this, dialog] { onSettingsAccepted(dialog); });
+    connect(dialog, &QDialog::rejected, this, &MainWindow::onSettingsRejected);
+    m_settingsDialog = dialog;
+    dialog->open();
+}
+
+// TEST sends the current patch with the dialog's pending port and channel. That needs the
+// link to use them, so the live port and channel change here; Cancel puts them back.
+void MainWindow::onSettingsTest(const AppSettings::Values &v)
+{
+    m_trialApplied = true;
+    m_link.setChannel(v.channel);
+    if (!sameOutput(v.outputPort))
+        setOutput(v.outputPort);
+    m_testedTarget = MidiLink::portKey(m_link.connectedPortName()) + QLatin1Char('/') + QString::number(v.channel);
+    refreshConnection();
+    sendAddress(m_current);
+}
+
+void MainWindow::onSettingsAccepted(SettingsDialog *dialog)
+{
+    const AppSettings::Values v = dialog->values();
+    const bool tested = dialog->testPressed();
+    applySettings(v);  // the dialog is still counted as open: a connect it causes is only noted
+    m_settings->setValues(v);
+    m_settingsOpen = false;
+    const QString target = MidiLink::portKey(m_link.connectedPortName()) + QLatin1Char('/') + QString::number(v.channel);
+    // A TEST to this very port and channel has just put the patch on the synth.
+    const bool justTested = tested && target == m_testedTarget;
+    if (m_connectPending && m_resendOnConnect && m_link.isConnected() && !justTested)
+        resendCurrent();
+    m_connectPending = false;
+}
+
+void MainWindow::onSettingsRejected()
+{
+    if (m_trialApplied) {
+        m_link.setChannel(m_snapshot.channel);
+        if (!sameOutput(m_snapshot.outputPort))
+            setOutput(m_snapshot.outputPort);
+        refreshConnection();
+    }
+    m_trialApplied = false;
+    m_settingsOpen = false;
+    m_connectPending = false;
+}
+
+void MainWindow::saveGeometryNow()
+{
+    if (m_settings)
+        m_settings->setWindowGeometry(saveGeometry());
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    saveGeometryNow();
+    QMainWindow::closeEvent(event);
+}
+
 }  // namespace d05
+

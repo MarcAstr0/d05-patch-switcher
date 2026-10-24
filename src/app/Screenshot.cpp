@@ -10,6 +10,7 @@
 #include "ui/MainWindow.h"
 #include "ui/PanelButton.h"
 #include "ui/PatchListView.h"
+#include "ui/SettingsDialog.h"
 
 #include <QApplication>
 #include <QLineEdit>
@@ -94,7 +95,25 @@ int runScreenshot(const CliOptions &opts)
     } else if (disconnected) {
         window.list()->setFocus();  // the mockup's second frame has the list focused
     }
-    // "settings" has no dialog yet (T3.4): the main window renders as the default state.
+
+    if (state == QLatin1String("settings")) {
+        // The dialog alone, as in docs/design/mockup-settings.png: the fake output open, no
+        // input, channel 1, resend-on-connect on.
+        AppSettings::Values values;
+        values.outputPort = QStringLiteral("Fake D-05 In");
+        values.resendOnConnect = true;
+        SettingsDialog dialog(backend, link, values);
+        dialog.show();
+        dialog.activateWindow();
+        QApplication::processEvents();
+        const QPixmap shot = dialog.grab();
+        if (!shot.save(opts.screenshotFile, "PNG")) {
+            err << "cannot write " << opts.screenshotFile << Qt::endl;
+            return 1;
+        }
+        library.flush();
+        return Exit::Ok;
+    }
 
     window.show();
     window.activateWindow();

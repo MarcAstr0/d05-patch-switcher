@@ -560,9 +560,14 @@ private slots:
         QTest::keyClick(w.searchField(), Qt::Key_Escape);
         QVERIFY(w.list()->hasFocus());
 
-        // Ctrl+Shift+A, Ctrl+, and F1 are stubs until T3.4 / M5: they say so, send nothing.
+        // Ctrl+Shift+A toggles auto-send (T3.4; tests/test_settings_ui.cpp covers it in depth).
+        // Ctrl+, needs the settings services this rig does not attach, and F1 is a stub until
+        // M5: they say so. None of them sends.
+        QVERIFY(!w.autoSend());
         QTest::keyClick(w.list(), Qt::Key_A, Qt::ControlModifier | Qt::ShiftModifier);
-        QVERIFY(w.message().contains(QStringLiteral("Auto-send")));
+        QVERIFY(w.autoSend());
+        QTest::keyClick(w.list(), Qt::Key_A, Qt::ControlModifier | Qt::ShiftModifier);
+        QVERIFY(!w.autoSend());
         QTest::keyClick(w.list(), Qt::Key_Comma, Qt::ControlModifier);
         QVERIFY(w.message().contains(QStringLiteral("Settings")));
         QTest::keyClick(w.list(), Qt::Key_F1);

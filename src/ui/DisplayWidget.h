@@ -61,6 +61,10 @@ public:
     // Shows SENT on line 2 for 400 ms (single-shot timer). Restarts if already on.
     void flashSent();
     bool sentActive() const { return m_sent; }
+    // Lights the status-bar activity LED for the same 400 ms (an incoming follow message,
+    // DESIGN 8.1) without touching line 2. Shares the one single-shot timer.
+    void flashActivity();
+    bool activityActive() const { return m_sent || m_activity; }
 
     // The two lines as stored: always 40 characters each.
     QString line1() const { return m_text[0]; }
@@ -99,8 +103,8 @@ public:
     QSize sizeHint() const override { return size(); }
 
 signals:
-    // Emitted when the SENT flash starts (true) and ends (false); the status bar
-    // activity LED follows it.
+    // Emitted when the SENT flash or an activity flash starts (true) and ends (false);
+    // the status bar activity LED follows it.
     void sentChanged(bool on);
 
 protected:
@@ -132,6 +136,7 @@ private:
     int m_matchCount = 0;
     QString m_entry;
     bool m_sent = false;
+    bool m_activity = false;
     QTimer m_sentTimer;
 
     QString m_text[Lines];

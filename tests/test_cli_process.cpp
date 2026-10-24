@@ -1,6 +1,7 @@
 // Runs the built binary with no display and no Qt platform plugin configured.
 #include <QDir>
 #include <QFileInfo>
+#include <QFile>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QTemporaryDir>
@@ -70,6 +71,30 @@ private slots:
         QVERIFY2(QString(r.out).replace(QStringLiteral("\r\n"), QStringLiteral("\n")) == QStringLiteral("B0 00 57\nB0 20 0A\nC0 1C\n"),
                  qPrintable(r.describe()));
         QVERIFY(QDir(tmp.path()).isEmpty());
+    }
+
+    // The real binary reads settings.ini from --config-dir: the saved channel applies to
+    // --send, and --channel still beats it.
+    void sendUsesTheSavedChannel()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QFile ini(tmp.filePath(QStringLiteral("settings.ini")));
+        QVERIFY(ini.open(QIODevice::WriteOnly));
+        ini.write("[midi]\nchannel=10\n");
+        ini.close();
+        Result r = run({QStringLiteral("--fake-midi"), QStringLiteral("--send"), QStringLiteral("P3-45"),
+                        QStringLiteral("--config-dir"), tmp.path()});
+        QVERIFY2(!r.crashed && r.code == 0, qPrintable(r.describe()));
+        QVERIFY2(QString(r.out).replace(QStringLiteral("\r\n"), QStringLiteral("\n"))
+                     == QStringLiteral("B9 00 57\nB9 20 0A\nC9 1C\n"),
+                 qPrintable(r.describe()));
+        r = run({QStringLiteral("--fake-midi"), QStringLiteral("--channel"), QStringLiteral("1"),
+                 QStringLiteral("--send"), QStringLiteral("P3-45"), QStringLiteral("--config-dir"), tmp.path()});
+        QVERIFY2(QString(r.out).startsWith(QStringLiteral("B0 00 57")), qPrintable(r.describe()));
+        // Reading the settings did not rewrite them.
+        QVERIFY(ini.open(QIODevice::ReadOnly));
+        QCOMPARE(ini.readAll(), QByteArray("[midi]\nchannel=10\n"));
     }
 
     void screenshotWithNoDisplayEnvironment()

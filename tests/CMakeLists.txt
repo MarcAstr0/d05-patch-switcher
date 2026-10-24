@@ -37,3 +37,7 @@ endif()
 
 d05_add_test(test_library_views test_library_views.cpp)
 target_link_libraries(test_library_views PRIVATE d05ui Qt6::Widgets)
+
+d05_add_test(test_app_settings test_app_settings.cpp)
+d05_add_test(test_settings_ui test_settings_ui.cpp)
+target_link_libraries(test_settings_ui PRIVATE d05ui Qt6::Widgets)

@@ -1,0 +1,863 @@
+// T3.4: the Settings dialog, auto-send, follow-the-panel, resend-on-connect and the
+// disconnected display, on the fake MIDI backend, headless, with a temporary config dir.
+#include "app/AppSettings.h"
+#include "app/Cli.h"
+#include "app/Paths.h"
+#include "app/Screenshot.h"
+#include "core/Library.h"
+#include "core/PatchCatalog.h"
+#include "midi/FakeMidiBackend.h"
+#include "midi/MidiLink.h"
+#include "ui/DisplayWidget.h"
+#include "ui/MainWindow.h"
+#include "ui/PanelButton.h"
+#include "ui/PatchListView.h"
+#include "ui/SettingsDialog.h"
+#include "ui/Theme.h"
+
+#include <QAction>
+#include <QApplication>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QFile>
+#include <QImage>
+#include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QSpinBox>
+#include <QTemporaryDir>
+#include <QTest>
+
+#include <memory>
+
+using namespace d05;
+
+namespace {
+
+PatchAddress addr(const char *t)
+{
+    return *PatchAddress::parse(QString::fromLatin1(t));
+}
+
+const QString kOut = QStringLiteral("Fake D-05 In");
+const QString kIn = QStringLiteral("Fake D-05 Out");
+
+AppSettings::Values values(const QString &out, int channel = 1)
+{
+    AppSettings::Values v;
+    v.outputPort = out;
+    v.channel = channel;
+    return v;
+}
+
+struct Rig {
+    QTemporaryDir dir;
+    QString iniPath;
+    PatchCatalog catalog;
+    std::unique_ptr<Library> library;
+    FakeMidiBackend backend;
+    std::unique_ptr<MidiLink> link;
+    std::unique_ptr<AppSettings> settings;
+    std::unique_ptr<MainWindow> w;
+
+    // Starts the way main.cpp does: window first, then the values take effect.
+    explicit Rig(const AppSettings::Values &start = values(kOut))
+    {
+        Paths::setOverride(dir.path());
+        iniPath = dir.filePath(QStringLiteral("settings.ini"));
+        library = std::make_unique<Library>(catalog, dir.filePath(QStringLiteral("library.json")));
+        link = std::make_unique<MidiLink>(&backend);
+        settings = std::make_unique<AppSettings>(iniPath);
+        w = std::make_unique<MainWindow>(catalog, *library, *link);
+        w->setServices(settings.get(), &backend);
+        w->applySettings(start);
+    }
+    ~Rig()
+    {
+        w.reset();
+        settings.reset();
+        link.reset();
+        library.reset();
+        Paths::setOverride(QString());
+    }
+
+    bool show()
+    {
+        w->show();
+        w->activateWindow();
+        return QTest::qWaitForWindowActive(w.get());
+    }
+    const QList<QByteArray> &sent() const { return backend.sentMessages(); }
+    AppSettings::Values saved() const { return AppSettings(iniPath).values(); }
+
+    SettingsDialog *openDialog()
+    {
+        w->openSettings();
+        return w->settingsDialog();
+    }
+    // Moves the highlight like the keyboard does and lets queued events run.
+    void key(QWidget *target, Qt::Key k) { QTest::keyClick(target, k); }
+    void inject(std::initializer_list<int> bytes)
+    {
+        QByteArray b;
+        for (int v : bytes)
+            b.append(char(v));
+        backend.injectReceived(b);
+        QCoreApplication::processEvents();
+    }
+    void injectPatch(int lsb, int program)
+    {
+        inject({0xB0, 0x00, 87});
+        inject({0xB0, 0x20, lsb});
+        inject({0xC0, program});
+    }
+};
+
+}  // namespace
+
+class TestSettingsUi : public QObject {
+    Q_OBJECT
+private slots:
+    void initTestCase() { Theme::install(*qobject_cast<QApplication *>(qApp)); }
+
+    // ------------------------------------------------------------------ dialog
+
+    void dialogMatchesTheDesign()
+    {
+        Rig r;
+        SettingsDialog *d = r.openDialog();
+        QVERIFY(d);
+        QCOMPARE(d->windowTitle(), QStringLiteral("Settings"));
+        QCOMPARE(d->size(), QSize(520, 436));
+        QVERIFY(QTest::qWaitForWindowExposed(d));  // the style sheet is applied by now
+        QCOMPARE(d->outputCombo()->geometry(), QRect(132, 40, 260, 26));
+        QCOMPARE(d->refreshButton()->geometry(), QRect(400, 40, 100, 26));
+        QCOMPARE(d->channelSpin()->geometry(), QRect(132, 74, 72, 26));
+        QCOMPARE(d->inputCombo()->geometry(), QRect(132, 164, 260, 26));
+        QCOMPARE(d->testButton()->geometry(), QRect(20, 388, 100, 28));
+        QCOMPARE(d->okButton()->geometry(), QRect(400, 388, 100, 28));
+        QCOMPARE(d->cancelButton()->geometry(), QRect(292, 388, 100, 28));
+        QCOMPARE(d->channelSpin()->minimum(), 1);
+        QCOMPARE(d->channelSpin()->maximum(), 16);
+        QVERIFY(d->okButton()->isDefault());
+        QVERIFY(!d->cancelButton()->isDefault());
+        QVERIFY(d->isModal());
+        QCOMPARE(d->inputCombo()->itemText(0), QStringLiteral("None"));
+        QCOMPARE(d->connectionText(), QStringLiteral("Connected to Fake D-05 In"));
+        QCOMPARE(d->connectionState(), QStringLiteral("ok"));
+        d->reject();
+    }
+
+    void dialogHasInitialFocusOnTheOutputCombo()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        SettingsDialog *d = r.openDialog();
+        QVERIFY(QTest::qWaitForWindowExposed(d));
+        // The dialog's own focus child (the offscreen platform may leave the main window active).
+        QCOMPARE(d->focusWidget(), static_cast<QWidget *>(d->outputCombo()));
+        d->reject();
+    }
+
+    void dialogShowsTheValuesInEffect()
+    {
+        AppSettings::Values v = values(kOut, 5);
+        v.inputPort = kIn;
+        v.follow = true;
+        v.autoSend = true;
+        v.resendOnConnect = true;
+        Rig r(v);
+        SettingsDialog *d = r.openDialog();
+        QCOMPARE(d->values(), v);
+        QCOMPARE(d->channelSpin()->value(), 5);
+        QVERIFY(d->followCheck()->isChecked());
+        QVERIFY(d->followCheck()->isEnabled());
+        QVERIFY(d->autoSendCheck()->isChecked());
+        QVERIFY(d->resendCheck()->isChecked());
+        d->reject();
+    }
+
+    void followIsDisabledWithoutAnInputPort()
+    {
+        Rig r;
+        SettingsDialog *d = r.openDialog();
+        QCOMPARE(d->inputCombo()->currentData().toString(), QString());
+        QVERIFY(!d->followCheck()->isEnabled());
+        d->inputCombo()->setCurrentIndex(1);  // Fake D-05 Out
+        QVERIFY(d->followCheck()->isEnabled());
+        d->inputCombo()->setCurrentIndex(0);  // None
+        QVERIFY(!d->followCheck()->isEnabled());
+        d->reject();
+    }
+
+    void okAppliesAndPersists()
+    {
+        Rig r;
+        SettingsDialog *d = r.openDialog();
+        d->channelSpin()->setValue(5);
+        d->inputCombo()->setCurrentIndex(1);
+        d->followCheck()->setChecked(true);
+        d->autoSendCheck()->setChecked(true);
+        d->resendCheck()->setChecked(true);
+        QVERIFY(!QFile::exists(r.iniPath));  // nothing is written before OK
+        QTest::mouseClick(d->okButton(), Qt::LeftButton);
+        QTRY_VERIFY(!r.w->settingsDialog());
+
+        QCOMPARE(r.link->channel(), 5);
+        QVERIFY(r.link->followEnabled());
+        QVERIFY(r.w->autoSend());
+        QVERIFY(r.w->resendOnConnect());
+        QVERIFY(r.w->autoSendButton()->lit());
+        QVERIFY(r.backend.isInputOpen());
+        const AppSettings::Values saved = r.saved();
+        QCOMPARE(saved.channel, 5);
+        QCOMPARE(saved.outputPort, kOut);
+        QCOMPARE(saved.inputPort, kIn);
+        QVERIFY(saved.follow && saved.autoSend && saved.resendOnConnect);
+        QVERIFY(r.sent().isEmpty());  // same port, nothing reconnected, nothing sent
+    }
+
+    void cancelRevertsEverything()
+    {
+        Rig r;
+        r.backend.setOutputPorts({kOut, QStringLiteral("Other Out")}, false);
+        SettingsDialog *d = r.openDialog();
+        d->channelSpin()->setValue(9);
+        d->outputCombo()->setCurrentIndex(d->outputCombo()->findText(QStringLiteral("Other Out")));
+        d->autoSendCheck()->setChecked(true);
+        d->inputCombo()->setCurrentIndex(1);
+        d->followCheck()->setChecked(true);
+        QTest::mouseClick(d->testButton(), Qt::LeftButton);  // the one thing that touches the live link
+        QCOMPARE(r.link->channel(), 9);
+        QCOMPARE(r.link->connectedPortKey(), QStringLiteral("Other Out"));
+        QTest::mouseClick(d->cancelButton(), Qt::LeftButton);
+        QTRY_VERIFY(!r.w->settingsDialog());
+
+        QCOMPARE(r.link->channel(), 1);
+        QCOMPARE(r.link->connectedPortKey(), kOut);
+        QVERIFY(r.link->isConnected());
+        QVERIFY(!r.w->autoSend());
+        QVERIFY(!r.link->followEnabled());
+        QVERIFY(!r.backend.isInputOpen());
+        // Nothing but the remembered patch (TEST sent it) reached the file.
+        QCOMPARE(r.saved(), AppSettings::Values{});
+        QCOMPARE(r.sent().size(), 3);  // the TEST only
+    }
+
+    void escapeIsCancel()
+    {
+        Rig r;
+        SettingsDialog *d = r.openDialog();
+        d->channelSpin()->setValue(12);
+        QTest::keyClick(d, Qt::Key_Escape);
+        QTRY_VERIFY(!r.w->settingsDialog());
+        QCOMPARE(r.link->channel(), 1);
+        QVERIFY(!QFile::exists(r.iniPath));
+    }
+
+    void cancelWithoutTestChangesNothing()
+    {
+        Rig r;
+        r.backend.setOutputPorts({kOut, QStringLiteral("Other Out")}, false);
+        SettingsDialog *d = r.openDialog();
+        d->outputCombo()->setCurrentIndex(d->outputCombo()->findText(QStringLiteral("Other Out")));
+        QCOMPARE(d->connectionText(), QStringLiteral("Connected to Other Out"));  // preview only
+        QCOMPARE(r.link->connectedPortKey(), kOut);                                // the link was not touched
+        QCOMPARE(r.backend.openOutputName(), kOut);
+        d->reject();
+        QCOMPARE(r.link->connectedPortKey(), kOut);
+    }
+
+    void testSendsExactlyOnceOnThePendingChannel()
+    {
+        Rig r;
+        r.w->setCurrent(addr("P3-45"));
+        SettingsDialog *d = r.openDialog();
+        QVERIFY(d->testButton()->isEnabled());
+        d->channelSpin()->setValue(7);
+        QTest::mouseClick(d->testButton(), Qt::LeftButton);
+        QCOMPARE(r.sent(), MidiLink::patchMessages(addr("P3-45"), 7));
+        QVERIFY(d->testPressed());
+        d->reject();
+        QCOMPARE(r.sent().size(), 3);
+    }
+
+    void testIsDisabledWhileThePortIsMissing()
+    {
+        Rig r(values(QStringLiteral("Not There")));
+        SettingsDialog *d = r.openDialog();
+        QCOMPARE(d->connectionText(), QStringLiteral("Port not found"));
+        QCOMPARE(d->connectionState(), QStringLiteral("error"));
+        QVERIFY(!d->testButton()->isEnabled());
+        // The configured port stays visible so OK does not forget it.
+        QCOMPARE(d->outputCombo()->currentText(), QStringLiteral("Not There"));
+        QCOMPARE(d->values().outputPort, QStringLiteral("Not There"));
+        d->reject();
+        QVERIFY(r.sent().isEmpty());
+    }
+
+    void connectionLineReportsAListingError()
+    {
+        Rig r;
+        r.backend.setListError(QStringLiteral("boom"));
+        SettingsDialog *d = r.openDialog();
+        QCOMPARE(d->connectionText(), QStringLiteral("Error: boom"));
+        QCOMPARE(d->connectionState(), QStringLiteral("error"));
+        QVERIFY(!d->testButton()->isEnabled());
+        r.backend.setListError(QString());
+        QTest::mouseClick(d->refreshButton(), Qt::LeftButton);
+        QCOMPARE(d->connectionText(), QStringLiteral("Connected to Fake D-05 In"));
+        QVERIFY(d->testButton()->isEnabled());
+        d->reject();
+    }
+
+    void connectionLineReportsAnOpenError()
+    {
+        Rig r(values(kOut));
+        r.backend.setFailOpen(true);
+        r.link->setOutputPort(kOut);  // reconnect: the open now fails
+        QVERIFY(!r.link->isConnected());
+        SettingsDialog *d = r.openDialog();
+        QCOMPARE(d->connectionText(), QStringLiteral("Error: open failed"));
+        d->reject();
+    }
+
+    void refreshPicksUpNewPortsAndKeepsTheSelection()
+    {
+        Rig r;
+        SettingsDialog *d = r.openDialog();
+        QCOMPARE(d->outputCombo()->count(), 1);
+        r.backend.setOutputPorts({QStringLiteral("Aardvark"), kOut}, false);
+        QTest::mouseClick(d->refreshButton(), Qt::LeftButton);
+        QCOMPARE(d->outputCombo()->count(), 2);
+        QCOMPARE(d->outputCombo()->currentText(), kOut);
+        d->reject();
+    }
+
+    void portsAreOfferedAndSavedAsKeys()
+    {
+        Rig r;
+        r.backend.setOutputPorts({QStringLiteral("Boutique:Boutique MIDI 1 24:0"), kOut}, false);
+        SettingsDialog *d = r.openDialog();
+        const int i = d->outputCombo()->findText(QStringLiteral("Boutique:Boutique MIDI 1"));
+        QVERIFY(i >= 0);
+        d->outputCombo()->setCurrentIndex(i);
+        QCOMPARE(d->values().outputPort, QStringLiteral("Boutique:Boutique MIDI 1"));
+        QTest::mouseClick(d->okButton(), Qt::LeftButton);
+        QTRY_VERIFY(!r.w->settingsDialog());
+        QCOMPARE(r.saved().outputPort, QStringLiteral("Boutique:Boutique MIDI 1"));
+        QVERIFY(r.link->isConnected());
+        QCOMPARE(r.link->connectedPortName(), QStringLiteral("Boutique:Boutique MIDI 1 24:0"));
+    }
+
+    void settingsActionOpensTheDialog()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        QVERIFY(!r.w->settingsDialog());
+        r.w->action(QStringLiteral("actionSettings"))->trigger();
+        QVERIFY(r.w->settingsDialog());
+        r.w->action(QStringLiteral("actionSettings"))->trigger();  // not a second one
+        QCOMPARE(r.w->findChildren<SettingsDialog *>().size(), 1);
+        r.w->settingsDialog()->reject();
+        QTRY_VERIFY(!r.w->settingsDialog());
+    }
+
+    void withoutServicesTheActionSaysSo()
+    {
+        QTemporaryDir dir;
+        Paths::setOverride(dir.path());
+        PatchCatalog catalog;
+        Library lib(catalog, dir.filePath(QStringLiteral("library.json")));
+        FakeMidiBackend backend;
+        MidiLink link(&backend);
+        MainWindow w(catalog, lib, link);
+        w.openSettings();
+        QVERIFY(!w.settingsDialog());
+        QVERIFY(w.message().contains(QStringLiteral("not available")));
+        Paths::setOverride(QString());
+    }
+
+    void settingsScreenshotRenders()
+    {
+        QTemporaryDir out;
+        QVERIFY(out.isValid());
+        CliOptions o;
+        o.screenshotFile = out.filePath(QStringLiteral("settings.png"));
+        o.screenshotState = QStringLiteral("settings");
+        o.configDir = out.path();
+        QCOMPARE(runScreenshot(o), 0);
+        QImage img;
+        QVERIFY(img.load(o.screenshotFile));
+        const qreal dpr = qApp->devicePixelRatio();
+        QCOMPARE(img.width(), int(520 * dpr));
+        QCOMPARE(img.height(), int(436 * dpr));
+        Paths::setOverride(QString());
+    }
+
+    // ------------------------------------------------------------------ resend on connect
+
+    void resendOnConnectSendsOnceWhenThePortReturns()
+    {
+        AppSettings::Values v = values(kOut);
+        v.resendOnConnect = true;
+        Rig r(v);
+        QCOMPARE(r.sent().size(), 3);  // the start-up connect: the current patch, once
+        QCOMPARE(r.sent(), MidiLink::patchMessages(addr("P1-11"), 1));
+        r.w->setCurrent(addr("P2-33"));
+        r.backend.clearSent();
+
+        r.backend.setOutputPorts({});  // unplugged
+        QVERIFY(!r.link->isConnected());
+        QVERIFY(r.link->isPolling());
+        QVERIFY(r.sent().isEmpty());
+        r.backend.setOutputPorts({kOut});  // plugged back in
+        r.link->pollNow();
+        QVERIFY(r.link->isConnected());
+        QCOMPARE(r.sent(), MidiLink::patchMessages(addr("P2-33"), 1));
+        r.link->pollNow();  // connected now: nothing more
+        QCOMPARE(r.sent().size(), 3);
+        QVERIFY(!r.link->isPolling());
+    }
+
+    void noResendWhenTheOptionIsOff()
+    {
+        Rig r;
+        r.backend.setOutputPorts({});
+        r.backend.setOutputPorts({kOut});
+        r.link->pollNow();
+        QVERIFY(r.link->isConnected());
+        QVERIFY(r.sent().isEmpty());
+    }
+
+    void resendUsesTheRestoredPatchAtStartup()
+    {
+        QTemporaryDir dir;
+        Paths::setOverride(dir.path());
+        PatchCatalog catalog;
+        Library lib(catalog, dir.filePath(QStringLiteral("library.json")));
+        FakeMidiBackend backend;
+        MidiLink link(&backend);
+        AppSettings settings(dir.filePath(QStringLiteral("settings.ini")));
+        MainWindow w(catalog, lib, link);
+        w.setServices(&settings, &backend);
+        w.setCurrent(addr("U4-72"));  // as main.cpp restores the last patch: no send
+        QVERIFY(backend.sentMessages().isEmpty());
+        AppSettings::Values v = values(kOut);
+        v.resendOnConnect = true;
+        w.applySettings(v);
+        QCOMPARE(backend.sentMessages(), MidiLink::patchMessages(addr("U4-72"), 1));
+        Paths::setOverride(QString());
+    }
+
+    void okWithAChangedPortResendsOnce()
+    {
+        Rig r;
+        r.backend.setOutputPorts({kOut, QStringLiteral("Other Out")}, false);
+        SettingsDialog *d = r.openDialog();
+        d->resendCheck()->setChecked(true);
+        d->outputCombo()->setCurrentIndex(d->outputCombo()->findText(QStringLiteral("Other Out")));
+        QTest::mouseClick(d->okButton(), Qt::LeftButton);
+        QTRY_VERIFY(!r.w->settingsDialog());
+        QCOMPARE(r.link->connectedPortKey(), QStringLiteral("Other Out"));
+        QCOMPARE(r.sent(), MidiLink::patchMessages(addr("P1-11"), 1));
+    }
+
+    void testThenOkDoesNotSendTwice()
+    {
+        Rig r;
+        r.backend.setOutputPorts({kOut, QStringLiteral("Other Out")}, false);
+        SettingsDialog *d = r.openDialog();
+        d->resendCheck()->setChecked(true);
+        d->outputCombo()->setCurrentIndex(d->outputCombo()->findText(QStringLiteral("Other Out")));
+        QTest::mouseClick(d->testButton(), Qt::LeftButton);
+        QTest::mouseClick(d->okButton(), Qt::LeftButton);
+        QTRY_VERIFY(!r.w->settingsDialog());
+        QCOMPARE(r.sent().size(), 3);
+    }
+
+    void okWithTheSamePortDoesNotResend()
+    {
+        Rig r;
+        SettingsDialog *d = r.openDialog();
+        d->resendCheck()->setChecked(true);
+        QTest::mouseClick(d->okButton(), Qt::LeftButton);
+        QTRY_VERIFY(!r.w->settingsDialog());
+        QVERIFY(r.sent().isEmpty());
+        QVERIFY(r.w->resendOnConnect());
+    }
+
+    // ------------------------------------------------------------------ disconnected display
+
+    void displayShowsNoMidiOutputWhileDisconnected()
+    {
+        Rig r(values(QStringLiteral("Not There")));
+        QVERIFY(!r.link->isConnected());
+        QVERIFY(r.w->display()->line2().startsWith(QStringLiteral("NO MIDI OUTPUT")));
+        // The patch stays on line 1; a send that fails changes nothing.
+        QVERIFY(r.w->display()->line1().startsWith(QStringLiteral("P1-11:Fantasia")));
+        r.backend.setOutputPorts({QStringLiteral("Not There")}, false);
+        r.link->pollNow();
+        QVERIFY(r.link->isConnected());
+        QVERIFY(!r.w->display()->line2().startsWith(QStringLiteral("NO MIDI OUTPUT")));
+    }
+
+    void displayShowsNoMidiOutputWhenThePortVanishes()
+    {
+        Rig r;
+        QVERIFY(!r.w->display()->line2().startsWith(QStringLiteral("NO MIDI OUTPUT")));
+        r.backend.setOutputPorts({});
+        QVERIFY(r.w->display()->line2().startsWith(QStringLiteral("NO MIDI OUTPUT")));
+    }
+
+    void startupWithNoPortIsDisconnected()
+    {
+        Rig r(AppSettings::Values{});
+        QVERIFY(r.w->display()->line2().startsWith(QStringLiteral("NO MIDI OUTPUT")));
+        QVERIFY(r.sent().isEmpty());
+    }
+
+    // ------------------------------------------------------------------ auto-send
+
+    void autoSendSendsWhenTheKeyboardMovesTheHighlight()
+    {
+        AppSettings::Values v = values(kOut);
+        v.autoSend = true;
+        Rig r(v);
+        QVERIFY(r.show());
+        r.w->list()->setFocus();
+        QVERIFY(r.sent().isEmpty());  // start-up sent nothing
+        r.key(r.w->list(), Qt::Key_Down);
+        QCOMPARE(r.sent(), MidiLink::patchMessages(addr("P1-12"), 1));
+        QCOMPARE(r.w->current(), addr("P1-12"));
+        r.backend.clearSent();
+        r.key(r.w->list(), Qt::Key_Down);
+        QCOMPARE(r.sent(), MidiLink::patchMessages(addr("P1-13"), 1));
+        r.backend.clearSent();
+        r.key(r.w->list(), Qt::Key_End);
+        QCOMPARE(r.sent(), MidiLink::patchMessages(addr("P6-88"), 1));
+        r.backend.clearSent();
+        r.key(r.w->list(), Qt::Key_Down);  // already at the end: no move, no send
+        QVERIFY(r.sent().isEmpty());
+    }
+
+    void autoSendOffSendsNothingOnHighlight()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        r.w->list()->setFocus();
+        r.key(r.w->list(), Qt::Key_Down);
+        r.key(r.w->list(), Qt::Key_Down);
+        r.key(r.w->list(), Qt::Key_End);
+        QVERIFY(r.sent().isEmpty());
+    }
+
+    void autoSendWorksFromTheSearchField()
+    {
+        AppSettings::Values v = values(kOut);
+        v.autoSend = true;
+        Rig r(v);
+        QVERIFY(r.show());
+        QTest::keyClicks(r.w->searchField(), QStringLiteral("brass"));  // typing never sends
+        QVERIFY(r.sent().isEmpty());
+        QVERIFY(r.w->model()->rowCount() > 2);
+        const PatchAddress first = *r.w->highlighted();
+        r.key(r.w->searchField(), Qt::Key_Down);
+        QVERIFY(*r.w->highlighted() != first);
+        QCOMPARE(r.sent(), MidiLink::patchMessages(*r.w->highlighted(), 1));
+    }
+
+    void autoSendNeverFiresOnSearchTyping()
+    {
+        AppSettings::Values v = values(kOut);
+        v.autoSend = true;
+        Rig r(v);
+        QVERIFY(r.show());
+        QTest::keyClicks(r.w->searchField(), QStringLiteral("p3-4"));
+        QTest::keyClick(r.w->searchField(), Qt::Key_Backspace);
+        r.w->searchField()->clear();
+        QVERIFY(r.sent().isEmpty());
+    }
+
+    void autoSendNeverFiresOnViewSwitches()
+    {
+        AppSettings::Values v = values(kOut);
+        v.autoSend = true;
+        Rig r(v);
+        QVERIFY(r.show());
+        r.w->viewButton(PatchListModel::View::Favourites)->click();
+        r.w->viewButton(PatchListModel::View::Recents)->click();
+        r.w->viewButton(PatchListModel::View::All)->click();
+        r.w->action(QStringLiteral("actionViewFavourites"))->trigger();
+        r.w->action(QStringLiteral("actionViewAll"))->trigger();
+        QVERIFY(r.sent().isEmpty());
+    }
+
+    void aMouseClickSendsOnceEvenWithAutoSend()
+    {
+        AppSettings::Values v = values(kOut);
+        v.autoSend = true;
+        Rig r(v);
+        QVERIFY(r.show());
+        const QModelIndex i = r.w->model()->index(5);
+        QTest::mouseClick(r.w->list()->viewport(), Qt::LeftButton, Qt::NoModifier, r.w->list()->visualRect(i).center());
+        QCOMPARE(r.sent().size(), 3);
+    }
+
+    void aHeldKeySendsOnlyItsFirstAndLastStep()
+    {
+        AppSettings::Values v = values(kOut);
+        v.autoSend = true;
+        Rig r(v);
+        QVERIFY(r.show());
+        r.w->list()->setFocus();
+        PatchListView *list = r.w->list();
+        // Press, three auto-repeats, release: what a held arrow key delivers.
+        QKeyEvent press(QEvent::KeyPress, Qt::Key_Down, Qt::NoModifier);
+        QApplication::sendEvent(list, &press);
+        QCOMPARE(r.sent().size(), 3);  // the first step
+        for (int i = 0; i < 3; ++i) {
+            QKeyEvent repeat(QEvent::KeyPress, Qt::Key_Down, Qt::NoModifier, QString(), true);
+            QApplication::sendEvent(list, &repeat);
+        }
+        QCOMPARE(r.sent().size(), 3);  // the repeats stream nothing
+        QCOMPARE(*r.w->highlighted(), addr("P1-15"));
+        QKeyEvent release(QEvent::KeyRelease, Qt::Key_Down, Qt::NoModifier);
+        QApplication::sendEvent(list, &release);
+        QCOMPARE(r.sent().size(), 6);  // the final row on release
+        QCOMPARE(r.sent().mid(3), MidiLink::patchMessages(addr("P1-15"), 1));
+    }
+
+    void autoSendWhileDisconnectedSendsNothingAndSaysSo()
+    {
+        AppSettings::Values v = values(QStringLiteral("Not There"));
+        v.autoSend = true;
+        Rig r(v);
+        QVERIFY(r.show());
+        r.w->list()->setFocus();
+        r.key(r.w->list(), Qt::Key_Down);
+        QVERIFY(r.sent().isEmpty());
+        QVERIFY(r.w->message().startsWith(QStringLiteral("Not sent")));
+        QCOMPARE(r.w->current(), addr("P1-11"));
+    }
+
+    void autoSendToggleButtonAndShortcutPersist()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        PanelButton *b = r.w->autoSendButton();
+        QVERIFY(!b->lit());
+        QVERIFY(!QFile::exists(r.iniPath));
+        QTest::mouseClick(b, Qt::LeftButton, Qt::NoModifier, QPoint(26, 16));
+        QVERIFY(r.w->autoSend());
+        QVERIFY(b->lit());
+        QVERIFY(r.saved().autoSend);
+
+        r.w->action(QStringLiteral("actionAutoSend"))->trigger();  // Ctrl+Shift+A
+        QVERIFY(!r.w->autoSend());
+        QVERIFY(!b->lit());
+        QVERIFY(!b->isChecked());
+        QVERIFY(!r.saved().autoSend);
+
+        r.w->action(QStringLiteral("actionAutoSend"))->trigger();
+        QVERIFY(r.w->autoSend() && b->lit() && b->isChecked());
+        QVERIFY(r.saved().autoSend);
+        QCOMPARE(r.w->action(QStringLiteral("actionAutoSend"))->shortcut(),
+                 QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A));
+        QVERIFY(r.sent().isEmpty());  // toggling sends nothing
+    }
+
+    void autoSendShortcutIsWindowWide()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        r.w->searchField()->setFocus();
+        QTest::keyClick(r.w.get(), Qt::Key_A, Qt::ControlModifier | Qt::ShiftModifier);
+        QVERIFY(r.w->autoSend());
+    }
+
+    void savedAutoSendComesBackAtStart()
+    {
+        AppSettings::Values v = values(kOut);
+        v.autoSend = true;
+        Rig r(v);
+        QVERIFY(r.w->autoSend());
+        QVERIFY(r.w->autoSendButton()->lit());
+        QVERIFY(r.sent().isEmpty());
+    }
+
+    // ------------------------------------------------------------------ follow
+
+    static AppSettings::Values followValues(bool autoSend = false)
+    {
+        AppSettings::Values v = values(kOut);
+        v.inputPort = kIn;
+        v.follow = true;
+        v.autoSend = autoSend;
+        return v;
+    }
+
+    void followMovesTheCurrentPatchWithoutSending()
+    {
+        Rig r(followValues());
+        QVERIFY(r.backend.isInputOpen());
+        QVERIFY(r.show());
+        r.injectPatch(10, 28);  // P3-45
+        QCOMPARE(r.w->current(), addr("P3-45"));
+        QVERIFY(r.w->display()->line1().startsWith(QStringLiteral("P3-45")));
+        QCOMPARE(r.w->highlighted().value(), addr("P3-45"));
+        QVERIFY(r.sent().isEmpty());
+        QVERIFY(r.w->display()->activityActive());   // the LED blinks
+        QVERIFY(!r.w->display()->sentActive());      // but line 2 does not claim SENT
+        QVERIFY(!r.w->display()->line2().startsWith(QStringLiteral("SENT")));
+        QVERIFY(!r.w->display()->line2().startsWith(QStringLiteral("NO MIDI OUTPUT")));
+        QVERIFY(r.library->recents().isEmpty());  // a follow is not a send
+    }
+
+    void followNeverTriggersAutoSend()
+    {
+        Rig r(followValues(true));
+        QVERIFY(r.show());
+        QVERIFY(r.w->autoSend());
+        r.injectPatch(10, 28);
+        r.injectPatch(0, 0);  // U1-11
+        r.injectPatch(13, 63);  // P6-88
+        QCOMPARE(r.w->current(), addr("P6-88"));
+        QVERIFY(r.sent().isEmpty());
+        // ... and a keyboard move afterwards still does.
+        r.w->list()->setFocus();
+        r.key(r.w->list(), Qt::Key_Up);
+        QCOMPARE(r.sent(), MidiLink::patchMessages(addr("P6-87"), 1));
+    }
+
+    void followAlsoWorksOnTheSavedChannel()
+    {
+        AppSettings::Values v = followValues();
+        v.channel = 3;
+        Rig r(v);
+        r.inject({0xB0, 0x00, 87});  // wrong channel: ignored
+        r.inject({0xB0, 0x20, 10});
+        r.inject({0xC0, 28});
+        QCOMPARE(r.w->current(), addr("P1-11"));
+        r.inject({0xB2, 0x00, 87});
+        r.inject({0xB2, 0x20, 10});
+        r.inject({0xC2, 28});
+        QCOMPARE(r.w->current(), addr("P3-45"));
+    }
+
+    void midiClockAndRealtimeBytesChangeNothing()
+    {
+        Rig r(followValues(true));
+        QVERIFY(r.show());
+        const QString line1 = r.w->display()->line1();
+        const QString line2 = r.w->display()->line2();
+        const PatchAddress cur = r.w->current();
+        for (int i = 0; i < 24; ++i)
+            r.inject({0xF8});  // timing clock, continuously on the D-05's USB port
+        r.inject({0xFE});      // active sensing
+        r.inject({0xFA});
+        r.inject({0xFB});
+        r.inject({0xFC});
+        r.inject({0xFF});
+        r.inject({0xF8, 0x00});  // even if a backend delivered it with trailing bytes
+        QCOMPARE(r.w->current(), cur);
+        QCOMPARE(r.w->display()->line1(), line1);
+        QCOMPARE(r.w->display()->line2(), line2);
+        QVERIFY(!r.w->display()->activityActive());
+        QVERIFY(r.sent().isEmpty());
+        // Clock between the three messages of a triplet does not break it either.
+        r.inject({0xB0, 0x00, 87});
+        r.inject({0xF8});
+        r.inject({0xB0, 0x20, 11});
+        r.inject({0xF8});
+        r.inject({0xC0, 0});
+        QCOMPARE(r.w->current(), addr("P4-11"));
+        QVERIFY(r.sent().isEmpty());
+    }
+
+    void followOffIgnoresIncomingPatches()
+    {
+        AppSettings::Values v = followValues();
+        v.follow = false;
+        Rig r(v);
+        QVERIFY(!r.backend.isInputOpen());
+        r.injectPatch(10, 28);
+        QCOMPARE(r.w->current(), addr("P1-11"));
+    }
+
+    void ourOwnSendIsNotFollowedBack()
+    {
+        Rig r(followValues());
+        QVERIFY(r.show());
+        r.w->setCurrent(addr("P1-11"));
+        QVERIFY(r.link->sendPatch(addr("P3-45")));
+        r.backend.clearSent();
+        r.injectPatch(10, 28);  // the loop-back of our own triplet within 300 ms
+        QCOMPARE(r.w->current(), addr("P3-45"));
+        QVERIFY(r.sent().isEmpty());
+        QVERIFY(!r.w->display()->activityActive() || r.w->display()->sentActive());
+    }
+
+    // ------------------------------------------------------------------ start-up writes nothing
+
+    void startupWithCliOverridesWritesNothing()
+    {
+        QTemporaryDir dir;
+        Paths::setOverride(dir.path());
+        const QString ini = dir.filePath(QStringLiteral("settings.ini"));
+        {
+            AppSettings saved(ini);
+            AppSettings::Values v = values(QStringLiteral("Saved Port"), 4);
+            saved.setValues(v);
+        }
+        const QByteArray before = [&] {
+            QFile f(ini);
+            f.open(QIODevice::ReadOnly);
+            return f.readAll();
+        }();
+        {
+            PatchCatalog catalog;
+            Library lib(catalog, dir.filePath(QStringLiteral("library.json")));
+            FakeMidiBackend backend;
+            MidiLink link(&backend);
+            AppSettings settings(ini);
+            MainWindow w(catalog, lib, link);
+            w.setServices(&settings, &backend);
+            CliOptions o;
+            o.port = QStringLiteral("Fake");
+            o.channel = 11;
+            w.applySettings(Cli::startupValues(settings, o));
+            QCOMPARE(link.channel(), 11);
+            QVERIFY(link.isConnected());
+            w.show();
+            QVERIFY(QTest::qWaitForWindowActive(&w));
+            QCOMPARE(AppSettings(ini).values().channel, 4);  // still the saved one
+            QCOMPARE(AppSettings(ini).values().outputPort, QStringLiteral("Saved Port"));
+            QFile f(ini);
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            QCOMPARE(f.readAll(), before);  // byte for byte, while the window is up
+        }
+        Paths::setOverride(QString());
+    }
+
+    void lastPatchIsRemembered()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        QVERIFY(!r.settings->lastPatch());
+        QVERIFY(r.link->sendPatch(addr("P2-33")));
+        QCOMPARE(AppSettings(r.iniPath).lastPatch().value(), addr("P2-33"));
+    }
+
+    void geometryIsSavedOnClose()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        r.w->resize(1000, 600);
+        QVERIFY(r.w->close());
+        QVERIFY(!AppSettings(r.iniPath).windowGeometry().isEmpty());
+    }
+};
+
+QTEST_MAIN(TestSettingsUi)
+#include "test_settings_ui.moc"

@@ -1,12 +1,15 @@
 #pragma once
 
+#include "app/AppSettings.h"
 #include "core/PatchAddress.h"
 #include "ui/PatchListModel.h"
+#include "ui/SettingsDialog.h"
 
 #include <QMainWindow>
 #include <QMessageBox>
 #include <QModelIndex>
 #include <QPointer>
+#include <QString>
 #include <optional>
 
 class QAction;
@@ -24,6 +27,7 @@ class BankGrid;
 class DisplayWidget;
 class GroupBar;
 class Library;
+class MidiBackend;
 class MidiLink;
 class Nameplate;
 class PanelButton;
@@ -36,8 +40,12 @@ class PatchListView;
 // keyboard shortcut of FR-13 that is in scope. It never sends on a mere highlight:
 // only Enter, a click, PREV/NEXT, PgUp/PgDn or a completed grid entry do.
 //
-// Views, favourites, rename, settings, auto-send and follow arrive in later tasks;
-// their actions exist here and report that they are not available yet.
+// Settings (FR-9, FR-10, FR-11): setServices() hands the window the persistent settings and
+// the backend (for port listing in the dialog); applySettings() puts a set of values into
+// effect (start-up and the dialog's OK), and nothing is written to disk except by the
+// user's own actions (OK, the AUTO SEND toggle, the window geometry on close).
+// Auto-send sends when the keyboard moves the list highlight; follow, search, view
+// switches and start-up never send.
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
@@ -54,6 +62,22 @@ public:
     void setInputPortLabel(const QString &name);
     // Re-reads port, channel and connection from the MidiLink into the status bar and display.
     void refreshConnection();
+
+    // `settings` is where OK, the AUTO SEND toggle, the last patch and the window geometry are
+    // saved; `backend` is used by the Settings dialog to list ports (never to send). Both may
+    // be null (the Settings action then says it is not available).
+    void setServices(AppSettings *settings, MidiBackend *backend);
+    // Puts `values` into effect: channel, ports, follow, auto-send, resend-on-connect. Does not save.
+    void applySettings(const AppSettings::Values &values);
+    // The values in effect now (the open output as its port key).
+    AppSettings::Values currentSettings() const;
+    void setAutoSend(bool on);  // persists when settings are attached
+    bool autoSend() const { return m_autoSendOn; }
+    bool resendOnConnect() const { return m_resendOnConnect; }
+    // Opens the Settings dialog (window-modal, not blocking).
+    void openSettings();
+    // Null once the dialog is closed and deleted.
+    SettingsDialog *settingsDialog() const { return m_settingsDialog.data(); }
 
     // Parts, for tests and the screenshot driver.
     DisplayWidget *display() const { return m_display; }
@@ -97,6 +121,7 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
     void showEvent(QShowEvent *event) override;
     bool event(QEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
@@ -124,6 +149,18 @@ private:
     void popupSystemMenu();
     void onNameCommitted(const PatchAddress &address, const QString &text);
     void refreshDisplayPatch();
+    void onFollowed(const PatchAddress &address);
+    void onConnectedChanged(bool connected);
+    void onHighlightMovedByKey();
+    void resendCurrent();
+    void noteConnected();
+    void setOutput(const QString &port);
+    void onSettingsTest(const AppSettings::Values &values);
+    void onSettingsAccepted(SettingsDialog *dialog);
+    void onSettingsRejected();
+    bool sameOutput(const QString &port) const;
+    void saveGeometryNow();
+    void setAutoSend(bool on, bool persist);
     // Stores and closes an open rename editor (before anything resets the list).
     void finishEditing();
 
@@ -138,6 +175,19 @@ private:
     QString m_startupError;
     QString m_inputLabel;
     bool m_firstShow = true;
+
+    AppSettings *m_settings = nullptr;
+    MidiBackend *m_backend = nullptr;
+    bool m_autoSendOn = false;
+    bool m_resendOnConnect = false;
+    bool m_searchRepeatMoved = false;  // Up/Down auto-repeated in the search field
+    // Settings dialog session.
+    QPointer<SettingsDialog> m_settingsDialog;
+    bool m_settingsOpen = false;
+    bool m_trialApplied = false;  // TEST changed the live port or channel; Cancel must undo it
+    bool m_connectPending = false;  // the output connected while the dialog was open
+    QString m_testedTarget;         // "<port key>/<channel>" of the last TEST
+    AppSettings::Values m_snapshot;
 
     QWidget *m_central = nullptr;
     QFrame *m_band = nullptr;

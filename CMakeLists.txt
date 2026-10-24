@@ -38,6 +38,7 @@ qt_add_library(d05core STATIC
     src/core/SearchQuery.h  src/core/SearchQuery.cpp
     src/core/Library.h      src/core/Library.cpp
     src/app/Paths.h         src/app/Paths.cpp
+    src/app/AppSettings.h   src/app/AppSettings.cpp
     src/app/Cli.h           src/app/Cli.cpp
     src/midi/MidiBackend.h
     src/midi/FakeMidiBackend.h src/midi/FakeMidiBackend.cpp
@@ -65,6 +66,7 @@ qt_add_library(d05ui STATIC
     src/ui/PatchListModel.h src/ui/PatchListModel.cpp
     src/ui/PatchDelegate.h  src/ui/PatchDelegate.cpp
     src/ui/PatchListView.h  src/ui/PatchListView.cpp
+    src/ui/SettingsDialog.h src/ui/SettingsDialog.cpp
     src/ui/MainWindow.h     src/ui/MainWindow.cpp
     src/app/Screenshot.h    src/app/Screenshot.cpp
 )

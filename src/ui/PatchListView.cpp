@@ -215,7 +215,25 @@ void PatchListView::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     }
+    const QModelIndex before = currentIndex();
     QListView::keyPressEvent(event);
+    const QModelIndex after = currentIndex();
+    if (after.isValid() && after != before) {
+        if (event->isAutoRepeat())
+            m_repeatMoved = true;
+        else
+            emit highlightMovedByKey(after);
+    }
+}
+
+void PatchListView::keyReleaseEvent(QKeyEvent *event)
+{
+    QListView::keyReleaseEvent(event);
+    if (m_repeatMoved && !event->isAutoRepeat()) {
+        m_repeatMoved = false;
+        if (currentIndex().isValid())
+            emit highlightMovedByKey(currentIndex());
+    }
 }
 
 }  // namespace d05

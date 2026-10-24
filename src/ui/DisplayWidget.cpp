@@ -44,6 +44,7 @@ DisplayWidget::DisplayWidget(QWidget *parent)
     m_sentTimer.setInterval(SentFlashMs);
     connect(&m_sentTimer, &QTimer::timeout, this, [this] {
         m_sent = false;
+        m_activity = false;
         recompute();
         emit sentChanged(false);
     });
@@ -127,6 +128,7 @@ void DisplayWidget::setConnected(bool connected)
     if (!connected && m_sent) {  // a flash makes no sense without an output
         m_sentTimer.stop();
         m_sent = false;
+        m_activity = false;
         recompute();
         emit sentChanged(false);
         return;
@@ -153,11 +155,20 @@ void DisplayWidget::setEntry(const QString &text)
     recompute();
 }
 
+void DisplayWidget::flashActivity()
+{
+    const bool wasOn = m_sent || m_activity;
+    m_activity = true;
+    m_sentTimer.start();
+    if (!wasOn)
+        emit sentChanged(true);
+}
+
 void DisplayWidget::flashSent()
 {
     if (!m_connected)
         return;
-    const bool wasOn = m_sent;
+    const bool wasOn = m_sent || m_activity;
     m_sent = true;
     m_sentTimer.start();  // restarts a running timer
     recompute();

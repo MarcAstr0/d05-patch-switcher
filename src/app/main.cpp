@@ -2,6 +2,7 @@
 // help, version and usage errors never touch a display. Headless runs
 // (--list-ports, --send) use a QCoreApplication: no window, no library file.
 
+#include "app/AppSettings.h"
 #include "app/Cli.h"
 #include "app/Paths.h"
 #include "app/Screenshot.h"
@@ -109,7 +110,9 @@ int main(int argc, char *argv[])
         }
         if (opts.listPorts)
             return d05::Cli::runListPorts(*backend, out, err);
-        return d05::Cli::runSend(opts, *backend, out, err);
+        // --send falls back to the saved port and channel when --port / --channel are absent.
+        const d05::AppSettings saved;
+        return d05::Cli::runSend(opts, *backend, out, err, &saved);
     }
 
     // Screenshots never need a screen: pick the offscreen platform unless the caller chose one.
@@ -139,18 +142,17 @@ int main(int argc, char *argv[])
     d05::Library library(catalog, d05::Paths::libraryPath());
     const d05::Library::LoadResult loaded = library.load();
     d05::MidiLink link(backend.get());
+    d05::AppSettings settings;
     // The window connects to the link first, so a port error at startup shows its text.
     d05::MainWindow window(catalog, library, link);
-    // AppSettings arrives with the Settings dialog; until then the port and channel come
-    // from the command line (no port by default, channel 1).
-    link.setChannel(opts.channel > 0 ? opts.channel : 1);
-    if (!opts.port.isEmpty())
-        link.setOutputPort(opts.port);
-    else if (opts.fakeMidi)
-        link.setOutputPort(QStringLiteral("Fake D-05 In"));
-    if (!opts.inPort.isEmpty())
-        link.setInputPort(opts.inPort);
-    window.setInputPortLabel(opts.inPort);
+    window.setServices(&settings, backend.get());
+    // The patch the app last showed comes back without sending anything, so resend-on-connect
+    // resends the right one. Then the saved settings take effect; --port, --in-port and
+    // --channel override them for this run only and are never written back.
+    if (const auto last = settings.lastPatch())
+        window.setCurrent(*last);
+    window.applySettings(d05::Cli::startupValues(settings, opts));
+    window.restoreGeometry(settings.windowGeometry());
     if (loaded == d05::Library::LoadResult::Recovered)
         window.showMessage(QStringLiteral("Library file was damaged; started a fresh one"));
     else if (loaded == d05::Library::LoadResult::Unreadable || loaded == d05::Library::LoadResult::SidelineFailed)

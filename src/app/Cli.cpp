@@ -141,7 +141,22 @@ int runListPorts(MidiBackend &backend, QTextStream &out, QTextStream &err)
     return Exit::Ok;
 }
 
-int runSend(const CliOptions &opts, MidiBackend &backend, QTextStream &out, QTextStream &err)
+AppSettings::Values startupValues(const AppSettings &saved, const CliOptions &opts)
+{
+    AppSettings::Values v = saved.values();
+    if (opts.channel > 0)
+        v.channel = opts.channel;
+    if (!opts.port.isEmpty())
+        v.outputPort = opts.port;
+    else if (opts.fakeMidi)
+        v.outputPort = QStringLiteral("Fake D-05 In");
+    if (!opts.inPort.isEmpty())
+        v.inputPort = opts.inPort;
+    return v;
+}
+
+int runSend(const CliOptions &opts, MidiBackend &backend, QTextStream &out, QTextStream &err,
+            const AppSettings *saved)
 {
     const auto address = PatchAddress::parse(opts.sendAddress);
     if (!address) {
@@ -159,8 +174,11 @@ int runSend(const CliOptions &opts, MidiBackend &backend, QTextStream &out, QTex
     QString wanted = opts.port;
     if (wanted.isEmpty() && opts.fakeMidi && !names.isEmpty())
         wanted = names.first();
+    else if (wanted.isEmpty() && !opts.fakeMidi && saved)
+        wanted = saved->outputPort();
+    const int channel = opts.channel > 0 ? opts.channel : (saved ? saved->channel() : 1);
     if (wanted.isEmpty()) {
-        err << "No output port given; use --port NAME (see --list-ports)" << Qt::endl;
+        err << "No output port given; use --port NAME (see --list-ports) or choose one in Settings" << Qt::endl;
         return Exit::PortNotFound;
     }
     const QString match = MidiLink::matchPort(names, wanted);
@@ -170,7 +188,7 @@ int runSend(const CliOptions &opts, MidiBackend &backend, QTextStream &out, QTex
     }
 
     MidiLink link(&backend);
-    link.setChannel(opts.channel > 0 ? opts.channel : 1);
+    link.setChannel(channel);
     link.setOutputPort(match);
     if (!link.isConnected()) {
         err << "MIDI error: " << link.status() << Qt::endl;
