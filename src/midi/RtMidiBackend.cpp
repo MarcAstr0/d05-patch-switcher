@@ -80,20 +80,32 @@ QString RtMidiBackend::ErrorSink::take()
     return std::exchange(text, QString());
 }
 
-RtMidiBackend::RtMidiBackend(QObject *parent)
+RtMidiBackend::RtMidiBackend(SimulateFailure simulate, QObject *parent)
     : MidiBackend(parent)
 {
+    const bool failOut = simulate == SimulateFailure::Output || simulate == SimulateFailure::Both;
+    const bool failIn = simulate == SimulateFailure::Input || simulate == SimulateFailure::Both;
+    // Output and input are set up independently: a broken input side must not
+    // take a working output down with it.
     try {
+        if (failOut)
+            throw RtMidiError("simulated output failure", RtMidiError::DRIVER_ERROR);
         m_out = std::make_unique<RtMidiOut>();
-        m_in = std::make_unique<RtMidiIn>();
-        m_in->ignoreTypes(true, true, true);  // sysex, timing, active sensing
         // With a callback installed RtMidi no longer throws or prints; every
         // operation below checks the sink afterwards.
         m_out->setErrorCallback(&errorCallback, &m_outErrors);
+    } catch (const RtMidiError &e) {
+        m_outInitError = errText(e);
+        m_out.reset();
+    }
+    try {
+        if (failIn)
+            throw RtMidiError("simulated input failure", RtMidiError::DRIVER_ERROR);
+        m_in = std::make_unique<RtMidiIn>();
+        m_in->ignoreTypes(true, true, true);  // sysex, timing, active sensing
         m_in->setErrorCallback(&errorCallback, &m_inErrors);
     } catch (const RtMidiError &e) {
-        m_initError = errText(e);
-        m_out.reset();
+        m_inInitError = errText(e);
         m_in.reset();
     }
 }
@@ -104,15 +116,32 @@ RtMidiBackend::~RtMidiBackend()
     closeOutput();
 }
 
-QStringList RtMidiBackend::outputPortNames(QString *err) { return listPorts(m_out.get(), m_outErrors, err); }
-QStringList RtMidiBackend::inputPortNames(QString *err) { return listPorts(m_in.get(), m_inErrors, err); }
+QStringList RtMidiBackend::outputPortNames(QString *err)
+{
+    if (!m_out) {
+        if (err)
+            *err = m_outInitError;
+        return {};
+    }
+    return listPorts(m_out.get(), m_outErrors, err);
+}
+
+QStringList RtMidiBackend::inputPortNames(QString *err)
+{
+    if (!m_in) {
+        if (err)
+            *err = m_inInitError;
+        return {};
+    }
+    return listPorts(m_in.get(), m_inErrors, err);
+}
 
 bool RtMidiBackend::openOutput(const QString &name, QString *error)
 {
     closeOutput();
     if (!m_out) {
         if (error)
-            *error = m_initError;
+            *error = m_outInitError;
         return false;
     }
     try {
@@ -157,7 +186,7 @@ bool RtMidiBackend::openInput(const QString &name, QString *error)
     closeInput();
     if (!m_in) {
         if (error)
-            *error = m_initError;
+            *error = m_inInitError;
         return false;
     }
     try {

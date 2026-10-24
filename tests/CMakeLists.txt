@@ -15,3 +15,13 @@ d05_add_test(test_search_query test_search_query.cpp)
 d05_add_test(test_library test_library.cpp)
 d05_add_test(test_midi_link test_midi_link.cpp)
 d05_add_test(test_cli test_cli.cpp)
+d05_add_test(test_rtmidi_init test_rtmidi_init.cpp)
+d05_add_test(test_cli_process test_cli_process.cpp)
+target_compile_definitions(test_cli_process PRIVATE D05_BINARY="$<TARGET_FILE:d05-patch-switcher>")
+add_dependencies(test_cli_process d05-patch-switcher)
+
+# Hardware-free MIDI check against ALSA "Midi Through" (exit 77 = skipped).
+if(UNIX AND NOT APPLE)
+    add_test(NAME midi_smoke COMMAND ${CMAKE_SOURCE_DIR}/scripts/midi-smoke.sh $<TARGET_FILE:d05-patch-switcher>)
+    set_tests_properties(midi_smoke PROPERTIES SKIP_RETURN_CODE 77 LABELS "hardware-free" TIMEOUT 60)
+endif()

@@ -27,8 +27,17 @@ fail() { echo "FAIL: $*"; fails=$((fails + 1)); }
 : >"$dump"  # aseqdump keeps its file offset; NULs fill the gap, hence tr -d below
 stdbuf -oL aseqdump -p "Midi Through" >"$dump" 2>&1 &
 pid=$!
-sleep 0.5
-kill -0 "$pid" 2>/dev/null || { cat "$dump"; echo "aseqdump did not start" >&2; exit 1; }
+# Wait (up to 5 s) until aseqdump has subscribed and printed its header.
+for _ in $(seq 50); do
+    tr -d '\000' <"$dump" | grep -q "Waiting for data" && break
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.1
+done
+if ! tr -d '\000' <"$dump" | grep -q "Waiting for data"; then
+    cat "$dump"
+    echo "aseqdump could not attach to Midi Through (no ALSA sequencer?); skipping" >&2
+    exit 77
+fi
 
 # check_send ADDR CHANNEL(1-based) MSB-line is always 87; LSB; PROGRAM
 check_send() {
@@ -65,7 +74,7 @@ rc=$?; [ "$rc" -eq 1 ] && echo "ok   P1-19 exits 1" || fail "P1-19 exit $rc, exp
 rc=$?; [ "$rc" -eq 2 ] && echo "ok   missing port exits 2" || fail "missing port exit $rc, expected 2"
 sleep 0.3
 [ -z "$(tr -d "\000" <"$dump" | grep -E "Control change|Program change")" ] || fail "bytes were sent for a failing command"
-[ ! -e "$tmp/cfg/library.json" ] || fail "--send wrote library.json"
+[ ! -e "$tmp/cfg" ] || fail "--send created the --config-dir directory"
 
 if [ "$fails" -eq 0 ]; then echo "midi-smoke: all passed"; exit 0; fi
 echo "midi-smoke: $fails failure(s)"

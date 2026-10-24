@@ -9,11 +9,9 @@
 
 namespace d05 {
 
-namespace {
-
 // Exact full-name match first, then equal keys (ALSA ids stripped), then a
 // case-insensitive substring of the key. Returns "" when none.
-QString matchPort(const QStringList &ports, const QString &wanted)
+QString MidiLink::matchPort(const QStringList &ports, const QString &wanted)
 {
     if (wanted.isEmpty())
         return {};
@@ -32,8 +30,6 @@ QString matchPort(const QStringList &ports, const QString &wanted)
     }
     return {};
 }
-
-}  // namespace
 
 QString MidiLink::portKey(const QString &name)
 {

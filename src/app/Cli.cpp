@@ -13,36 +13,12 @@ namespace d05::Cli {
 
 namespace {
 
-QString findPort(const QStringList &names, const QString &wanted)
-{
-    for (const QString &n : names) {
-        if (n == wanted)
-            return n;
-    }
-    for (const QString &n : names) {
-        if (n.contains(wanted, Qt::CaseInsensitive))
-            return n;
-    }
-    return {};
-}
-
 QString hex(const QByteArray &b)
 {
     return QString::fromLatin1(b.toHex(' ').toUpper());
 }
 
 }  // namespace
-
-bool wantsHeadless(const QStringList &args)
-{
-    for (int i = 1; i < args.size(); ++i) {
-        const QString &a = args.at(i);
-        if (a == QLatin1String("--list-ports") || a == QLatin1String("--send")
-            || a.startsWith(QLatin1String("--send=")))
-            return true;
-    }
-    return false;
-}
 
 ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, int *exitCode)
 {
@@ -80,10 +56,13 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
         return ParseStatus::ExitNow;
     };
 
-    if (!p.parse(args))
+    // A help or version request wins over unrelated parse errors, but not over unknown options.
+    const bool parsed = p.parse(args);
+    const bool infoRequested = p.isSet(help) || p.isSet(QStringLiteral("help-all")) || p.isSet(version);
+    if (!parsed && !(infoRequested && p.unknownOptionNames().isEmpty()))
         return fail(p.errorText());
-    if (p.isSet(help)) {
-        *message = p.helpText();
+    if (p.isSet(help) || p.isSet(QStringLiteral("help-all"))) {
+        *message = p.helpText().replace(QLatin1String("<executable_name>"), QCoreApplication::applicationName());
         *exitCode = Exit::Ok;
         return ParseStatus::ExitNow;
     }
@@ -164,7 +143,7 @@ int runSend(const CliOptions &opts, MidiBackend &backend, QTextStream &out, QTex
         err << "No output port given; use --port NAME (see --list-ports)" << Qt::endl;
         return Exit::PortNotFound;
     }
-    const QString match = findPort(names, wanted);
+    const QString match = MidiLink::matchPort(names, wanted);
     if (match.isEmpty()) {
         err << "Output port not found: " << wanted << Qt::endl;
         return Exit::PortNotFound;

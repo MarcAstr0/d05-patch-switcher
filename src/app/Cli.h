@@ -33,16 +33,14 @@ constexpr int Usage = 64;
 
 namespace Cli {
 
-// True if `args` (argv as a list, program name first) asks for a headless run.
-// Cheap pre-scan so main() can pick QCoreApplication before parsing.
-bool wantsHeadless(const QStringList &args);
-
 enum class ParseStatus { Run, ExitNow };
 
-// Parses `args`. ExitNow: print `*message` (stdout when `*exitCode` is 0, else
+// Parses `args` (argv as a list, program name first). Needs no application
+// object, so help, version and usage errors work with no display. ExitNow: print `*message` (stdout when `*exitCode` is 0, else
 // stderr) and exit with `*exitCode` (help, version, usage errors).
 ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, int *exitCode);
 
+// Precedence: help/version/usage errors, then --list-ports (wins over --send), then --send.
 // --list-ports: both lists on `out`. Exit::Ok or Exit::MidiError (text on `err`).
 int runListPorts(MidiBackend &backend, QTextStream &out, QTextStream &err);
 

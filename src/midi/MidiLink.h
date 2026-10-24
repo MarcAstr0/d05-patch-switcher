@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QList>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 
 #include <functional>
@@ -41,6 +42,9 @@ public:
     // Name without the trailing ALSA "client:port" numbers; persist this.
     QString connectedPortKey() const { return portKey(m_connectedName); }
     static QString portKey(const QString &name);
+    // How `wanted` is matched against a port list: exact full name, then equal
+    // keys, then case-insensitive substring of the key. "" when none.
+    static QString matchPort(const QStringList &ports, const QString &wanted);
     QString status() const { return m_status; }
     QString inputStatus() const { return m_inputStatus; }
     std::optional<PatchAddress> current() const { return m_current; }

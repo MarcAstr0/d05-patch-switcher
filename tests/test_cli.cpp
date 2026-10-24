@@ -81,11 +81,31 @@ private slots:
         QVERIFY(!msg.isEmpty());
     }
 
-    void headlessPrescan()
+    void helpAllWinsOverSend()
     {
-        QVERIFY(Cli::wantsHeadless(argv({"--send", "P1-11"})));
-        QVERIFY(Cli::wantsHeadless(argv({"--list-ports"})));
-        QVERIFY(!Cli::wantsHeadless(argv({"--fake-midi"})));
+        CliOptions o;
+        QString msg;
+        int code = -1;
+        QCOMPARE(Cli::parse(argv({"--send", "P1-11", "--help-all"}), &o, &msg, &code), Cli::ParseStatus::ExitNow);
+        QCOMPARE(code, 0);
+        QVERIFY(msg.contains(QStringLiteral("--send")));
+    }
+
+    void spellings()
+    {
+        CliOptions o;
+        QString msg;
+        int code = 0;
+        QCOMPARE(Cli::parse(argv({"--send=P2-22"}), &o, &msg, &code), Cli::ParseStatus::Run);
+        QCOMPARE(o.sendAddress, QStringLiteral("P2-22"));
+        QVERIFY(o.headless());
+    }
+
+    void portMatchingLikeTheGui()
+    {
+        FakeMidiBackend f;
+        QCOMPARE(send(argv({"--port", "Fake D-05 In", "--send", "P1-11"}), f).code, 0);
+        QCOMPARE(send(argv({"--port", "FAKE", "--send", "P1-11"}), f).code, 0);
     }
 
     void sendBytes()
@@ -129,6 +149,15 @@ private slots:
         FakeMidiBackend g;
         g.setListError(QStringLiteral("boom"));
         QCOMPARE(send(argv({"--fake-midi", "--send", "P1-11"}), g).code, Exit::MidiError);
+    }
+
+    void listPortsWinsOverSend()
+    {
+        FakeMidiBackend f;
+        const Run r = send(argv({"--fake-midi", "--list-ports", "--send", "P1-11"}), f);
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.out.contains(QStringLiteral("MIDI outputs")));
+        QVERIFY(f.sentMessages().isEmpty());
     }
 
     void listPorts()

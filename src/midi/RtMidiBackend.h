@@ -16,7 +16,11 @@ namespace d05 {
 class RtMidiBackend : public MidiBackend {
     Q_OBJECT
 public:
-    explicit RtMidiBackend(QObject *parent = nullptr);
+    // Test seam: make construction of the output and/or input side fail as if
+    // RtMidi had thrown.
+    enum class SimulateFailure { None, Output, Input, Both };
+    explicit RtMidiBackend(QObject *parent = nullptr) : RtMidiBackend(SimulateFailure::None, parent) {}
+    explicit RtMidiBackend(SimulateFailure simulate, QObject *parent = nullptr);
     ~RtMidiBackend() override;
 
     QStringList outputPortNames(QString *err) override;
@@ -42,7 +46,8 @@ private:
     ErrorSink m_inErrors;
     std::unique_ptr<RtMidiOut> m_out;
     std::unique_ptr<RtMidiIn> m_in;
-    QString m_initError;
+    QString m_outInitError;
+    QString m_inInitError;
 };
 
 }  // namespace d05

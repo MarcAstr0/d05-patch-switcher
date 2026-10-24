@@ -27,7 +27,7 @@ No GUI beyond the scaffold window. Everything here is testable headless.
 - ☑ **T1.5 `Library`.** JSON load/save per SPEC §3.3, `QSaveFile`, 500 ms debounce, corruption handling, `--config-dir`. Tests in a temp dir: round-trip, recents ordering and counts, cap at 50, broken file is sidelined and the app proceeds.
 - ☑ **T1.6 MIDI layer.** `MidiBackend`, `FakeMidiBackend`, `RtMidiBackend`, `MidiLink` (connect by name, substring match, 2 s poll while disconnected, `sendPatch`, status text, follow-mode parsing with 300 ms echo suppression). Tests on the fake: exact bytes for channels 1, 10 and 16; a vanished port flips status and the poll reconnects when the fake port "reappears"; incoming CC0/CC32/PC updates `current` without a send; the echo of our own send is ignored.
 - ☑ **T1.7 CLI.** `--list-ports`, `--port`, `--in-port`, `--channel`, `--send`, `--fake-midi`, `--config-dir` with the exit codes from FR-15. `scripts/midi-smoke.sh` passes on the Linux box against `Midi Through` (install `alsa-utils` if `aseqdump` is missing). Record the test command in the README's developer section.
-- ☐ **R1 Review** (reviewer + Codex): all of M1, the agent on the commit range and `scripts/codex-review.sh --base origin/main` after the push; foreman reconciles per `docs/FOREMAN.md`. Builder fixes anything rated above style.
+- ☑ **R1 Review** (reviewer + Codex): all of M1, the agent on the commit range and `scripts/codex-review.sh --base origin/main` after the push; foreman reconciles per `docs/FOREMAN.md`. Builder fixes anything rated above style.
 - ☐ **Push and CI**: the build-and-test steps green on all three runners (packaging steps may still fail).
 
 **Gate G1 (owner, optional).** If the D-05 can be brought to the Linux box now, plug it
