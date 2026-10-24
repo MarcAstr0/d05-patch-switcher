@@ -55,7 +55,8 @@ Linux box: Ubuntu 24.04, Qt 6.4.2 (`qt6-base-dev`), GCC 13, ALSA. `aseqdump` (fr
 - Bank Select MSB = 87 always. LSB 0–7 = U1–U8, 8–13 = P1–P6. Program = (bank−1)·8 + (number−1), zero-based. Send MSB, LSB, PC in that order on the configured channel.
 - Panel addresses use digits 1–8 only (`11`…`88`): there is no `P1-19`.
 - The D-05 ignores all of it unless `SYSTEM → MIDI → Prog.C` is ON. The owner's manual also lists a `Bank.S` switch; the owner's unit has none, and bank select reception is not gated (`docs/MIDI.md`).
-- The owner's computer talks to the **Hapax's** USB MIDI port; the Hapax forwards to the D-05 over DIN. There is no "D-05" port to look for.
+- On the owner's MacBook the app talks to the **Hapax's** USB MIDI port; the Hapax forwards to the D-05 over DIN. During hardware tests on the Linux box the D-05 may be plugged in over USB directly, in which case the port is named after the D-05. Never hard-code a port name; always offer the picker.
+- A web version is specified in `docs/WEB.md` (Web MIDI, same repo under `web/`). It is not scheduled until desktop M3 is done.
 
 ## Agents
 
