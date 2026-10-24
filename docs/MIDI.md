@@ -63,36 +63,19 @@ one the app sent in the previous 300 ms, because some MIDI paths loop the output
 Per-patch `TxPC` (a Program Change number stored in each patch, p. 5) is a different
 feature, for driving *other* gear from the D-05, and is irrelevant here.
 
-## The owner's cable path
+## Connecting the D-05
+
+The app opens whatever MIDI output the user picks; it never hard-codes a port name.
+Three kinds of path work:
 
 ```
-D-05  ──DIN MIDI──▶  Squarp Hapax  ──USB──▶  computer
+computer ──USB──▶ D-05                                   (1) the D-05's own USB port
+computer ──USB──▶ MIDI interface ──DIN──▶ D-05 MIDI IN    (2) a USB MIDI interface
+computer ──USB──▶ sequencer / hub ──DIN──▶ D-05 MIDI IN   (3) a device that forwards MIDI
 ```
 
-The Hapax is configured as a MIDI thru: what the computer sends to the Hapax's USB
-input is forwarded to the DIN output the D-05 hangs on. From the computer's point of
-view the port to open is the **Hapax's** USB MIDI port, not a D-05 port, which is why
-the app never hard-codes a port name and always offers a picker.
-
-Verified at gate G4 (2026-10-24, MacBook, hapaxOS 3.x): the Hapax is not a plain thru.
-Its USB device port shows up as 16 virtual ports (`HAPAX Puerto 1` … `16` on a
-Spanish-language macOS). Incoming MIDI goes into the selected track, whose input is set
-to ALL ACTIVE (so a controller on the Hapax also plays it), and leaves on that track's
-DIN output **on the track's own channel**. In the app:
-
-- choose **HAPAX Puerto 3**, the port the owner's unit responds on (which cable a track hears is not documented by Squarp; try the ports in turn on another setup);
-- the app's channel does not matter on this path, because the Hapax rewrites it;
-- the D-05 still needs `Prog.C` ON, and Bank Select and Program Change pass through.
-
-The reverse direction (D-05 DIN out → Hapax DIN in → USB) only exists if that cable
-is connected and the Hapax forwards it; follow-the-panel is therefore optional and off
-by default.
-
-### Hardware tests on the Linux box
-
-The Hapax is fixed in the synth room, so hardware tests on the Linux box use the
-**D-05 module plugged in over USB directly**. This is **verified** (2026-10-24, gate
-G1, Ubuntu 24.04): the unit enumerates with no driver.
+**(1) The D-05's own USB port.** Verified on Linux (2026-10-24, gate G1, Ubuntu 24.04):
+the unit enumerates with no driver.
 
 | | Observed |
 |---|---|
@@ -103,19 +86,38 @@ G1, Ubuntu 24.04): the unit enumerates with no driver.
 | Result | `P1-11`, `P2-11`, `P6-88`, `U1-11` sent with `--send` on the unit's channel each showed on the D-05 in order |
 | Unit output | MIDI clock continuously on the USB port; the app ignores timing messages |
 
-Roland's D-05 manual still says the USB driver must be installed and documents no
-GENERIC / class-compliant mode; on Linux the kernel's USB audio driver handles the unit
-regardless. Note the port is named **Boutique**, not D-05.
+Roland's D-05 manual says the USB driver must be installed and documents no GENERIC /
+class-compliant mode; on Linux the kernel's USB audio driver handles the unit
+regardless. On macOS and Windows this path needs Roland's driver. Note the port is
+named **Boutique**, not D-05.
 
-The first step of any Linux hardware test is `./build/d05-patch-switcher --list-ports`
-(or `aconnect -l`) with the D-05 on and plugged in, then check the unit's `CH`: the
-owner's unit is on channel 3, and sending on another channel does nothing, exactly
-like `Prog.C` OFF. If the `Boutique` port does not appear, fall back to the Hapax: it is
-a class-compliant USB MIDI device and the path above works on Linux with no driver
-when its USB cable is moved to the box.
+**(2) A USB MIDI interface.** A class-compliant interface needs no driver on Linux,
+macOS or Windows. The port name is the interface's; the app's channel must match the
+D-05's `CH`.
 
-On macOS and Windows the D-05's own USB port needs Roland's driver; the app does not
-depend on it because the owner's Mac talks to the Hapax.
+**(3) A device that forwards MIDI** (a hardware sequencer, a MIDI hub, a synth with
+USB-to-DIN thru). Two behaviours to expect, both seen on real hardware:
+
+- **Several USB ports.** Such devices often expose many virtual ports. Only the one
+  routed to the DIN output that reaches the D-05 works; try them in turn with *Test*.
+- **Channel rewriting.** Some devices pass incoming MIDI through a track or channel map
+  and send it on their own output channel. Then the app's channel does not matter; the
+  device's output channel must match the D-05's `CH`. The device must also pass Bank
+  Select (CC 0, CC 32) and Program Change through.
+
+Example verified at gate G4 (2026-10-24, macOS, Squarp Hapax with hapaxOS 3.x): the
+Hapax's USB port appears as 16 virtual ports; incoming MIDI goes into the selected
+track (input ALL ACTIVE) and leaves on that track's DIN output on the track's channel;
+the D-05 answered on the third port, and Bank Select and Program Change passed through.
+
+**Follow the panel** needs the reverse direction too: the D-05's output reaching the
+computer (path 1 carries both directions; paths 2 and 3 need a cable from the D-05's
+MIDI OUT and a device that forwards it). That is why follow-the-panel is optional and
+off by default.
+
+**First step of any hardware test:** `./build/d05-patch-switcher --list-ports` (or
+`aconnect -l` on Linux) with the D-05 on and connected, then check the unit's `CH`:
+sending on another channel does nothing, exactly like `Prog.C` OFF.
 
 ## Testing without hardware (Linux)
 
@@ -136,8 +138,8 @@ the bytes without opening any port, which is what the unit tests use.
 ## Hardware checklist (the owner runs this)
 
 1. D-05 on, `SYSTEM` → `MIDI`: `CH` matches the app, `Prog.C` ON (and `Bank.S` ON if the menu has it).
-2. Through the Hapax: Hapax on, thru routing from USB device in to the D-05's DIN out enabled. D-05 on USB directly: confirm it appears in `--list-ports` first (see "Hardware tests on the Linux box").
-3. App: Settings → output port = the Hapax (or `Boutique` on USB directly); channel as above; "Test" sends the current
+2. The D-05 is reachable (see "Connecting the D-05"): on USB directly, `Boutique` appears in `--list-ports`; through an interface or a forwarding device, that device is on and routes to the D-05's MIDI IN.
+3. App: Settings → output port = the port that reaches the D-05 (`Boutique` on USB directly); channel as above; "Test" sends the current
    patch. The D-05 display must change to it.
 4. From the app select `P1-11` *Fantasia*, then `P2-11` *Neo Horizon*, then `P6-88`
    *Big Waves*: each must show on the D-05 within a blink. Then `U1-11`.

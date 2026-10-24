@@ -25,8 +25,9 @@ All notable changes to D-05 Patch Switcher. The format follows
   Linux the app now shows up in `aconnect -l` as "D-05 Patch Switcher".
 - Sharper icon at 16, 24 and 32 px; the macOS icon now includes every size.
 - Two identical MIDI devices are listed by their full names, so you can pick either.
-- The README documents the Squarp Hapax path, where the data files live on each
-  system, and the Windows SmartScreen step.
+- The README explains the ways to connect the D-05 (its own USB port, a USB MIDI
+  interface, or a device that forwards MIDI), where the data files live on each system,
+  and the Windows SmartScreen step.
 
 ### Fixed
 
@@ -62,7 +63,8 @@ First pre-release.
 
 - Linux, D-05 over USB (shows up as `Boutique`): sending, prev/next across groups and
   follow-the-panel.
-- macOS through a Squarp Hapax (port `HAPAX Puerto 3`): sending and prev/next.
+- macOS through a hardware sequencer forwarding USB MIDI to the D-05's DIN input:
+  sending and prev/next.
 
 [1.0.0]: https://github.com/MarcAstr0/d05-patch-switcher/releases/tag/v1.0.0
 [0.9.0]: https://github.com/MarcAstr0/d05-patch-switcher/releases/tag/v0.9.0

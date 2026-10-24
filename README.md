@@ -17,16 +17,29 @@ like it belongs next to the synth.
 
 ## What you need
 
-- A Roland Boutique D-05 reachable from your computer over MIDI, directly (its own USB
-  port) or through another device that forwards MIDI.
-- Through a Squarp Hapax (the author's setup): the Hapax's USB port shows up as 16
-  virtual ports. Pick one in Settings and try them in turn; the author's unit answers on
-  port 3. The app's channel setting does not matter on this path, because the Hapax track
-  rewrites it to its own output channel. `Prog.C` must still be ON at the D-05.
+- A Roland Boutique D-05 reachable from your computer over MIDI. See
+  [Connecting the D-05](#connecting-the-d-05).
 - On the D-05, in `FUNCTION` → `SYSTEM` → `MIDI`: `Prog.C` **ON** and `CH` set to the
   channel you pick in the app (if your firmware also shows `Bank.S`, turn it on). With
   `Prog.C` off the synth ignores the app in silence.
 - Linux, macOS 12 or later, or Windows 10 or later.
+
+### Connecting the D-05
+
+The app sends Bank Select and Program Change to whichever MIDI output you pick in
+Settings. It never assumes a port name, so any of these works:
+
+- **The D-05's own USB port.** On Linux it works with no driver and shows up as
+  `Boutique`. On macOS and Windows it needs Roland's USB driver for the D-05.
+- **A USB MIDI interface** with its MIDI OUT cabled to the D-05's MIDI IN. Class-compliant
+  interfaces need no driver on any of the three systems.
+- **A hardware sequencer, hub or other device that forwards MIDI** from its USB port to
+  the D-05. Check two things on that device:
+  - Many of them expose several USB ports. If the D-05 does not react, try each port in
+    turn with *Test*.
+  - Some route incoming MIDI through a track or a channel map and send it on their own
+    channel, so the app's channel setting may not be the one that reaches the D-05. Make
+    sure the device passes Program Change and Bank Select (CC 0 and CC 32) through.
 
 ## Install
 
@@ -72,7 +85,7 @@ stops the app.
 
 #### MIDI on macOS
 
-- A Hapax (or any class-compliant USB MIDI interface) needs no driver on macOS.
+- A class-compliant USB MIDI interface or forwarding device needs no driver on macOS.
 - The D-05's own USB port does need Roland's USB driver on macOS. Connecting through
   another device's MIDI output avoids that.
 - Names, favourites, recents and settings live in
@@ -80,8 +93,9 @@ stops the app.
 
 ## Use
 
-1. Open Settings (`Ctrl+,`, `Cmd+,` on macOS), pick the MIDI output port your D-05 is behind, set the
-   channel, press *Test*. The D-05's display should jump to the patch shown in the app.
+1. Open Settings (`Ctrl+,`, `Cmd+,` on macOS), pick the MIDI output that reaches your
+   D-05, set the channel, press *Test*. The D-05's display should jump to the patch shown
+   in the app. If nothing happens, see [Connecting the D-05](#connecting-the-d-05).
 2. Type in the search box: `brass`, `e-piano`, `p3-45`, `345`, `u2`. Arrow keys move,
    Enter sends. `PgUp` / `PgDn` step through the catalogue.
 3. `Ctrl+D` toggles the favourite of the highlighted row; `Ctrl+2` shows favourites, `Ctrl+3` recents.
