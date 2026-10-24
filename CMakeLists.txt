@@ -101,7 +101,14 @@ set_target_properties(d05-patch-switcher PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "D-05 Patch Switcher"
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.marcastr0.d05-patch-switcher"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
-    MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}")
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_ICON_FILE "d05-patch-switcher.icns")
+if(APPLE)
+    # Copy the icon into Contents/Resources; CFBundleIconFile names it.
+    set(D05_ICNS "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/d05-patch-switcher.icns")
+    set_source_files_properties("${D05_ICNS}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    target_sources(d05-patch-switcher PRIVATE "${D05_ICNS}")
+endif()
 
 install(TARGETS d05-patch-switcher
     BUNDLE  DESTINATION .

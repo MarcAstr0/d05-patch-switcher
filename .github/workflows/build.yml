@@ -191,11 +191,18 @@ jobs:
         if: matrix.name == 'macos'
         run: |
           set -eux
-          APP=build/d05-patch-switcher.app
+          # Stage a copy named for the user ("D-05 Patch Switcher.app") next to an
+          # /Applications symlink so the dmg supports drag-install. The executable
+          # inside keeps its name, d05-patch-switcher.
+          stage="$RUNNER_TEMP/dmg-stage"
+          rm -rf "$stage"
+          mkdir -p "$stage" dist
+          APP="$stage/D-05 Patch Switcher.app"
+          cp -R build/d05-patch-switcher.app "$APP"
           macdeployqt "$APP" -always-overwrite
           codesign --force --deep --sign - "$APP"
-          mkdir -p dist
-          hdiutil create -volname "D-05 Patch Switcher" -srcfolder "$APP" -ov -format UDZO \
+          ln -s /Applications "$stage/Applications"
+          hdiutil create -volname "D-05 Patch Switcher" -srcfolder "$stage" -ov -format UDZO \
             dist/d05-patch-switcher-macos-universal.dmg
 
       - name: Verify (macOS .dmg)
@@ -210,7 +217,8 @@ jobs:
           mkdir -p "$mnt"
           hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mnt"
           trap 'hdiutil detach "$mnt" -force || true' EXIT
-          app="$mnt/d05-patch-switcher.app"
+          app="$mnt/D-05 Patch Switcher.app"
+          test -L "$mnt/Applications"
           bin="$app/Contents/MacOS/d05-patch-switcher"
           # Universal: both slices must be present.
           info="$(lipo -info "$bin")"
@@ -218,6 +226,15 @@ jobs:
           echo "$info" | grep -q x86_64
           echo "$info" | grep -q arm64
           codesign --verify --deep --strict --verbose=2 "$app"
+          # Icon: named by Info.plist and present in Resources; Retina-capable.
+          plist="$app/Contents/Info.plist"
+          icon="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIconFile' "$plist")"
+          echo "CFBundleIconFile: $icon"
+          test "$icon" = "d05-patch-switcher.icns"
+          test -s "$app/Contents/Resources/$icon"
+          hires="$(/usr/libexec/PlistBuddy -c 'Print NSHighResolutionCapable' "$plist")"
+          echo "NSHighResolutionCapable: $hires"
+          echo "$hires" | grep -qi true
           "$bin" --version | tee version.txt
           grep -q "d05-patch-switcher" version.txt
           "$bin" --list-ports

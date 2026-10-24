@@ -27,8 +27,48 @@ Builds for the three platforms are attached to each GitHub release.
 | Platform | File | Notes |
 |---|---|---|
 | Linux x86_64 | `d05-patch-switcher-x86_64.AppImage` | `chmod +x`, run |
-| macOS (Intel and Apple Silicon) | `d05-patch-switcher-macos-universal.dmg` | Not notarised: the first time, right-click the app and choose *Open* |
+| macOS (Intel and Apple Silicon) | `d05-patch-switcher-macos-universal.dmg` | Not notarised: see [Opening the macOS app](#opening-the-macos-app) |
 | Windows x64 | `d05-patch-switcher-windows-x64.zip` | unzip anywhere, run the `.exe` |
+
+### macOS notes
+
+Needs macOS 12 or later. Open the `.dmg` and drag *D-05 Patch Switcher* onto the
+*Applications* shortcut in the same window.
+
+The app is signed ad hoc but not notarised by Apple, so Gatekeeper blocks the first
+launch. Pick the steps for your macOS version.
+
+#### Opening the macOS app
+
+**macOS 12 to 14**
+
+1. In Finder, open *Applications*.
+2. Right-click (or Control-click) *D-05 Patch Switcher* and choose *Open*.
+3. In the dialog, click *Open*. Later launches work normally.
+
+**macOS 15 (Sequoia) and later** removed the right-click bypass for unnotarised apps.
+
+1. Open the app once (double-click) and dismiss the warning with *Done*.
+2. Open *System Settings* → *Privacy & Security* and scroll down to *Security*.
+3. Next to "D-05 Patch Switcher was blocked", click *Open Anyway*, then confirm with
+   your password or Touch ID and click *Open Anyway* again. Later launches work normally.
+
+**Terminal alternative** (any version):
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/D-05 Patch Switcher.app"
+```
+
+This removes the quarantine flag macOS attached to the download, so Gatekeeper no longer
+stops the app.
+
+#### MIDI on macOS
+
+- A Hapax (or any class-compliant USB MIDI interface) needs no driver on macOS.
+- The D-05's own USB port does need Roland's USB driver on macOS. Connecting through
+  another device's MIDI output avoids that.
+- Names, favourites, recents and settings live in
+  `~/Library/Application Support/marcastr0/d05-patch-switcher/`.
 
 ## Use
 

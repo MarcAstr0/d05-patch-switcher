@@ -253,7 +253,7 @@ bytes → backend callback (RtMidi thread) → queued signal → `MidiLink` pars
 
 Linux: `linuxdeploy` + Qt plugin → AppImage; also `cmake --install` for a plain prefix.
 macOS: `macdeployqt`, universal, ad-hoc `codesign`, `hdiutil` DMG. Without notarisation
-the first launch needs right-click → Open (documented in the README).
+the first launch needs right-click → Open on macOS 12 to 14, or Privacy & Security → Open Anyway on macOS 15 and later (documented in the README).
 Windows: `windeployqt` folder zipped. No installer.
 
 Version comes from `project(VERSION)` in CMake; tags are `vMAJOR.MINOR.PATCH`.
