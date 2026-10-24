@@ -79,7 +79,7 @@ the D-05 display showed. Fixes go back to the builder.
 
 - ☑ **T5.1** `F1` shortcut sheet; About box with version, licence and the trademark notice; first-run hint on the display's second line when no port is configured (`OPEN SETTINGS: CTRL+,`).
 - ☐ **T5.2** Everything the owner reported at G3/G4.
-- ☐ **T5.3** `CHANGELOG.md`; README screenshots from `--screenshot` at 2×.
+- ☑ **T5.3** `CHANGELOG.md`; README screenshots from `--screenshot` at 2×.
 - ☐ **R5 Final review** (reviewer + Codex; the foreman may run the agent on Opus).
 - ☐ **T5.4** Tag `v1.0.0`; release green; the vault's project page updated by the owner.
 
@@ -119,3 +119,4 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-24, foreman (R3, Codex findings after the limit reset): a follow move ends a running SENT flash; input listing/open/loss errors now reach the UI (`MidiLink::inputStatusChanged`); the main window relayouts when the display's size changes on a DPR change. Two visuals were added by the builder without a DESIGN.md slot and are accepted provisionally: an input-error line right of the input combo in Settings (380, 144, 100, 26; type.note, labelRed) and an input `NOT FOUND` marker in the status bar (statusError role). The designer records or revises both in DESIGN.md during M5. R3 now has both reviews.
 - 2026-10-24, foreman (T5.1): the first-run hint reads `CMD+,` on macOS and `CTRL+,` elsewhere, and shows only when no output port was ever configured (a configured but missing port still shows `NO MIDI OUTPUT`). The subset Inter has ⌘ ⇧ ⌥ for macOS key caps; other key symbols fall back to the system font. The Shortcuts sheet layout (wrapping, key column width) goes to the designer.
 - 2026-10-24, foreman (M5 design pass): accepted the designer's §10.3 rework (sheet 680 wide, no wrapping; `Esc` row split into clear and back), the About link line to the GitHub repository (§10.4), macOS caps `Esc` and `fn ↑` / `fn ↓` for PgUp/PgDn (the native glyphs are not in the subset font), the input-error line in Settings at body size, and hand-placed 16/24/32 px icons with a complete `.icns`. The owner can overrule the link and the `fn` labels.
+- 2026-10-24, foreman (T5.3): the README keeps the owner's real macOS capture (`docs/images/screenshot-macos.png`) as its screenshot instead of `--screenshot` renders; a real window shows native chrome and true font rendering. `CHANGELOG.md` follows Keep a Changelog; the [Unreleased] section becomes 1.0.0 at T5.4.
