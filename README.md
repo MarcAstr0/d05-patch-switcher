@@ -8,7 +8,12 @@ switches. Browse by group and bank with a grid that mirrors the panel, star favo
 and see what you used recently, all on a black panel with a green display that looks
 like it belongs next to the synth.
 
-**Status: in development.** See `docs/PLAN.md` for where it stands.
+<p align="center">
+  <img src="docs/images/screenshot-macos.png" width="800"
+       alt="D-05 Patch Switcher on macOS: a green two-line display reading P1-21 DigitalNativeDance, the patch group, bank and number buttons with the current patch lit, a search field, and the patch list.">
+</p>
+
+**Status: pre-release ([v0.9.0](https://github.com/MarcAstr0/d05-patch-switcher/releases/tag/v0.9.0)).** See `docs/PLAN.md` for where it stands.
 
 ## What you need
 
