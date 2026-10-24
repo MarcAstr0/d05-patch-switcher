@@ -38,7 +38,7 @@ qt_add_library(d05core STATIC
     src/core/SearchQuery.h  src/core/SearchQuery.cpp
     src/core/Library.h      src/core/Library.cpp
     src/app/Paths.h         src/app/Paths.cpp
-    src/midi/PortLister.h   src/midi/PortLister.cpp
+    src/app/Cli.h           src/app/Cli.cpp
     src/midi/MidiBackend.h
     src/midi/FakeMidiBackend.h src/midi/FakeMidiBackend.cpp
     src/midi/RtMidiBackend.h src/midi/RtMidiBackend.cpp

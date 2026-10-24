@@ -59,8 +59,19 @@ ctest --test-dir build --output-on-failure
 ./build/d05-patch-switcher
 ```
 
-Command-line options (`--help`): `--list-ports`, `--port`, `--channel`, `--send P1-11`
-for scripting, `--fake-midi` for trying it with no hardware.
+Command-line options (`--help`): `--list-ports`, `--port`, `--in-port`, `--channel`,
+`--send P1-11` for scripting (exit 0 sent, 1 bad address, 2 port not found, 3 MIDI
+error), `--fake-midi` for trying it with no hardware, `--config-dir`.
+
+### Developer: testing MIDI without hardware
+
+Unit tests run on a fake backend (`ctest`). On Linux, `scripts/midi-smoke.sh` drives the
+real RtMidi backend against the ALSA `Midi Through` port and checks the bytes with
+`aseqdump` (`sudo apt install alsa-utils`):
+
+```sh
+scripts/midi-smoke.sh [path/to/d05-patch-switcher]   # default: build/d05-patch-switcher
+```
 
 ## Trademarks
 
