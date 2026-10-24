@@ -23,11 +23,11 @@ No GUI beyond the scaffold window. Everything here is testable headless.
 - ☑ **T1.1 Split the build.** `d05core` and `d05ui` static libraries, the executable, tests linking `d05core`. `cmake --build` and `ctest` green; `--list-ports` still works.
 - ☑ **T1.2 `PatchAddress`.** Parse/format every form in SPEC §4 FR-3 and the canonical `P3-45`; `catalogueIndex()` 0…895 and its inverse; `midiTriplet()`. Tests: round-trip over all 896; rejects `P1-19`, `P1-90`, `P7-11`, `U9-11`, `X1-11`; the five worked examples from `docs/MIDI.md`.
 - ☑ **T1.3 `PatchCatalog`.** Loads the TSV from the resource; `name(addr)`, `mode(addr)`, `displayName(addr)` (user name or address for U groups); user-name overlay; `prev/next` in catalogue order with the ends clamped. Tests: 384 preset names present, `P1-11` = Fantasia, `U1-11` displays as `U1-11` until named, `P1-88`→next = `P2-11`, `P6-88`→next stays.
-- ☐ **T1.4 `SearchQuery`.** The FR-3 grammar as a predicate plus match ranges. Tests: a table with at least 25 cases copied from the spec, including the "bare digits are text" rule, accent-insensitivity (`Cafe` finds *Venetian Cafe*; a query with an accent also matches), and multi-token AND.
+- ☑ **T1.4 `SearchQuery`.** The FR-3 grammar as a predicate plus match ranges. Tests: a table with at least 25 cases copied from the spec, including the "bare digits are text" rule, accent-insensitivity (`Cafe` finds *Venetian Cafe*; a query with an accent also matches), and multi-token AND.
 - ☐ **T1.5 `Library`.** JSON load/save per SPEC §3.3, `QSaveFile`, 500 ms debounce, corruption handling, `--config-dir`. Tests in a temp dir: round-trip, recents ordering and counts, cap at 50, broken file is sidelined and the app proceeds.
 - ☐ **T1.6 MIDI layer.** `MidiBackend`, `FakeMidiBackend`, `RtMidiBackend`, `MidiLink` (connect by name, substring match, 2 s poll while disconnected, `sendPatch`, status text, follow-mode parsing with 300 ms echo suppression). Tests on the fake: exact bytes for channels 1, 10 and 16; a vanished port flips status and the poll reconnects when the fake port "reappears"; incoming CC0/CC32/PC updates `current` without a send; the echo of our own send is ignored.
 - ☐ **T1.7 CLI.** `--list-ports`, `--port`, `--in-port`, `--channel`, `--send`, `--fake-midi`, `--config-dir` with the exit codes from FR-15. `scripts/midi-smoke.sh` passes on the Linux box against `Midi Through` (install `alsa-utils` if `aseqdump` is missing). Record the test command in the README's developer section.
-- ☐ **R1 Review** (reviewer): all of M1. Builder fixes anything rated above style.
+- ☐ **R1 Review** (reviewer + Codex): all of M1, the agent on the commit range and `scripts/codex-review.sh --base origin/main` after the push; foreman reconciles per `docs/FOREMAN.md`. Builder fixes anything rated above style.
 - ☐ **Push and CI**: the build-and-test steps green on all three runners (packaging steps may still fail).
 
 **Gate G1 (owner, optional).** If the D-05 can be brought to the Linux box now, plug it
@@ -56,7 +56,7 @@ changes. One round of changes is budgeted. M3 starts only after approval.
 - ☐ **T3.4 Settings dialog and connection.** FR-9 and FR-10 wired to `MidiLink`; disconnected state on the display; auto-send; follow-the-panel; resend-on-connect; Test button.
 - ☐ **T3.5 Footprint.** `scripts/measure-footprint.sh`; numbers recorded in the PR/commit message; fix until within SPEC §5.
 - ☐ **D3 Design review** (designer): screenshots of every state at 1× and 2× (`QT_SCALE_FACTOR=2`) against DESIGN.md; numbered deviations; builder fixes; one more round at most.
-- ☐ **R3 Review** (reviewer): all of M3, with emphasis on threading, error paths and repaint discipline.
+- ☐ **R3 Review** (reviewer + Codex): all of M3, with emphasis on threading, error paths and repaint discipline; both reviews, reconciled.
 - ☐ **Push and CI** green on build-and-test.
 
 **Gate G3 (owner).** Hardware test on the Linux box, D-05 on USB directly if it
@@ -80,7 +80,7 @@ the D-05 display showed. Fixes go back to the builder.
 - ☐ **T5.1** `F1` shortcut sheet; About box with version, licence and the trademark notice; first-run hint on the display's second line when no port is configured (`OPEN SETTINGS: CTRL+,`).
 - ☐ **T5.2** Everything the owner reported at G3/G4.
 - ☐ **T5.3** `CHANGELOG.md`; README screenshots from `--screenshot` at 2×.
-- ☐ **R5 Final review** (reviewer; the foreman may run this one on Opus).
+- ☐ **R5 Final review** (reviewer + Codex; the foreman may run the agent on Opus).
 - ☐ **T5.4** Tag `v1.0.0`; release green; the vault's project page updated by the owner.
 
 ## Decisions log
