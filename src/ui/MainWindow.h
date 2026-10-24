@@ -6,8 +6,9 @@
 #include "ui/SettingsDialog.h"
 
 #include <QMainWindow>
-#include <QMessageBox>
+#include <QDialog>
 #include <QModelIndex>
+#include <QPair>
 #include <QPointer>
 #include <QString>
 #include <optional>
@@ -18,7 +19,6 @@ class QLabel;
 class QLineEdit;
 class QMenu;
 class QMenuBar;
-class QMessageBox;
 class QButtonGroup;
 
 namespace d05 {
@@ -106,7 +106,7 @@ public:
     // Opens the DESIGN 10.5 confirmation (window-modal, not blocking); CLEAR empties the recents.
     void confirmClearRecents();
     // Null once the box is closed and deleted (deletion can lag behind closing).
-    QMessageBox *clearRecentsBox() const { return m_clearBox.data(); }
+    QDialog *clearRecentsBox() const { return m_clearBox.data(); }
 
     // Sends and selects the highlighted patch (Enter).
     void sendHighlighted();
@@ -130,7 +130,8 @@ private:
     void layoutAll();
     bool sendAddress(const PatchAddress &address);
     void onSent(const PatchAddress &address);
-    void applyCurrent(const PatchAddress &address);
+    // `moveHighlight` false for a quiet send (resend, TEST): the list stays where the user is.
+    void applyCurrent(const PatchAddress &address, bool moveHighlight = true);
     void onQueryChanged(const QString &text);
     void onViewToggled();
     void onModelAboutToReset();
@@ -163,6 +164,9 @@ private:
     void setAutoSend(bool on, bool persist);
     // Stores and closes an open rename editor (before anything resets the list).
     void finishEditing();
+    // Applies a rename whose commit is still queued (closing, quitting).
+    void flushPendingRename();
+    void saveAndQuit();
 
     PatchCatalog &m_catalog;
     Library &m_library;
@@ -181,6 +185,7 @@ private:
     bool m_autoSendOn = false;
     bool m_resendOnConnect = false;
     int m_searchRepeatKey = 0;  // the Up/Down key whose auto-repeat moved the search field highlight
+    std::optional<QPair<PatchAddress, QString>> m_pendingRename;
     bool m_quietSend = false;   // the send being made is not a user selection: no Recents entry
     bool m_resendBlocked = false;  // the last resend failed: no more until a send works or settings change
     int m_connGeneration = 0;      // bumped on every connect and disconnect
@@ -215,7 +220,7 @@ private:
     QMenu *m_systemMenu = nullptr;
     QWidget *m_statusStrip = nullptr;
     QMenuBar *m_nativeMenuBar = nullptr;  // macOS only
-    QPointer<QMessageBox> m_clearBox;
+    QPointer<QDialog> m_clearBox;
     std::optional<PatchAddress> m_lastHighlight;  // the last highlight seen before a reset
 };
 

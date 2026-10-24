@@ -19,6 +19,12 @@ QString MidiLink::matchPort(const QStringList &ports, const QString &wanted)
         if (p == wanted)
             return p;
     }
+    // A saved key may itself end in digits ("Launchpad 2" on Windows, where the index was already
+    // stripped): try it as it is before stripping it again.
+    for (const QString &p : ports) {
+        if (MidiLink::portKey(p).compare(wanted, Qt::CaseInsensitive) == 0)
+            return p;
+    }
     const QString key = MidiLink::portKey(wanted);
     for (const QString &p : ports) {
         if (MidiLink::portKey(p).compare(key, Qt::CaseInsensitive) == 0)
@@ -31,11 +37,24 @@ QString MidiLink::matchPort(const QStringList &ports, const QString &wanted)
     return {};
 }
 
+QString MidiLink::stripWinMMIndex(const QString &name)
+{
+    static const QRegularExpression suffix(QStringLiteral("\\s\\d+$"));
+    QString k = name;
+    k.remove(suffix);
+    return k;
+}
+
 QString MidiLink::portKey(const QString &name)
 {
     static const QRegularExpression suffix(QStringLiteral("\\s+\\d+:\\d+$"));
     QString k = name;
     k.remove(suffix);
+#if defined(Q_OS_WIN) || defined(D05_WINMM_PORT_KEYS)
+    // WinMM names carry no ALSA suffix; their " <index>" is always present.
+    if (k == name)
+        k = stripWinMMIndex(name);
+#endif
     return k;
 }
 

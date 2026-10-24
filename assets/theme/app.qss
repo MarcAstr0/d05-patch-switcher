@@ -212,7 +212,7 @@ QLineEdit#nameEditor {
     font-weight: 400;
     border: 1px solid #9DBBE8;
     border-radius: 0px;
-    padding: 0px 3px;
+    padding: 0px 1px;
     selection-background-color: #2E4366;
     selection-color: #E2E0D4;
 }

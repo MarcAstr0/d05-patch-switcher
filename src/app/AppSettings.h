@@ -22,7 +22,7 @@ class AppSettings {
 public:
     // The connection and behaviour settings that FR-9 edits as one unit.
     struct Values {
-        QString outputPort;  // port key; empty = none chosen
+        QString outputPort;  // port key (MidiLink::portKey of an OS name); empty = none chosen
         QString inputPort;   // port key; empty = None
         int channel = 1;
         bool autoSend = false;

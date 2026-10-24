@@ -59,8 +59,8 @@ private slots:
         QTemporaryDir dir;
         const QString path = dir.filePath(QStringLiteral("settings.ini"));
         AppSettings::Values v;
-        v.outputPort = QStringLiteral("Hapax MIDI 1");
-        v.inputPort = QStringLiteral("Hapax MIDI 2");
+        v.outputPort = QStringLiteral("Hapax Port A");
+        v.inputPort = QStringLiteral("Hapax Port B");
         v.channel = 3;
         v.autoSend = true;
         v.follow = true;
@@ -102,8 +102,9 @@ private slots:
         s.setInputPort(QStringLiteral("Boutique:Boutique MIDI 1 24:0"));
         QCOMPARE(s.outputPort(), QStringLiteral("Boutique:Boutique MIDI 1"));
         QCOMPARE(s.inputPort(), QStringLiteral("Boutique:Boutique MIDI 1"));
+        // Values already hold keys (the dialog strips OS names); they are stored as given.
         AppSettings::Values v;
-        v.outputPort = QStringLiteral("Midi Through:Midi Through Port-0 14:0");
+        v.outputPort = QStringLiteral("Midi Through:Midi Through Port-0");
         s.setValues(v);
         QCOMPARE(s.outputPort(), QStringLiteral("Midi Through:Midi Through Port-0"));
     }
@@ -166,8 +167,8 @@ private slots:
         const QString path = dir.filePath(QStringLiteral("settings.ini"));
         AppSettings saved(path);
         AppSettings::Values v;
-        v.outputPort = QStringLiteral("Hapax MIDI 1");
-        v.inputPort = QStringLiteral("Hapax MIDI 2");
+        v.outputPort = QStringLiteral("Hapax Port A");
+        v.inputPort = QStringLiteral("Hapax Port B");
         v.channel = 3;
         v.autoSend = true;
         saved.setValues(v);
@@ -201,7 +202,7 @@ private slots:
     {
         QTemporaryDir dir;
         AppSettings saved(dir.filePath(QStringLiteral("settings.ini")));
-        saved.setOutputPort(QStringLiteral("Hapax MIDI 1"));
+        saved.setOutputPort(QStringLiteral("Hapax Port A"));
         QCOMPARE(Cli::startupValues(saved, parsed({"--fake-midi"})).outputPort, QStringLiteral("Fake D-05 In"));
         QCOMPARE(Cli::startupValues(saved, parsed({"--fake-midi", "--port", "Fake"})).outputPort, QStringLiteral("Fake"));
     }
@@ -252,19 +253,19 @@ private slots:
     {
         QTemporaryDir dir;
         AppSettings saved(dir.filePath(QStringLiteral("settings.ini")));
-        saved.setOutputPort(QStringLiteral("Hapax MIDI 1"));
+        saved.setOutputPort(QStringLiteral("Hapax Port A"));
         FakeMidiBackend fake;
         QString out, err;
         QTextStream so(&out), se(&err);
         QCOMPARE(Cli::runSend(parsed({"--send", "P1-11"}), fake, so, se, &saved), Exit::PortNotFound);
-        QVERIFY(err.contains(QStringLiteral("Hapax MIDI 1")));
+        QVERIFY(err.contains(QStringLiteral("Hapax Port A")));
     }
 
     void sendFakeMidiIgnoresASavedRealPort()
     {
         QTemporaryDir dir;
         AppSettings saved(dir.filePath(QStringLiteral("settings.ini")));
-        saved.setOutputPort(QStringLiteral("Hapax MIDI 1"));
+        saved.setOutputPort(QStringLiteral("Hapax Port A"));
         FakeMidiBackend fake;
         QString out, err;
         QTextStream so(&out), se(&err);

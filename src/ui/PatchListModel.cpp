@@ -14,10 +14,7 @@ PatchListModel::PatchListModel(const PatchCatalog &catalog, const Library &libra
     , m_rowOf(PatchAddress::CatalogueSize, -1)
 {
     connect(&m_library, &Library::favoritesChanged, this, &PatchListModel::onFavoritesChanged);
-    connect(&m_library, &Library::recentsChanged, this, [this] {
-        if (m_view == View::Recents)
-            rebuild();
-    });
+    connect(&m_library, &Library::recentsChanged, this, &PatchListModel::onRecentsChanged);
     connect(&m_library, &Library::userNamesChanged, this, &PatchListModel::onUserNamesChanged);
     rebuild();
 }
@@ -125,6 +122,32 @@ QString PatchListModel::emptyNote() const
     case View::All: break;
     }
     return QString();
+}
+
+// While the Recents view is shown a send must not reorder the rows: with auto-send the
+// highlight would chase the row it just sent. Counts update in place; the order refreshes
+// when the view is entered again. Rows that left the library (cleared, capped) rebuild.
+void PatchListModel::onRecentsChanged()
+{
+    if (m_view != View::Recents)
+        return;
+    QVector<int> counts(PatchAddress::CatalogueSize, 0);
+    for (const Library::Recent &r : m_library.recents())
+        counts[r.address.catalogueIndex()] = r.count;
+    for (const Row &row : std::as_const(m_rows)) {
+        if (counts[row.address.catalogueIndex()] == 0) {
+            rebuild();
+            return;
+        }
+    }
+    for (int r = 0; r < m_rows.size(); ++r) {
+        const int n = counts[m_rows[r].address.catalogueIndex()];
+        const QString text = QStringLiteral("×") + QString::number(n);
+        if (text != m_rows[r].countText) {
+            m_rows[r].countText = text;
+            emit dataChanged(index(r), index(r));
+        }
+    }
 }
 
 void PatchListModel::onFavoritesChanged()

@@ -79,6 +79,9 @@ public:
     // "WHOLE", "DUAL", "SPLIT" for 'W', 'D', 'S'; empty otherwise.
     static QString modeText(QChar mode);
 
+    // How many times the lit-field frame was rebuilt (tests: a drag must not rebuild it).
+    int frameBuildCount() const { return m_frameBuilds; }
+
     // Geometry (device pixels), exposed for tests.
     int deviceDot() const { return m_P; }
     // The device-pixel dot pitch P for a logical pitch and a DPR. The single place
@@ -150,8 +153,8 @@ private:
     int m_g = 0;
     bool m_builtGhost = false;
     int m_pitchBuilt = 0;
-    int m_widthBuilt = 0;
     int m_windowWidth = 100000;
+    int m_frameBuilds = 0;
     int m_atlasP = 0;
     int m_atlasG = 0;
     int m_dotOffX = 0;  // device px from the frame's left to the dot area

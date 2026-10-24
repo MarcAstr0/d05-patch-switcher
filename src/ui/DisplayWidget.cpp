@@ -66,8 +66,10 @@ void DisplayWidget::setStep(int p, int windowWidth)
         return;
     m_pitch = p;
     m_windowWidth = windowWidth;
-    ensureResources();
-    update();
+    if (resourcesStale()) {
+        ensureResources();
+        update();
+    }
 }
 
 int DisplayWidget::pitchForWidth(int w)
@@ -278,8 +280,10 @@ qreal DisplayWidget::currentDpr() const
 
 bool DisplayWidget::resourcesStale() const
 {
+    // A window width matters only through the pitch it yields (DESIGN 5.1): dragging the
+    // window edge rebuilds nothing while P stays the same.
     return m_P == 0 || !qFuzzyCompare(currentDpr(), m_dpr) || m_pitchBuilt != m_pitch
-           || m_widthBuilt != m_windowWidth || m_builtGhost != m_showGhost;
+           || m_builtGhost != m_showGhost || devicePitch(m_pitch, currentDpr(), m_windowWidth) != m_P;
 }
 
 namespace {
@@ -355,7 +359,6 @@ void DisplayWidget::ensureResources()
 
     m_dpr = dpr;
     m_pitchBuilt = m_pitch;
-    m_widthBuilt = m_windowWidth;
     const bool ghostChanged = m_builtGhost != m_showGhost;
     m_builtGhost = m_showGhost;
     m_P = devicePitch(m_pitch, dpr, m_windowWidth);
@@ -378,6 +381,7 @@ void DisplayWidget::ensureResources()
         buildAtlas();
     }
 
+    ++m_frameBuilds;
     m_frame = QPixmap(pixW, pixH);  // device pixels; the DPR is set after painting
     m_frame.fill(Theme::lcdBack);
     {

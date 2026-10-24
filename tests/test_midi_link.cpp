@@ -46,6 +46,26 @@ private slots:
         QVERIFY(f.sentMessages().isEmpty());
     }
 
+    // RtMidi 6.0.0 WinMM appends " <port index>" to every port name (RtMidi.cpp,
+    // MidiInWinMM::getPortName line 2977 and MidiOutWinMM::getPortName line 3047,
+    // "ensure unique portnames"); the index changes as devices come and go.
+    void winMMIndexIsStripped()
+    {
+        QCOMPARE(MidiLink::stripWinMMIndex(QStringLiteral("Hapax MIDI 1 3")), QStringLiteral("Hapax MIDI 1"));
+        QCOMPARE(MidiLink::stripWinMMIndex(QStringLiteral("Boutique 0")), QStringLiteral("Boutique"));
+        QCOMPARE(MidiLink::stripWinMMIndex(QStringLiteral("USB MIDI Device 12")), QStringLiteral("USB MIDI Device"));
+        QCOMPARE(MidiLink::stripWinMMIndex(QStringLiteral("Launchpad")), QStringLiteral("Launchpad"));  // not WinMM form
+        QCOMPARE(MidiLink::stripWinMMIndex(QStringLiteral("Port2")), QStringLiteral("Port2"));          // no space, no index
+#if defined(Q_OS_WIN) || defined(D05_WINMM_PORT_KEYS)
+        QCOMPARE(MidiLink::portKey(QStringLiteral("Hapax MIDI 1 3")), QStringLiteral("Hapax MIDI 1"));
+        QCOMPARE(MidiLink::matchPort({QStringLiteral("Hapax MIDI 1 3")}, QStringLiteral("Hapax MIDI 1")),
+                 QStringLiteral("Hapax MIDI 1 3"));  // a saved key that ends in digits still finds its port
+#else
+        // Elsewhere only the ALSA "client:port" suffix is a varying part.
+        QCOMPARE(MidiLink::portKey(QStringLiteral("Hapax MIDI 1")), QStringLiteral("Hapax MIDI 1"));
+#endif
+    }
+
     void listsPortsThroughTheLink()
     {
         FakeMidiBackend f;
@@ -288,7 +308,9 @@ private slots:
         QCOMPARE(MidiLink::portKey(QStringLiteral("Hapax:Hapax MIDI 1 24:0")),
                  QStringLiteral("Hapax:Hapax MIDI 1"));
         QCOMPARE(MidiLink::portKey(QStringLiteral("Fake D-05 In")), QStringLiteral("Fake D-05 In"));
-        QCOMPARE(MidiLink::portKey(QStringLiteral("Port 3")), QStringLiteral("Port 3"));
+#if !(defined(Q_OS_WIN) || defined(D05_WINMM_PORT_KEYS))
+        QCOMPARE(MidiLink::portKey(QStringLiteral("Port 3")), QStringLiteral("Port 3"));  // WinMM would strip it
+#endif
 
         FakeMidiBackend f;
         f.setOutputPorts({QStringLiteral("Hapax:Hapax MIDI 1 28:0")});

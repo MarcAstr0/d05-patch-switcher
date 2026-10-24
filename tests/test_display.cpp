@@ -471,6 +471,39 @@ private slots:
         Paths::setOverride(QString());
     }
 
+    // Dragging the window edge changes the width every pixel; the frame is rebuilt only
+    // when the width changes the pitch the rule yields (DESIGN 5.1).
+    void resizeRebuildsOnlyWhenThePitchChanges()
+    {
+        DisplayWidget d;
+        d.setStep(3, 800);
+        const int base = d.frameBuildCount();
+        for (int w = 801; w <= 1500; ++w)  // 1x: P = 3 up to 1041, then 4, then 5: only p changes it
+            d.setStep(DisplayWidget::pitchForWidth(w), w);
+        QCOMPARE(d.frameBuildCount() - base, 2);  // 3 -> 4 at 1042 and 4 -> 5 at 1285, nothing else
+        for (int w = 1500; w >= 800; --w)
+            d.setStep(DisplayWidget::pitchForWidth(w), w);
+        QCOMPARE(d.frameBuildCount() - base, 4);
+
+        // At 1.25 the device pitch also depends on the width inside one step.
+        DisplayWidget f;
+        f.rebuildForDprForTest(1.25);
+        f.setStep(3, 800);
+        const int start = f.frameBuildCount();
+        int changes = 0;
+        int last = DisplayWidget::devicePitch(3, 1.25, 800);
+        for (int w = 801; w <= 1041; ++w) {
+            f.setStep(3, w);
+            const int p = DisplayWidget::devicePitch(3, 1.25, w);
+            if (p != last)
+                ++changes;
+            last = p;
+        }
+        QVERIFY(changes >= 1);
+        QCOMPARE(f.frameBuildCount() - start, changes);
+        QCOMPARE(f.deviceDot(), last);
+    }
+
     void screenshotProcessExitCodes()
     {
         QTemporaryDir out;

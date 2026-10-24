@@ -22,6 +22,7 @@ constexpr int kMargin = 20;
 constexpr int kContentW = 480;
 constexpr int kControlX = 112;
 constexpr int kStatusElideW = 350;
+constexpr int kIsKeyRole = Qt::UserRole + 1;  // item data: true when the data is a saved key, not an OS name
 
 // The 10 x 4 LED beside the connection text: lit (no core) when connected, else off.
 class StatusLed : public QWidget {
@@ -50,6 +51,13 @@ protected:
 private:
     bool m_lit = false;
 };
+
+// The selected port as a key: OS names are stripped, a saved key is kept as it is.
+QString selectedKey(const QComboBox *c)
+{
+    const QString data = c->currentData().toString();
+    return c->currentData(kIsKeyRole).toBool() ? data : MidiLink::portKey(data);
+}
 
 }  // namespace
 
@@ -201,7 +209,8 @@ void SettingsDialog::fillCombo(QComboBox *combo, const QStringList &names, const
         index = combo->findData(match);
     } else if (!wanted.isEmpty()) {
         // Configured but not listed right now: keep it visible so OK does not forget it.
-        combo->addItem(MidiLink::portKey(wanted), wanted);
+        combo->addItem(wanted, wanted);
+        combo->setItemData(combo->count() - 1, true, kIsKeyRole);  // already a key: never strip it again
         index = combo->count() - 1;
     }
     combo->setCurrentIndex(index >= 0 ? index : 0);
@@ -210,11 +219,8 @@ void SettingsDialog::fillCombo(QComboBox *combo, const QStringList &names, const
 void SettingsDialog::refreshPorts()
 {
     // Re-enumerates; whatever is selected stays selected (or stays as a "missing" entry).
-    const auto selected = [](const QComboBox *c, const QString &fallback) {
-        return c->count() > 0 ? c->currentData().toString() : fallback;
-    };
-    const QString wantOut = m_outCombo->count() > 0 ? selected(m_outCombo, QString()) : m_initial.outputPort;
-    const QString wantIn = m_inCombo->count() > 0 ? selected(m_inCombo, QString()) : m_initial.inputPort;
+    const QString wantOut = m_outCombo->count() > 0 ? selectedKey(m_outCombo) : m_initial.outputPort;
+    const QString wantIn = m_inCombo->count() > 0 ? selectedKey(m_inCombo) : m_initial.inputPort;
     QString outErr, inErr;
     const QStringList outs = m_link.outputPortNames(&outErr);
     const QStringList ins = m_link.inputPortNames(&inErr);
@@ -234,11 +240,12 @@ void SettingsDialog::updateEnabled()
 AppSettings::Values SettingsDialog::values() const
 {
     AppSettings::Values v;
-    v.outputPort = MidiLink::portKey(m_outCombo->currentData().toString());
-    v.inputPort = MidiLink::portKey(m_inCombo->currentData().toString());
+    v.outputPort = selectedKey(m_outCombo);
+    v.inputPort = selectedKey(m_inCombo);
     v.channel = m_channel->value();
     v.autoSend = m_autoSend->isChecked();
-    v.follow = m_follow->isChecked();
+    // Follow needs an input port: with None it is off whatever the (disabled) box shows.
+    v.follow = m_follow->isChecked() && !v.inputPort.isEmpty();
     v.resendOnConnect = m_resend->isChecked();
     return v;
 }
@@ -251,7 +258,7 @@ QString SettingsDialog::connectionState() const
 void SettingsDialog::updateStatus()
 {
     const QString selected = m_outCombo->currentData().toString();
-    const QString key = MidiLink::portKey(selected);
+    const QString key = selectedKey(m_outCombo);
     QString text;
     bool ok = false;
     if (!m_listError.isEmpty()) {

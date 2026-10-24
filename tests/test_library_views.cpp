@@ -18,6 +18,7 @@
 #include <QClipboard>
 #include <QImage>
 #include <QLineEdit>
+#include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSignalSpy>
@@ -266,14 +267,20 @@ private slots:
         // Counts show in the Recents view only.
         QTest::keyClick(r.w.get(), Qt::Key_1, Qt::ControlModifier);
         QVERIFY(r.model()->row(0).countText.isEmpty());
-        // Sending in the Recents view reorders; the highlight stays on the address.
+        // Sending in the Recents view updates the count in place: no reorder under the cursor.
         QTest::keyClick(r.w.get(), Qt::Key_3, Qt::ControlModifier);
         r.highlight("P1-12");
         r.list()->setFocus();
         QTest::keyClick(r.list(), Qt::Key_Return);
+        QCOMPARE(r.model()->row(0).address, addr("P3-45"));
+        QCOMPARE(r.model()->row(2).address, addr("P1-12"));
+        QCOMPARE(r.model()->row(2).countText, QStringLiteral("×2"));
+        QCOMPARE(r.w->highlighted().value(), addr("P1-12"));
+        // Entering the view again shows the new order.
+        QTest::keyClick(r.w.get(), Qt::Key_1, Qt::ControlModifier);
+        QTest::keyClick(r.w.get(), Qt::Key_3, Qt::ControlModifier);
         QCOMPARE(r.model()->row(0).address, addr("P1-12"));
         QCOMPARE(r.model()->row(0).countText, QStringLiteral("×2"));
-        QCOMPARE(r.w->highlighted().value(), addr("P1-12"));
         // Persisted.
         r.library->flush();
         PatchCatalog c2;
@@ -297,21 +304,32 @@ private slots:
         QCOMPARE(r.model()->rowCount(), 2);
 
         r.w->action(QStringLiteral("actionClearRecents"))->trigger();
-        QMessageBox *box = r.w->clearRecentsBox();
+        QDialog *box = r.w->clearRecentsBox();
         QVERIFY(box);
-        QCOMPARE(box->text(), QStringLiteral("Clear the list of recently sent patches?"));
-        QCOMPARE(box->icon(), QMessageBox::NoIcon);
+        QCOMPARE(box->findChild<QLabel *>()->text(), QStringLiteral("Clear the list of recently sent patches?"));
+        QCOMPARE(box->windowTitle(), QStringLiteral("Clear Recents"));
+        QVERIFY(box->isModal());
         QPushButton *clear = box->findChild<QPushButton *>(QStringLiteral("clearButton"));
         QVERIFY(clear);
         QCOMPARE(clear->text(), QStringLiteral("CLEAR"));
-        QVERIFY(box->defaultButton());
-        QCOMPARE(box->defaultButton()->text(), QStringLiteral("CANCEL"));
+        QPushButton *cancel = box->findChild<QPushButton *>(QStringLiteral("cancelButton"));
+        QVERIFY(cancel);
+        QCOMPARE(cancel->text(), QStringLiteral("CANCEL"));
+        QVERIFY(cancel->isDefault());
+        QVERIFY(!clear->isDefault());
+        QCOMPARE(box->focusWidget(), static_cast<QWidget *>(cancel));  // initial focus
+        // DESIGN 10.5: client 360 x 104, 20 px margins, buttons 100 x 28 right aligned 8 px apart.
+        QVERIFY(QTest::qWaitForWindowExposed(box));
+        QCOMPARE(box->size(), QSize(360, 104));
+        QCOMPARE(box->findChild<QLabel *>()->geometry().x(), 20);
+        QCOMPARE(clear->geometry(), QRect(360 - 20 - 100 - 8 - 100, 104 - 20 - 28, 100, 28));
+        QCOMPARE(cancel->geometry(), QRect(360 - 20 - 100, 104 - 20 - 28, 100, 28));
         // Asking again while the box is open does not stack a second one.
         r.w->action(QStringLiteral("actionClearRecents"))->trigger();
         QCOMPARE(r.w->clearRecentsBox(), box);
         QCOMPARE(r.model()->rowCount(), 2);  // nothing happened yet
 
-        box->defaultButton()->click();  // CANCEL
+        cancel->click();
         QTRY_VERIFY(!r.w->clearRecentsBox());  // closing may lag (a macOS sheet; deferred delete)
         QCOMPARE(r.library->recents().size(), 2);
         QCOMPARE(r.model()->rowCount(), 2);
@@ -359,9 +377,12 @@ private slots:
         QVERIFY(e->text().isEmpty());
         QVERIFY(e->validator());
         QCOMPARE(r.sentCount(), 0);
-        // Editor geometry: over (80, 2, Wl - 180, 24) of the row (DESIGN 7.4).
+        // Editor geometry: over (80, 2, Wl - 180, 24) of the row, Wl being the viewport width
+        // the row paint uses, so the right edge is at Wl - 100 (DESIGN 7.4).
         const QRect row = r.list()->visualRect(r.model()->indexOf(addr("U2-34")));
-        QCOMPARE(e->geometry(), QRect(row.x() + 80, row.y() + 2, row.width() - 180, 24));
+        const int Wl = r.list()->viewport()->width();
+        QCOMPARE(e->geometry(), QRect(row.x() + 80, row.y() + 2, Wl - 180, 24));
+        QCOMPARE(e->geometry().x() + e->geometry().width(), Wl - 100);
         QCOMPARE(e->objectName(), QStringLiteral("nameEditor"));
     }
 
@@ -578,7 +599,7 @@ private slots:
         const QPoint pos = r.list()->visualRect(i).center();
         QTest::mousePress(vp, Qt::LeftButton, Qt::NoModifier, pos);
         QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, pos);
-        QCOMPARE(r.model()->row(0).address, addr("U1-11"));
+        QCOMPARE(r.model()->row(2).address, addr("U1-11"));  // in place: it did not move
         QMouseEvent dbl(QEvent::MouseButtonDblClick, pos, vp->mapToGlobal(pos), Qt::LeftButton, Qt::LeftButton,
                         Qt::NoModifier);
         QApplication::sendEvent(vp, &dbl);

@@ -46,7 +46,13 @@ public:
     QString connectedPortName() const { return m_connectedName; }
     // Name without the trailing ALSA "client:port" numbers; persist this.
     QString connectedPortKey() const { return portKey(m_connectedName); }
+    // On Windows RtMidi (WinMM) appends " <port index>" to every name (RtMidi.cpp 6.0.0,
+    // MidiInWinMM / MidiOutWinMM::getPortName, "ensure unique portnames"), and the index
+    // changes as devices come and go; the key drops it there. CoreMIDI adds nothing.
     static QString portKey(const QString &name);
+    // The WinMM rule on its own (always compiled, so tests can exercise it on any platform):
+    // removes exactly one trailing " <digits>".
+    static QString stripWinMMIndex(const QString &name);
     // How `wanted` is matched against a port list: exact full name, then equal
     // keys, then case-insensitive substring of the key. "" when none.
     static QString matchPort(const QStringList &ports, const QString &wanted);

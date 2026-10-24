@@ -41,3 +41,10 @@ target_link_libraries(test_library_views PRIVATE d05ui Qt6::Widgets)
 d05_add_test(test_app_settings test_app_settings.cpp)
 d05_add_test(test_settings_ui test_settings_ui.cpp)
 target_link_libraries(test_settings_ui PRIVATE d05ui Qt6::Widgets)
+
+# The real RtMidi input path against ALSA "Midi Through" (exit 77 = skipped).
+if(UNIX AND NOT APPLE)
+    d05_add_test(test_rtmidi_follow test_rtmidi_follow.cpp)
+    target_link_libraries(test_rtmidi_follow PRIVATE rtmidi)
+    set_tests_properties(test_rtmidi_follow PROPERTIES SKIP_RETURN_CODE 77 LABELS "hardware-free" TIMEOUT 60)
+endif()

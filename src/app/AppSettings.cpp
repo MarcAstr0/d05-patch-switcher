@@ -83,8 +83,10 @@ AppSettings::Values AppSettings::values() const
 
 void AppSettings::setValues(const Values &v)
 {
-    store(kOutput, key(v.outputPort));
-    store(kInput, key(v.inputPort));
+    // Values hold keys already (the dialog strips OS names). Stripping again is not safe where a
+    // key can end in digits (WinMM), so they are stored as given.
+    store(kOutput, v.outputPort.trimmed());
+    store(kInput, v.inputPort.trimmed());
     store(kChannel, qBound(1, v.channel, 16));
     store(kAutoSend, v.autoSend);
     store(kFollow, v.follow);

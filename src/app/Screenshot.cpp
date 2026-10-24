@@ -15,7 +15,7 @@
 
 #include <QApplication>
 #include <QLineEdit>
-#include <QMessageBox>
+#include <QDialog>
 #include <QPainter>
 #include <QPixmap>
 #include <QTemporaryDir>
@@ -147,7 +147,7 @@ int runScreenshot(const CliOptions &opts)
     }
     QApplication::processEvents();
     QPixmap shot = window.grab();
-    if (QMessageBox *box = window.clearRecentsBox()) {
+    if (QDialog *box = window.clearRecentsBox()) {
         // The box is its own top-level window: paint it over the window where it sits.
         const QPoint at = box->mapToGlobal(QPoint()) - window.mapToGlobal(QPoint());
         const QPixmap boxShot = box->grab();

@@ -356,8 +356,11 @@ void PatchDelegate::setModelData(QWidget *editor, QAbstractItemModel *, const QM
 
 void PatchDelegate::updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option, const QModelIndex &) const
 {
+    // The width comes from the viewport the row paint uses, so the editor ends at Wl - 100,
+    // 20 px before the counter column (DESIGN 7.4).
     const QRect r = option.rect;
-    editor->setGeometry(r.x() + 80, r.y() + 2, r.width() - 180, 24);
+    const int Wl = editor->parentWidget() ? editor->parentWidget()->width() : r.width();
+    editor->setGeometry(r.x() + 80, r.y() + 2, Wl - 180, 24);
 }
 
 }  // namespace d05

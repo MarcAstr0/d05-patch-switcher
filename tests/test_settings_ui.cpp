@@ -1206,6 +1206,175 @@ private slots:
         QCOMPARE(r.w->current(), addr("P3-45"));
     }
 
+    // ------------------------------------------------------------------ R3
+
+    static QLineEdit *editorOf(Rig &r)
+    {
+        for (QLineEdit *e : r.w->list()->viewport()->findChildren<QLineEdit *>(QStringLiteral("nameEditor"))) {
+            if (!e->isHidden())
+                return e;
+        }
+        return nullptr;
+    }
+
+    void autoSendInRecentsDoesNotPingPong()
+    {
+        AppSettings::Values v = values(kOut);
+        Rig r(v);
+        QVERIFY(r.show());
+        QVERIFY(r.link->sendPatch(addr("P1-13")));
+        QVERIFY(r.link->sendPatch(addr("P1-12")));
+        QVERIFY(r.link->sendPatch(addr("P1-11")));  // recents: P1-11, P1-12, P1-13
+        r.w->viewButton(PatchListModel::View::Recents)->click();
+        QCOMPARE(r.w->model()->rowCount(), 3);
+        r.w->setAutoSend(true);
+        r.backend.clearSent();
+        r.w->list()->setFocus();
+        QCOMPARE(*r.w->highlighted(), addr("P1-11"));
+        QList<PatchAddress> visited{*r.w->highlighted()};
+        for (int i = 0; i < 4; ++i) {
+            r.key(r.w->list(), Qt::Key_Down);
+            visited << *r.w->highlighted();
+        }
+        QCOMPARE(visited, (QList<PatchAddress>{addr("P1-11"), addr("P1-12"), addr("P1-13"), addr("P1-13"), addr("P1-13")}));
+        QCOMPARE(r.sent().size(), 6);  // two sends: P1-12, P1-13; the two further Downs have no row to go to
+        // The rows kept their order; the counts moved in place.
+        QCOMPARE(r.w->model()->row(0).address, addr("P1-11"));
+        QCOMPARE(r.w->model()->row(1).address, addr("P1-12"));
+        QCOMPARE(r.w->model()->row(2).address, addr("P1-13"));
+        QCOMPARE(r.w->model()->row(1).countText, QStringLiteral("×2"));
+        QCOMPARE(r.w->model()->row(2).countText, QStringLiteral("×2"));
+        QCOMPARE(r.w->model()->row(0).countText, QStringLiteral("×1"));
+        // Entering the view again refreshes the order (most recent first).
+        r.w->viewButton(PatchListModel::View::All)->click();
+        r.w->viewButton(PatchListModel::View::Recents)->click();
+        QCOMPARE(r.w->model()->row(0).address, addr("P1-13"));
+        QCOMPARE(r.w->model()->row(1).address, addr("P1-12"));
+        QCOMPARE(r.w->model()->row(2).address, addr("P1-11"));
+    }
+
+    void clearingRecentsStillEmptiesTheRecentsView()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        QVERIFY(r.link->sendPatch(addr("P1-13")));
+        r.w->viewButton(PatchListModel::View::Recents)->click();
+        QCOMPARE(r.w->model()->rowCount(), 1);
+        r.library->clearRecents();
+        QCOMPARE(r.w->model()->rowCount(), 0);
+    }
+
+    void aQuietSendLeavesTheRenameEditorAndHighlightAlone()
+    {
+        AppSettings::Values v = values(kOut);
+        v.resendOnConnect = true;
+        Rig r(v);
+        QVERIFY(r.show());
+        r.w->list()->setFocus();
+        const QModelIndex u = r.w->model()->indexOf(addr("U1-14"));
+        r.w->list()->setCurrentIndex(u);
+        r.w->renameHighlighted();
+        QLineEdit *e = editorOf(r);
+        QVERIFY(e);
+        e->setText(QStringLiteral("Half a nam"));
+        r.backend.clearSent();
+        r.dropAndReturn();  // poll reconnect: resend-on-connect fires
+        QCOMPARE(r.sent().size(), 3);
+        QCOMPARE(editorOf(r), e);  // still open
+        QCOMPARE(e->text(), QStringLiteral("Half a nam"));
+        QCOMPARE(*r.w->highlighted(), addr("U1-14"));  // the list did not jump to the current patch
+        QCOMPARE(r.w->current(), addr("P1-11"));       // the display shows what was resent
+        // TEST is quiet too.
+        SettingsDialog *d = r.openDialog();
+        QTest::mouseClick(d->testButton(), Qt::LeftButton);
+        QCOMPARE(editorOf(r), e);
+        QCOMPARE(*r.w->highlighted(), addr("U1-14"));
+        d->reject();
+        // A real selection still commits the editor.
+        r.w->step(1);
+        QVERIFY(!editorOf(r));
+        QCOMPARE(r.catalog.name(addr("U1-14")), QStringLiteral("Half a nam"));
+    }
+
+    void aFollowCommitsTheRenameEditor()
+    {
+        Rig r(followValues());
+        QVERIFY(r.show());
+        r.w->list()->setFocus();
+        r.w->list()->setCurrentIndex(r.w->model()->indexOf(addr("U1-14")));
+        r.w->renameHighlighted();
+        QLineEdit *e = editorOf(r);
+        QVERIFY(e);
+        e->setText(QStringLiteral("Followed"));
+        r.injectPatch(10, 28);
+        QVERIFY(!editorOf(r));
+        QCOMPARE(r.catalog.name(addr("U1-14")), QStringLiteral("Followed"));
+    }
+
+    void closingSavesARenameInProgress()
+    {
+        {
+            Rig r;
+            QVERIFY(r.show());
+            r.w->list()->setFocus();
+            r.w->list()->setCurrentIndex(r.w->model()->indexOf(addr("U2-21")));
+            r.w->renameHighlighted();
+            QLineEdit *e = editorOf(r);
+            QVERIFY(e);
+            e->setText(QStringLiteral("Saved On Close"));
+            QVERIFY(r.w->close());
+            QCOMPARE(r.catalog.name(addr("U2-21")), QStringLiteral("Saved On Close"));
+            r.library->flush();
+            PatchCatalog c2;
+            Library l2(c2, r.dir.filePath(QStringLiteral("library.json")));
+            l2.load();
+            QCOMPARE(c2.name(addr("U2-21")), QStringLiteral("Saved On Close"));
+        }
+    }
+
+    void closingAppliesACommitThatIsStillQueued()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        r.w->list()->setFocus();
+        r.w->list()->setCurrentIndex(r.w->model()->indexOf(addr("U2-22")));
+        r.w->renameHighlighted();
+        QLineEdit *e = editorOf(r);
+        QVERIFY(e);
+        e->setText(QStringLiteral("Queued"));
+        QTest::keyClick(e, Qt::Key_Return);  // the commit is queued: no event loop turn yet
+        QVERIFY(r.w->close());
+        QCOMPARE(r.catalog.name(addr("U2-22")), QStringLiteral("Queued"));
+    }
+
+    void quitActionSavesARenameInProgress()
+    {
+        Rig r;
+        QVERIFY(r.show());
+        r.w->list()->setFocus();
+        r.w->list()->setCurrentIndex(r.w->model()->indexOf(addr("U2-23")));
+        r.w->renameHighlighted();
+        QLineEdit *e = editorOf(r);
+        QVERIFY(e);
+        e->setText(QStringLiteral("Quit Name"));
+        r.w->action(QStringLiteral("actionQuit"))->trigger();
+        QCOMPARE(r.catalog.name(addr("U2-23")), QStringLiteral("Quit Name"));
+    }
+
+    void followIsOffInTheValuesWhenTheInputIsNone()
+    {
+        Rig r;
+        SettingsDialog *d = r.openDialog();
+        d->followCheck()->setChecked(true);  // disabled, but a stale tick must not count
+        QVERIFY(!d->followCheck()->isEnabled());
+        QVERIFY(!d->values().follow);
+        d->inputCombo()->setCurrentIndex(1);
+        QVERIFY(d->values().follow);
+        d->inputCombo()->setCurrentIndex(0);
+        QVERIFY(!d->values().follow);
+        d->reject();
+    }
+
     void geometryIsSavedOnClose()
     {
         Rig r;

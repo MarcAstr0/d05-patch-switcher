@@ -5,6 +5,7 @@
 # Usage: scripts/measure-footprint.sh [path/to/d05-patch-switcher]
 # Env:   FOOTPRINT_OFFSCREEN=1  force QT_QPA_PLATFORM=offscreen (numbers differ from X11)
 #        FOOTPRINT_XVFB=1       run under Xvfb (needs xvfb-run) instead of the real display
+#        FOOTPRINT_NO_FOLLOW=1  skip the two follow-the-panel scenarios (fewer windows on screen)
 #        FOOTPRINT_QUICK=1      10 s CPU window and 15 s RSS settle (smoke run, not for the record)
 #
 # Method
@@ -104,6 +105,11 @@ scenarios=("fake|1|--fake-midi" "disconnected|1|--port NoSuchPort-footprint" "fa
 have_through=0
 if "$bin" --list-ports 2>/dev/null | grep -q "Midi Through"; then
     scenarios+=("through|1|--port Midi\ Through")
+    # Follow-the-panel scenarios need saved settings (follow and an input port); written below.
+    if [ "${FOOTPRINT_NO_FOLLOW:-}" != 1 ]; then
+        scenarios+=("follow|1|--port Midi\ Through")
+        scenarios+=("followmissing|1|--port Midi\ Through")
+    fi
     have_through=1
 fi
 
@@ -112,6 +118,12 @@ echo "Launching ${#scenarios[@]} idle scenarios; measuring ${window} s after ${s
 for s in "${scenarios[@]}"; do
     IFS='|' read -r name scale extra <<<"$s"
     mkdir -p "$tmp/cfg-$name"
+    case "$name" in
+        follow) # follow on, input open on Midi Through (RtMidi's input thread runs)
+            printf '[midi]\ninputPort=Midi Through\n[behaviour]\nfollow=true\n' >"$tmp/cfg-$name/settings.ini" ;;
+        followmissing) # follow on, the input port does not exist: polled every 2 s like a missing output
+            printf '[midi]\ninputPort=NoSuchInput-footprint\n[behaviour]\nfollow=true\n' >"$tmp/cfg-$name/settings.ini" ;;
+    esac
     eval exec strace -f -o "\"$tmp/$name.strace\"" -e trace=poll,ppoll,epoll_wait,epoll_pwait \
         env QT_SCALE_FACTOR="$scale" "\"$bin\"" --config-dir "\"$tmp/cfg-$name\"" $extra >"$tmp/$name.out" 2>&1 &
     spid=$!
@@ -153,13 +165,13 @@ report_cpu() { # name label
     local n="$1" d w pct v limit
     d=$((t1[$n] - t0[$n])); w=$((w1[$n] - w0[$n]))
     pct="$(awk -v d="$d" -v hz="$hz" -v w="$window" 'BEGIN { printf "%.2f", 100 * d / (hz * w) }')"
-    if [[ "$n" == disconnected* ]]; then
+    if [[ "$n" == disconnected* || "$n" == followmissing* ]]; then
         limit=$((window / 2 + 1))  # one wake per 2 s, plus one for the window edges
         v=PASS; [ "$w" -gt "$limit" ] && v=FAIL
-        add_row "Wakes, disconnected $2" "$w in ${window}s" "<= 1 per 2 s ($limit)" "$v"
+        add_row "Wakes, polling $2" "$w in ${window}s" "<= 1 per 2 s ($limit)" "$v"
         v=PASS; [ "$d" -gt "$((window * hz / 100))" ] && v=FAIL  # sanity: under 1 %
-        add_row "  ctx switches, disconnected $2" "$((c1[$n] - c0[$n])) in ${window}s" "info" "info"
-        add_row "CPU, disconnected $2" "${pct}% ($d ticks); ps ${psc[$n]}%" "poll only, < 1%" "$v"
+        add_row "  ctx switches, polling $2" "$((c1[$n] - c0[$n])) in ${window}s" "info" "info"
+        add_row "CPU, polling $2" "${pct}% ($d ticks); ps ${psc[$n]}%" "poll only, < 1%" "$v"
     else
         v=PASS; [ "$d" -gt 1 ] && v=FAIL  # 1 tick over 30 s is 0.03%, which prints as 0.0
         add_row "Idle CPU, connected $2" "${pct}% ($d ticks); ps ${psc[$n]}%" "0.0% over ${window}s" "$v"
@@ -170,6 +182,10 @@ report_cpu() { # name label
 report_cpu fake "(fake)"
 if [ "$have_through" = 1 ]; then
     report_cpu through "(Midi Through)"
+    if [ -n "${t1[follow]:-}" ]; then
+        report_cpu follow "(follow on, input open)"
+        report_cpu followmissing "(follow on, input missing)"
+    fi
 else
     add_row "Idle CPU, connected (Midi Through)" "port not present" "-" "skipped"
 fi
@@ -177,8 +193,9 @@ report_cpu fake2x "(fake, 2x)"
 report_cpu disconnected "(1x)"
 report_cpu disconnected2x "(2x)"
 
-for n in fake disconnected through; do
-    [ "$n" = through ] && [ "$have_through" = 0 ] && continue
+for n in fake disconnected through follow followmissing; do
+    case "$n" in through|follow*) [ "$have_through" = 0 ] && continue ;; esac
+    [ -z "${rss[$n]:-}" ] && continue
     v=PASS; le "${rss[$n]}" 80 || v=FAIL
     add_row "RSS 1x after ${rss_at}s, $n" "${rss[$n]} MB" "<= 80 MB" "$v"
 done
@@ -186,11 +203,14 @@ for n in fake2x disconnected2x; do
     v=PASS; le "${rss[$n]}" 120 || v=FAIL
     add_row "RSS 2x after ${rss_at}s, $n" "${rss[$n]} MB" "<= 120 MB" "$v"
 done
-for n in fake disconnected through; do
-    [ "$n" = through ] && [ "$have_through" = 0 ] && continue
-    # Qt's xcb and D-Bus helper threads are the platform's; the app adds at most RtMidi's input thread.
-    v=PASS; [ "${thr[$n]%% *}" -gt 4 ] && v=FAIL
-    add_row "Threads, $n" "${thr[$n]}" "<= 4 (main+Qt+RtMidi)" "$v"
+for n in fake disconnected through follow followmissing; do
+    case "$n" in through|follow*) [ "$have_through" = 0 ] && continue ;; esac
+    [ -z "${thr[$n]:-}" ] && continue
+    # Qt's xcb and D-Bus helper threads are the platform's; the app adds at most RtMidi's input thread
+    # (only while an input port is open: the follow scenario).
+    limit=4; [ "$n" = follow ] && limit=5
+    v=PASS; [ "${thr[$n]%% *}" -gt "$limit" ] && v=FAIL
+    add_row "Threads, $n" "${thr[$n]}" "<= $limit (main+Qt+RtMidi)" "$v"
 done
 
 # Startup: wall clock to first paint, median of 3 (new process each, killed at the stamp).

@@ -64,6 +64,7 @@ public:
 private:
     void rebuild();
     void onFavoritesChanged();
+    void onRecentsChanged();
     void onUserNamesChanged();
 
     const PatchCatalog &m_catalog;

@@ -28,7 +28,8 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
-#include <QMessageBox>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QPushButton>
 #include <QPainter>
 #include <QScrollBar>
@@ -434,7 +435,7 @@ void MainWindow::buildActions()
     auto *about = make(QStringLiteral("actionAbout"), QStringLiteral("About D-05 Patch Switcher"), QKeySequence(),
                        [this] { notAvailable(QStringLiteral("The About box")); });
     auto *quit = make(QStringLiteral("actionQuit"), QStringLiteral("Quit"), QKeySequence(Qt::CTRL | Qt::Key_Q),
-                      [] { QApplication::quit(); });
+                      [this] { saveAndQuit(); });
     m_systemMenu->addAction(settings);
     m_systemMenu->addAction(sheet);
     m_systemMenu->addAction(clear);
@@ -620,11 +621,14 @@ void MainWindow::beginGridEntry()
 
 void MainWindow::onSent(const PatchAddress &address)
 {
-    finishEditing();  // recording the send reorders the Recents view
-    if (!m_quietSend)
-        m_library.recordSend(address);  // a resend or a TEST is not a selection
-    m_resendBlocked = false;           // a send worked: resend-on-connect may try again
-    applyCurrent(address);
+    // A resend or a TEST is not a selection: no Recents entry, and it leaves an open rename
+    // editor and the highlight alone.
+    if (!m_quietSend) {
+        finishEditing();
+        m_library.recordSend(address);
+    }
+    m_resendBlocked = false;  // a send worked: resend-on-connect may try again
+    applyCurrent(address, !m_quietSend);
     m_display->flashSent();
 }
 
@@ -638,14 +642,15 @@ void MainWindow::onFollowed(const PatchAddress &address)
 }
 
 // The current patch changed (sent, followed or restored): every view of it follows.
-void MainWindow::applyCurrent(const PatchAddress &address)
+void MainWindow::applyCurrent(const PatchAddress &address, bool moveHighlight)
 {
     m_current = address;
     m_model->setCurrent(address);
     m_display->setPatch(address, m_catalog.name(address), m_catalog.mode(address));
     m_groupBar->setLitGroup(address.group());
     m_grid->setCurrent(address);
-    highlightCurrent(false);
+    if (moveHighlight)
+        highlightCurrent(false);
 }
 
 void MainWindow::setCurrent(const PatchAddress &address)
@@ -808,16 +813,36 @@ void MainWindow::onNameCommitted(const PatchAddress &address, const QString &tex
 {
     // Deferred one turn: with a search active the rename rebuilds the list, and that must
     // not happen under the view while it is still closing the editor.
+    flushPendingRename();  // an earlier one that is still queued goes first
+    m_pendingRename = qMakePair(address, text);
     QMetaObject::invokeMethod(
         this,
-        [this, address, text] {
-            m_library.setUserName(address, text);
+        [this] {
+            flushPendingRename();
             // Enter and Esc leave the focus with the list; a commit by clicking elsewhere
             // must leave it where the user put it.
             if (!QApplication::focusWidget())
                 m_list->setFocus(Qt::OtherFocusReason);
         },
         Qt::QueuedConnection);
+}
+
+void MainWindow::flushPendingRename()
+{
+    if (!m_pendingRename)
+        return;
+    const auto held = *m_pendingRename;
+    m_pendingRename.reset();
+    m_library.setUserName(held.first, held.second);
+}
+
+// Closing or quitting with a rename in progress keeps the name: the open editor is committed
+// and a commit still waiting in the queue is applied now, not dropped.
+void MainWindow::saveAndQuit()
+{
+    finishEditing();
+    flushPendingRename();
+    QApplication::quit();
 }
 
 void MainWindow::finishEditing()
@@ -835,23 +860,44 @@ void MainWindow::confirmClearRecents()
 {
     if (m_clearBox)
         return;  // already asking (or the last box is still being deleted)
-    auto *box = new QMessageBox(this);
+    // A plain QDialog like the others (DESIGN 10.5): QMessageBox's fixed text indent and
+    // margins put the text and the buttons off the 20 px grid.
+    auto *box = new QDialog(this);
     box->setObjectName(QStringLiteral("clearRecentsBox"));
-    box->setIcon(QMessageBox::NoIcon);
-    box->setText(QStringLiteral("Clear the list of recently sent patches?"));
-    // The QSS reaches CLEAR only if it is named before addButton (DESIGN 12).
-    auto *clear = new QPushButton(QStringLiteral("CLEAR"));
-    clear->setObjectName(QStringLiteral("clearButton"));
-    box->addButton(clear, QMessageBox::AcceptRole);
-    QPushButton *cancel = box->addButton(QStringLiteral("CANCEL"), QMessageBox::RejectRole);
-    box->setDefaultButton(cancel);
-    box->setEscapeButton(cancel);
-    Theme::applyDialogButtonFonts(box);
+    box->setWindowTitle(QStringLiteral("Clear Recents"));
     box->setAttribute(Qt::WA_DeleteOnClose);
-    connect(clear, &QAbstractButton::clicked, this, [this] {
+    auto *column = new QVBoxLayout(box);
+    column->setContentsMargins(20, 20, 20, 20);
+    column->setSpacing(20);
+    auto *text = new QLabel(QStringLiteral("Clear the list of recently sent patches?"), box);
+    text->setProperty("role", QStringLiteral("body"));
+    text->setWordWrap(true);
+    text->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    column->addWidget(text);
+    auto *row = new QHBoxLayout;
+    row->setContentsMargins(0, 0, 0, 0);
+    row->setSpacing(8);
+    row->addStretch(1);
+    // The QSS reaches CLEAR through its object name (DESIGN 12).
+    auto *clear = new QPushButton(QStringLiteral("CLEAR"), box);
+    clear->setObjectName(QStringLiteral("clearButton"));
+    clear->setAutoDefault(false);
+    auto *cancel = new QPushButton(QStringLiteral("CANCEL"), box);
+    cancel->setObjectName(QStringLiteral("cancelButton"));
+    cancel->setDefault(true);
+    row->addWidget(clear);
+    row->addWidget(cancel);
+    column->addLayout(row);
+    Theme::applyDialogButtonFonts(box);
+    box->setFixedWidth(360);
+    box->setFixedHeight(column->totalHeightForWidth(360));
+    connect(clear, &QAbstractButton::clicked, this, [this, box] {
         finishEditing();
         m_library.clearRecents();
+        box->accept();
     });
+    connect(cancel, &QAbstractButton::clicked, box, &QDialog::reject);
+    cancel->setFocus();  // initial focus is the safe choice
     m_clearBox = box;
     box->open();
 }
@@ -1162,6 +1208,8 @@ void MainWindow::noteSettingsWrite()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    finishEditing();
+    flushPendingRename();
     saveStateNow();
     QMainWindow::closeEvent(event);
 }
