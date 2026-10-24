@@ -42,6 +42,7 @@ qt_add_library(d05core STATIC
     src/app/Cli.h           src/app/Cli.cpp
     src/midi/MidiBackend.h
     src/midi/FakeMidiBackend.h src/midi/FakeMidiBackend.cpp
+    src/midi/MidiBackend.h src/midi/MidiBackend.cpp
     src/midi/RtMidiBackend.h src/midi/RtMidiBackend.cpp
     src/midi/MidiLink.h src/midi/MidiLink.cpp
 )

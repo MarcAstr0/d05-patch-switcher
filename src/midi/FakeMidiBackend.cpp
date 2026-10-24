@@ -18,7 +18,7 @@ QStringList FakeMidiBackend::outputPortNames(QString *err)
             *err = m_listError;
         return {};
     }
-    return m_outputs;
+    return withoutOwnPorts(m_outputs);
 }
 
 QStringList FakeMidiBackend::inputPortNames(QString *err)
@@ -28,7 +28,7 @@ QStringList FakeMidiBackend::inputPortNames(QString *err)
             *err = m_listError;
         return {};
     }
-    return m_inputs;
+    return withoutOwnPorts(m_inputs);
 }
 
 bool FakeMidiBackend::openOutput(const QString &name, QString *error)

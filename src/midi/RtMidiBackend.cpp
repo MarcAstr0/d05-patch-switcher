@@ -38,6 +38,7 @@ QStringList listPorts(Rt *rt, RtMidiBackend::ErrorSink &sink, QString *err)
         const unsigned n = rt->getPortCount();
         for (unsigned i = 0; i < n; ++i)
             names << QString::fromStdString(rt->getPortName(i));
+        names = MidiBackend::withoutOwnPorts(names);
     } catch (const RtMidiError &e) {
         sink.record(errText(e));
     }
@@ -90,7 +91,7 @@ RtMidiBackend::RtMidiBackend(SimulateFailure simulate, QObject *parent)
     try {
         if (failOut)
             throw RtMidiError("simulated output failure", RtMidiError::DRIVER_ERROR);
-        m_out = std::make_unique<RtMidiOut>();
+        m_out = std::make_unique<RtMidiOut>(RtMidi::UNSPECIFIED, MidiBackend::ownClientName().toStdString());
         // With a callback installed RtMidi no longer throws or prints; every
         // operation below checks the sink afterwards.
         m_out->setErrorCallback(&errorCallback, &m_outErrors);
@@ -101,7 +102,7 @@ RtMidiBackend::RtMidiBackend(SimulateFailure simulate, QObject *parent)
     try {
         if (failIn)
             throw RtMidiError("simulated input failure", RtMidiError::DRIVER_ERROR);
-        m_in = std::make_unique<RtMidiIn>();
+        m_in = std::make_unique<RtMidiIn>(RtMidi::UNSPECIFIED, MidiBackend::ownClientName().toStdString());
         m_in->ignoreTypes(true, true, true);  // sysex, timing, active sensing
         m_in->setErrorCallback(&errorCallback, &m_inErrors);
     } catch (const RtMidiError &e) {
@@ -145,7 +146,7 @@ bool RtMidiBackend::openOutput(const QString &name, QString *error)
         return false;
     }
     try {
-        const int idx = indexOfPort(*m_out, name);
+        const int idx = MidiBackend::isOwnPort(name) ? -1 : indexOfPort(*m_out, name);
         if (idx < 0) {
             if (error)
                 *error = QStringLiteral("port not found");
@@ -190,7 +191,7 @@ bool RtMidiBackend::openInput(const QString &name, QString *error)
         return false;
     }
     try {
-        const int idx = indexOfPort(*m_in, name);
+        const int idx = MidiBackend::isOwnPort(name) ? -1 : indexOfPort(*m_in, name);
         if (idx < 0) {
             if (error)
                 *error = QStringLiteral("port not found");

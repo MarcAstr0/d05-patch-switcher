@@ -123,6 +123,29 @@ private slots:
         QCOMPARE(link.status(), QStringLiteral("No port selected"));
     }
 
+    void ownPortsAreNeverListedOrMatched()
+    {
+        FakeMidiBackend f;
+        MidiLink link(&f);
+        const QString own1 = QStringLiteral("D-05 Patch Switcher:d05-patch-switcher out 128:0");
+        const QString own2 = QStringLiteral("RtMidi Output Client:d05-patch-switcher out 128:0");  // older naming
+        const QString own3 = QStringLiteral("D-05 Patch Switcher:whatever 130:0");                // another instance
+        const QString real = QStringLiteral("Boutique:Boutique MIDI 1 24:0");
+        f.setOutputPorts({own1, real, own3}, false);
+        f.setInputPorts({own2, real, own1}, false);
+        QCOMPARE(link.outputPortNames(nullptr), QStringList{real});
+        QCOMPARE(link.inputPortNames(nullptr), QStringList{real});
+        // Asking for our own port by name finds nothing.
+        link.setInputPort(QStringLiteral("d05-patch-switcher"));
+        QVERIFY(!link.inputConnected());
+        link.setOutputPort(QStringLiteral("D-05 Patch Switcher"));
+        QVERIFY(!link.isConnected());
+        link.setOutputPort(QStringLiteral("Boutique"));
+        QVERIFY(link.isConnected());
+        QVERIFY(!MidiBackend::isOwnPort(QStringLiteral("HAPAX Puerto 3")));
+        QVERIFY(!MidiBackend::isOwnPort(real));
+    }
+
     void connectBySubstring()
     {
         FakeMidiBackend f;

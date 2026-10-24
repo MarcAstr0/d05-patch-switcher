@@ -4,6 +4,7 @@
 // arrives on the main thread (queued) with the right address and that nothing is sent.
 // Exits 77 (skipped) when `Midi Through` is not there.
 #include "midi/MidiLink.h"
+#include "midi/MidiBackend.h"
 #include "midi/RtMidiBackend.h"
 
 #include <RtMidi.h>
@@ -83,6 +84,43 @@ private slots:
         QCOMPARE(changed.count(), 1);
         QCOMPARE(sent.count(), 0);  // following never sends
         QVERIFY(!link.isConnected());  // and no output was ever opened
+    }
+
+    // The app's own ALSA ports never appear in its lists (they would let the input feed the
+    // app's own sends back into follow mode).
+    void ownPortsAreNotListed()
+    {
+        RtMidiBackend backend;
+        QString err;
+        const QStringList outs0 = backend.outputPortNames(&err);
+        QVERIFY(!outs0.isEmpty());
+        QString e1, e2;
+        QVERIFY2(backend.openOutput(outs0.first(), &e1), qPrintable(e1));
+        QStringList ins = backend.inputPortNames(&err);
+        QString through;
+        for (const QString &n : ins)
+            if (n.contains(QStringLiteral("Midi Through")))
+                through = n;
+        QVERIFY(!through.isEmpty());
+        QVERIFY2(backend.openInput(through, &e2), qPrintable(e2));
+
+        // Proof the test bites: a plain RtMidi client does see our ports under our client name.
+        bool rawSeesOurs = false;
+        RtMidiIn rawIn;
+        RtMidiOut rawOut;
+        for (unsigned i = 0; i < rawIn.getPortCount(); ++i)
+            rawSeesOurs = rawSeesOurs || QString::fromStdString(rawIn.getPortName(i)).startsWith(MidiBackend::ownClientName());
+        for (unsigned i = 0; i < rawOut.getPortCount(); ++i)
+            rawSeesOurs = rawSeesOurs || QString::fromStdString(rawOut.getPortName(i)).startsWith(MidiBackend::ownClientName());
+        QVERIFY(rawSeesOurs);
+
+        for (const QStringList &list : {backend.outputPortNames(&err), backend.inputPortNames(&err)}) {
+            QVERIFY(!list.isEmpty());
+            for (const QString &n : list) {
+                QVERIFY2(!MidiBackend::isOwnPort(n), qPrintable(n));
+                QVERIFY2(!n.contains(QStringLiteral("d05-patch-switcher")), qPrintable(n));
+            }
+        }
     }
 };
 
