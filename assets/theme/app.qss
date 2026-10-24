@@ -84,6 +84,8 @@
  * 2. Object names and the dynamic properties [role="..."] and [state="..."] must be
  *    set before the widget is first shown. Changing one later needs
  *    style()->unpolish(w); style()->polish(w); (QSS does not re-evaluate by itself).
+ *    The Clear Recents box is a QDialog named clearRecentsBox (DESIGN 10.5); the
+ *    QMessageBox selector below is kept until the code switches, then drop it.
  *    For QMessageBox: create the QPushButton, setObjectName("clearButton"), then
  *    addButton(button, role); naming the button addButton(text, role) returns is
  *    too late and CLEAR stays labelPrimary.
@@ -446,7 +448,8 @@ QDialog QPushButton#refreshButton:focus {
     max-height: 22px;
 }
 
-QMessageBox QPushButton#clearButton {
+QMessageBox QPushButton#clearButton,
+QDialog#clearRecentsBox QPushButton#clearButton {
     color: #E8565C;
 }
 

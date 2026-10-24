@@ -693,8 +693,11 @@ no ranges: nothing is highlighted for them.
 
 ### 7.4 User-slot inline editor (F2 or double-click on a U row)
 
-A `QLineEdit` `#nameEditor` over `(80, 2, Wl - 180, 24)` of the row: background
-`fieldBack`, 1 px `focusRing` border, padding 0 3 px (so text starts at x 84),
+A `QLineEdit` `#nameEditor` over `(80, 2, Wl - 180, 24)` of the row, where `Wl` is the
+same inner width the row paint uses (scrollbar excluded), so the editor ends 20 px before
+the counter column at `Wl - 100`: background
+`fieldBack`, 1 px `focusRing` border, padding 0 1 px (1 px border + 1 px padding + QLineEdit's
+built-in 2 px margin put the text origin at x 84, where the name is drawn when not editing),
 `type.listName`, `labelPrimary`, max length 18, printable ASCII validator. While
 editing, the recents-count column shows `n/18` (`type.listMeta`, `labelSecondary`;
 `labelRed` at 18/18). `Enter` commits, `Esc` cancels. Preset rows never open it.
@@ -866,9 +869,25 @@ size. 16 px gap. Then, each a `type.body` or `type.note` paragraph with 8 px bet
 
 ### 10.5 Clear recents confirmation
 
-`QMessageBox` styled by the global QSS (background `panel`, text `type.body`). Text:
-`Clear the list of recently sent patches?` Buttons `CLEAR` and `CANCEL`; `CANCEL` is the
-default; `CLEAR` text in `labelRed`. No icon.
+A small `QDialog` (object name `clearRecentsBox`), not a `QMessageBox`: Qt's message box
+inserts a fixed 15 px indent spacer before the text when there is no icon and uses the
+style's 11 px margins, so its text sat 32 px in from the left edge while the buttons
+sat 11 px from the right (D3 round 2). Built like the other dialogs:
+
+| Part | Spec |
+|---|---|
+| Window | title `Clear Recents`, modal (`open()`), width fixed 360 (content 320), height from the layout, not resizable, background `panel` |
+| Margins | 20 on all four sides (as every dialog, section 10) |
+| Text | `QLabel`, `type.body`, `labelPrimary`, word wrap on, left aligned at content x 0: `Clear the list of recently sent patches?` (one line at 13 px, about 236 px) |
+| Gap | 20 px between the text and the button row |
+| Button row | height 28, right aligned: `CLEAR` (object name `clearButton`, text `labelRed`), 8 px, `CANCEL` rightmost. Both 100 x 28 dialog buttons (10.2) with `Theme::applyDialogButtonFonts` |
+| Default and escape | `CANCEL` is the default button (1 px `labelRed` border when not focused) and has initial focus; `Esc` rejects; `CLEAR` accepts |
+| Icon | none |
+
+At 1x the client area is 360 x 104 (20 + text line 16 + 20 + 28 + 20). The QSS
+selector for the red label is `QDialog#clearRecentsBox QPushButton#clearButton`
+(app.qss carries it beside the old `QMessageBox` one; drop the old one with the
+switch).
 
 ---
 
@@ -916,7 +935,7 @@ Object names and dynamic properties the QSS relies on (T2.3 writes against these
 
 | Selector | Widget |
 |---|---|
-| `QMainWindow`, `QDialog`, `QMessageBox` | backgrounds |
+| `QMainWindow`, `QDialog`, `QMessageBox` | backgrounds (`QMessageBox` is no longer used by the app after 10.5; the rule is harmless) |
 | `QFrame#band` | the band container (must be a `QFrame`: a plain `QWidget` ignores QSS borders) |
 | `#searchField` | search `QLineEdit` |
 | `#patchList` | list `QListView` |
@@ -927,7 +946,7 @@ Object names and dynamic properties the QSS relies on (T2.3 writes against these
 | `QLabel#connectionText[state="ok"]` / `[state="error"]` | Settings connection line |
 | `QPushButton` (inside dialogs) | dialog buttons, `:default` |
 | `QPushButton#refreshButton` | `REFRESH` in Settings, 26 px tall (10.1) |
-| `QPushButton#clearButton` | `CLEAR` in the confirmation (red text). Create the button, set the name, then `addButton(button, role)`: naming the button `addButton(text, role)` returns is too late for QSS |
+| `QDialog#clearRecentsBox QPushButton#clearButton` | `CLEAR` in the confirmation (red text, 10.5). Set the object names before the dialog is first shown |
 
 Object names and `role` / `state` properties are set before a widget is first shown;
 changing a property later needs `style()->unpolish(w); style()->polish(w);`. QSS cannot
