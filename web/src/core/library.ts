@@ -18,11 +18,14 @@ export interface Recent {
 }
 
 export interface LibraryStorage {
-  /** The stored text, or null when nothing is stored. */
+  /** The stored text; null only when nothing is stored. Throws when storage cannot be read. */
   read(): string | null;
   /** May throw (quota, private mode); the library keeps the data and retries. */
   write(text: string): void;
-  /** Keep a copy of an unreadable file out of the way (desktop: library.json.broken-<stamp>). */
+  /**
+   * Set an unreadable file aside, like the desktop's library.json.broken-<stamp>: keep a copy
+   * AND remove the primary entry. Throws if either step fails (the library then refuses to write).
+   */
   quarantine?(text: string): void;
 }
 
@@ -31,10 +34,13 @@ export class MemoryStorage implements LibraryStorage {
   broken: string[] = [];
   writes = 0;
   failWrites = false;
+  failReads = false;
+  failQuarantine = false;
   constructor(text: string | null = null) {
     this.text = text;
   }
   read(): string | null {
+    if (this.failReads) throw new Error('read failed');
     return this.text;
   }
   write(text: string): void {
@@ -43,32 +49,86 @@ export class MemoryStorage implements LibraryStorage {
     this.writes++;
   }
   quarantine(text: string): void {
+    if (this.failQuarantine) throw new Error('quarantine failed');
     this.broken.push(text);
+    this.text = null;
   }
 }
 
+export const MAX_BROKEN_COPIES = 3;
+
+type StoreLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'key' | 'length'>;
+
 export class LocalLibraryStorage implements LibraryStorage {
+  private readonly given: StoreLike | undefined;
   constructor(
     private readonly key = 'd05.library',
-    private readonly store: Pick<Storage, 'getItem' | 'setItem'> = localStorage,
-  ) {}
+    store?: StoreLike,
+  ) {
+    this.given = store;
+  }
+  /** Resolved on use: merely touching `localStorage` throws when site storage is blocked. */
+  private get store(): StoreLike {
+    const s = this.given ?? (globalThis as { localStorage?: StoreLike }).localStorage;
+    if (!s) throw new Error('localStorage is not available');
+    return s;
+  }
   read(): string | null {
-    try {
-      return this.store.getItem(this.key);
-    } catch {
-      return null;
-    }
+    return this.store.getItem(this.key);
   }
   write(text: string): void {
     this.store.setItem(this.key, text);
   }
   quarantine(text: string): void {
+    const st = this.store;
+    const stamp = new Date().toISOString().replace(/[-:.]/g, '').replace(/Z$/, '');
+    const base = `${this.key}.broken-${stamp}`;
+    let copy = base;
+    for (let n = 2; st.getItem(copy) !== null; n++) copy = `${base}-${n}`;
+    st.setItem(copy, text);
     try {
-      const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, '');
-      this.store.setItem(`${this.key}.broken-${stamp}`, text);
-    } catch {
-      /* nothing more to do */
+      st.removeItem(this.key);
+      if (st.getItem(this.key) !== null) throw new Error('could not remove the unreadable library');
+    } catch (e) {
+      try {
+        st.removeItem(copy);
+      } catch {
+        /* best effort */
+      }
+      throw e;
     }
+    this.pruneBroken(st);
+  }
+  private pruneBroken(st: StoreLike): void {
+    const prefix = `${this.key}.broken-`;
+    const keys: string[] = [];
+    for (let i = 0; i < st.length; i++) {
+      const k = st.key(i);
+      if (k !== null && k.startsWith(prefix)) keys.push(k);
+    }
+    keys.sort();
+    try {
+      for (const k of keys.slice(0, Math.max(0, keys.length - MAX_BROKEN_COPIES))) st.removeItem(k);
+    } catch {
+      /* best effort */
+    }
+  }
+}
+
+/**
+ * localStorage when it works, otherwise an in-memory store. `persistent: false` means
+ * changes will not survive a reload (the UI should say so).
+ */
+export function createLibraryStorage(key = 'd05.library', getStore?: () => StoreLike): { storage: LibraryStorage; persistent: boolean } {
+  try {
+    const st = getStore ? getStore() : (globalThis as { localStorage?: StoreLike }).localStorage;
+    if (!st) throw new Error('no localStorage');
+    const probe = `${key}.probe`;
+    st.setItem(probe, '1');
+    st.removeItem(probe);
+    return { storage: new LocalLibraryStorage(key, st), persistent: true };
+  } catch {
+    return { storage: new MemoryStorage(), persistent: false };
   }
 }
 
@@ -80,24 +140,49 @@ export interface ParsedLibrary {
   skipped: number;
 }
 
-const ISO = /^(\d{4})-(\d\d)-(\d\d)(?:T(\d\d):(\d\d)(?::(\d\d)(?:[.,]\d+)?)?)?(Z|[+-]\d\d(?::?\d\d)?)?$/;
+// What Qt::ISODate accepts for a date-time: date, optional [T t space] hh[:mm[:ss]] with a
+// fraction (. or ,) on the last field given, optional Z/z/+hh[[:]mm]. Nothing is trimmed.
+const ISO =
+  /^(\d{4})-(\d\d)-(\d\d)(?:[Tt ](\d\d)(?::(\d\d)(?::(\d\d))?)?(?:[.,](\d+))?)?(Z|z|[+-]\d\d(?::?\d\d)?)?$/;
 
-/** ISO 8601; text without a zone is UTC. Returns null when it is not a date. */
+/** ISO 8601 as the desktop reads it; text without a zone is UTC. Milliseconds since the epoch, or null. */
 export function parseIsoUtc(text: string): number | null {
-  const m = ISO.exec(text.trim());
+  const m = ISO.exec(text);
   if (!m) return null;
-  const [y, mo, d, h = 0, mi = 0, s = 0] = [m[1], m[2], m[3], m[4], m[5], m[6]].map((v) => (v === undefined ? 0 : Number(v)));
-  const ms = Date.UTC(y!, mo! - 1, d!, h, mi, s);
-  const chk = new Date(ms);
-  if (chk.getUTCMonth() !== mo! - 1 || chk.getUTCDate() !== d! || h > 23 || mi > 59 || s > 59) return null;
-  let offset = 0;
-  const z = m[7];
-  if (z && z !== 'Z') {
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const hasH = m[4] !== undefined;
+  let h = hasH ? Number(m[4]) : 0;
+  const mi = m[5] !== undefined ? Number(m[5]) : 0;
+  const sec = m[6] !== undefined ? Number(m[6]) : 0;
+  if (y < 1) return null;
+  const frac = m[7] !== undefined ? Number('0.' + m[7]) : 0;
+  // The fraction belongs to the last field present.
+  const unit = m[6] !== undefined ? 1000 : m[5] !== undefined ? 60000 : 3600000;
+  const fracMs = Math.floor(frac * unit);
+  let dayShift = 0;
+  if (h === 24) {
+    if (mi !== 0 || sec !== 0 || fracMs !== 0) return null;
+    h = 0;
+    dayShift = 1;
+  }
+  if (h > 23 || mi > 59 || sec > 59) return null;
+  const dt = new Date(0);
+  dt.setUTCFullYear(y, mo - 1, d); // setUTCFullYear: years 0..99 are not mapped to 19xx
+  dt.setUTCHours(0, 0, 0, 0);
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+  let ms = dt.getTime() + dayShift * 86400000 + ((h * 60 + mi) * 60 + sec) * 1000 + fracMs;
+  const z = m[8];
+  if (z && z !== 'Z' && z !== 'z') {
     const sign = z[0] === '-' ? -1 : 1;
     const digits = z.slice(1).replace(':', '');
-    offset = sign * (Number(digits.slice(0, 2)) * 60 + Number(digits.slice(2) || '0'));
+    const oh = Number(digits.slice(0, 2));
+    const om = Number(digits.slice(2) || '0');
+    if (oh > 23 || om > 59) return null;
+    ms -= sign * (oh * 60 + om) * 60000;
   }
-  return ms - offset * 60000;
+  return ms;
 }
 
 export function formatIsoUtc(ms: number): string {
@@ -165,7 +250,9 @@ export function parseLibraryJson(text: string): ParsedLibrary | null {
   }
 
   const userNames: [PatchAddress, string][] = [];
-  for (const [k, v] of Object.entries(nv ?? {})) {
+  // QJsonObject iterates keys sorted by UTF-16 code unit, and a later duplicate (same address,
+  // different spelling) overwrites an earlier one: do the same.
+  for (const [k, v] of Object.entries(nv ?? {}).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))) {
     const a = parseAddress(k);
     if (a && isUser(a) && typeof v === 'string') userNames.push([a, v]);
     else skipped++;
@@ -173,7 +260,12 @@ export function parseLibraryJson(text: string): ParsedLibrary | null {
   return { favorites, recents, userNames, skipped };
 }
 
-export type LoadResult = 'fresh' | 'loaded' | 'recovered';
+/**
+ * fresh: nothing stored. loaded: ok. recovered: corrupt file set aside, fresh library.
+ * unreadable / sidelineFailed: storage could not be read / the corrupt file could not be set
+ * aside; the library is empty and refuses to write so the stored data is never overwritten.
+ */
+export type LoadResult = 'fresh' | 'loaded' | 'recovered' | 'unreadable' | 'sidelineFailed';
 
 export type ImportResult =
   | { ok: true; favorites: number; recents: number; userNames: number; skipped: number }
@@ -185,55 +277,103 @@ export class Library {
   private dirty = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private failing = false;
-  private blocked = false;
+  private blockedReason: string | null = null;
   private listeners = new Set<() => void>();
-  /** Set while a save keeps failing (storage full or unavailable); null otherwise. */
-  saveError: string | null = null;
+  private saveListeners = new Set<(error: string | null) => void>();
+  private err: string | null = null;
 
   constructor(
     private readonly catalog: Catalog,
     private readonly storage: LibraryStorage,
   ) {}
 
-  /** Reads storage. A corrupt file is quarantined and a fresh library started ('recovered'). */
+  /** The reason the last save failed (or writes are blocked); null when saving works. */
+  get saveError(): string | null {
+    return this.err;
+  }
+
+  /** Called whenever `saveError` changes: when a save starts failing and when one succeeds again. */
+  onSaveStatus(fn: (error: string | null) => void): () => void {
+    this.saveListeners.add(fn);
+    return () => this.saveListeners.delete(fn);
+  }
+
+  private setSaveError(e: string | null): void {
+    if (e === this.err) return;
+    this.err = e;
+    for (const fn of this.saveListeners) fn(e);
+  }
+
+  /** Reads storage. A corrupt file is set aside and a fresh library started ('recovered'). */
   load(): LoadResult {
     this.cancelTimer();
     this.dirty = false;
     this.failing = false;
-    this.blocked = false;
+    this.blockedReason = null;
     this.favs = [];
     this.recs = [];
     this.catalog.clearUserNames();
-    let text: string | null;
-    try {
-      text = this.storage.read();
-    } catch {
-      text = null;
-    }
-    if (text === null) {
-      this.emit();
-      return 'fresh';
-    }
-    const p = parseLibraryJson(text);
-    if (!p) {
-      try {
-        this.storage.quarantine?.(text);
-      } catch {
-        this.blocked = true; // could not set it aside: never overwrite it
-      }
-      this.emit();
-      return 'recovered';
-    }
-    this.apply(p);
+    const result = this.loadInto();
+    if (this.blockedReason) this.setSaveError(this.blockedReason);
+    else this.setSaveError(null);
     this.emit();
-    return 'loaded';
+    return result;
   }
 
-  private apply(p: ParsedLibrary): void {
-    this.favs = p.favorites;
-    this.recs = p.recents;
-    this.catalog.clearUserNames();
-    for (const [a, n] of p.userNames) this.catalog.setUserName(a, n);
+  private readStored(): { text: string | null; failed: boolean } {
+    try {
+      return { text: this.storage.read(), failed: false };
+    } catch {
+      return { text: null, failed: true };
+    }
+  }
+
+  private loadInto(): LoadResult {
+    const { text, failed } = this.readStored();
+    if (failed) {
+      this.blockedReason = 'Stored library could not be read; not overwriting it.';
+      return 'unreadable';
+    }
+    if (text === null) return 'fresh';
+    const p = parseLibraryJson(text);
+    if (p) {
+      this.apply(p);
+      return 'loaded';
+    }
+    try {
+      if (!this.storage.quarantine) throw new Error('no way to set it aside');
+      this.storage.quarantine(text);
+    } catch {
+      this.blockedReason = 'The stored library is corrupt and could not be set aside; not overwriting it.';
+      return 'sidelineFailed';
+    }
+    return 'recovered';
+  }
+
+  /**
+   * For a `storage` event (another tab wrote the library). With no unsaved edits it is a plain
+   * load(). With unsaved local edits it merges instead of losing either side: favourites are
+   * the union, recents are the union keeping the newer entry per address (cap 50), and local
+   * user names win over stored ones. The merged result is then saved as usual.
+   */
+  reload(): LoadResult {
+    if (!this.dirty) return this.load();
+    const { text, failed } = this.readStored();
+    if (failed || text === null) return failed ? 'unreadable' : 'fresh';
+    const p = parseLibraryJson(text);
+    if (!p) return 'recovered'; // keep the local edits; the next save replaces the corrupt value
+    const fav = new Map(this.favs.map((a) => [a.index, a] as const));
+    for (const a of p.favorites) fav.set(a.index, a);
+    this.favs = [...fav.values()].sort((x, y) => x.index - y.index);
+    const rec = new Map(this.recs.map((r) => [r.address.index, r] as const));
+    for (const r of p.recents) {
+      const mine = rec.get(r.address.index);
+      if (!mine || parseIsoUtc(r.last)! > parseIsoUtc(mine.last)!) rec.set(r.address.index, r);
+    }
+    this.recs = [...rec.values()].sort((x, y) => parseIsoUtc(y.last)! - parseIsoUtc(x.last)!).slice(0, MAX_RECENTS);
+    for (const [a, n] of p.userNames) if (!this.catalog.hasUserName(a)) this.catalog.setUserName(a, n);
+    this.changed();
+    return 'loaded';
   }
 
   onChange(fn: () => void): () => void {
@@ -243,6 +383,13 @@ export class Library {
 
   private emit(): void {
     for (const fn of this.listeners) fn();
+  }
+
+  private apply(p: ParsedLibrary): void {
+    this.favs = p.favorites;
+    this.recs = p.recents;
+    this.catalog.clearUserNames();
+    for (const [a, n] of p.userNames) this.catalog.setUserName(a, n);
   }
 
   /** Favourites in catalogue order. */
@@ -329,7 +476,6 @@ export class Library {
     }
     if (!p) return { ok: false, error: 'Not a D-05 Patch Switcher library file (library.json version 1).' };
     this.apply(p);
-    this.blocked = false;
     this.changed();
     return { ok: true, favorites: p.favorites.length, recents: p.recents.length, userNames: p.userNames.length, skipped: p.skipped };
   }
@@ -341,7 +487,7 @@ export class Library {
   }
 
   private schedule(ms: number): void {
-    if (this.blocked) return;
+    if (this.blockedReason) return;
     this.cancelTimer();
     this.timer = setTimeout(() => this.flush(), ms);
   }
@@ -351,25 +497,25 @@ export class Library {
     this.timer = null;
   }
 
-  /** Writes now if there is anything unsaved. Returns false when the write failed. */
+  /** Writes now if there is anything unsaved. Returns false when the write failed or is blocked. */
   flush(): boolean {
     this.cancelTimer();
     if (!this.dirty) return true;
-    if (this.blocked) {
-      this.saveError = 'The stored library could not be set aside; not overwriting it.';
+    if (this.blockedReason) {
+      this.setSaveError(this.blockedReason);
       return false;
     }
     try {
       this.storage.write(this.exportJson());
     } catch (e) {
       this.failing = true;
-      this.saveError = e instanceof Error ? e.message : String(e);
+      this.setSaveError(e instanceof Error ? e.message : String(e));
       this.schedule(RETRY_MS);
       return false;
     }
     this.dirty = false;
     this.failing = false;
-    this.saveError = null;
+    this.setSaveError(null);
     return true;
   }
 }

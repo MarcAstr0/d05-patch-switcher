@@ -24,6 +24,7 @@ export function parsePresetTable(text: string): PresetRow[] {
     if (c.length < 5) continue;
     const g = c[0]!;
     if (g.length !== 2 || g[0] !== 'P' || g[1]! < '1' || g[1]! > '6') continue;
+    if (!/^\d$/.test(c[1]!) || !/^\d$/.test(c[2]!)) continue;
     const address = fromParts(7 + Number(g[1]), Number(c[1]), Number(c[2]));
     const name = c[3]!;
     const mode = c[4]!;

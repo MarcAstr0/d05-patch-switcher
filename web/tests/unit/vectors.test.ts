@@ -41,6 +41,16 @@ function check(c: SearchCase, hits: string[]): void {
 }
 
 describe('shared vectors', () => {
+  test('every section is present and substantial', () => {
+    expect(vectors.addresses.length).toBeGreaterThanOrEqual(10);
+    expect(vectors.parse.length).toBeGreaterThanOrEqual(16);
+    expect(vectors.invalid.length).toBeGreaterThanOrEqual(31);
+    expect(vectors.search.length).toBeGreaterThanOrEqual(38);
+    expect(vectors.library.expect.recents.length).toBeGreaterThanOrEqual(3);
+    expect(vectors.library.expect.searches?.length).toBeGreaterThanOrEqual(4);
+    expect(vectors.library.invalidEntries.expect.favorites.length).toBeGreaterThan(0);
+  });
+
   test('addresses', () => {
     for (const v of vectors.addresses) {
       const a = parseAddress(v.text)!;

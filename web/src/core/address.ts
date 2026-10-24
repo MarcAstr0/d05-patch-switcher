@@ -49,11 +49,17 @@ export function formatAddress(a: PatchAddress): string {
   return `${groupLabel(a.group)}-${a.bank}${a.number}`;
 }
 
+/** Qt's QChar::isSpace: U+0009..000D, U+0020, U+0085 and the Unicode Z categories (not U+FEFF). */
+export const QT_SPACE = '\\t-\\r \\u0085\\p{Z}';
+const TRIM = new RegExp(`^[${QT_SPACE}]+|[${QT_SPACE}]+$`, 'gu');
+/** QString::trimmed(). */
+export const qtTrim = (s: string): string => s.replace(TRIM, '');
+
 const isDigit = (c: string | undefined): boolean => c !== undefined && c >= '0' && c <= '9';
 
 /** Accepts `P3-45`, `p345`, `3-45`, `345` (no letter means P), surrounding whitespace. ASCII digits only. */
 export function parseAddress(text: string): PatchAddress | null {
-  const s = text.trim();
+  const s = qtTrim(text);
   let pos = 0;
   let user = false;
   const c0 = s[0];
@@ -84,9 +90,10 @@ export function midiTriplet(a: PatchAddress): MidiTriplet {
   return { msb: BANK_SELECT_MSB, lsb: a.group, program: (a.bank - 1) * 8 + (a.number - 1) };
 }
 
-/** The three messages in send order (Bank MSB, Bank LSB, Program Change) on channel 1..16. */
+/** The three messages in send order (Bank MSB, Bank LSB, Program Change) on channel 1..16. Throws RangeError otherwise. */
 export function midiBytes(a: PatchAddress, channel: number): number[][] {
-  const ch = Math.min(16, Math.max(1, Math.trunc(channel))) - 1;
+  if (!Number.isInteger(channel) || channel < 1 || channel > 16) throw new RangeError(`MIDI channel must be an integer 1..16, got ${channel}`);
+  const ch = channel - 1;
   const t = midiTriplet(a);
   return [
     [0xb0 | ch, 0x00, t.msb],
@@ -97,7 +104,7 @@ export function midiBytes(a: PatchAddress, channel: number): number[][] {
 
 /** Inverse of midiTriplet; null unless msb is 87 and lsb/program are in range. */
 export function fromMidi(msb: number, lsb: number, program: number): PatchAddress | null {
-  if (msb !== BANK_SELECT_MSB || program < 0 || program > 63) return null;
+  if (msb !== BANK_SELECT_MSB || !Number.isInteger(lsb) || !Number.isInteger(program) || program < 0 || program > 63) return null;
   return fromParts(lsb, (program >> 3) + 1, (program & 7) + 1);
 }
 

@@ -1,5 +1,5 @@
 // FR-3 search grammar: whitespace-separated tokens, all must match. No DOM.
-import { allAddresses, type PatchAddress } from './address';
+import { QT_SPACE, allAddresses, type PatchAddress } from './address';
 
 export interface Range {
   /** UTF-16 index into the original name. */
@@ -14,6 +14,7 @@ type Token =
   | { kind: 'text'; folded: string };
 
 const MARK = /\p{M}/u;
+const SPACES = new RegExp(`[${QT_SPACE}]+`, 'u');
 
 /** Folds one UTF-16 unit: lowercase, first unit of its canonical decomposition; combining marks vanish (''). */
 function foldUnit(c: string): string {
@@ -76,7 +77,7 @@ export class SearchQuery {
   private readonly tokens: Token[] = [];
 
   constructor(text: string) {
-    for (const raw of text.trim().split(/\s+/)) {
+    for (const raw of text.split(SPACES)) {
       if (raw === '') continue;
       const t = parseToken(raw);
       if (t) this.tokens.push(t);
