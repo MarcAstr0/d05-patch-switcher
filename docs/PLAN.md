@@ -75,13 +75,13 @@ the D-05 display showed. Fixes go back to the builder.
 **Gate G4 (owner).** Download the `.dmg` on the MacBook, run it against the real rig
 (checklist steps 3–5). Report.
 
-## M5 · Polish and v1.0.0 ◐
+## M5 · Polish and v1.0.0 ☑
 
 - ☑ **T5.1** `F1` shortcut sheet; About box with version, licence and the trademark notice; first-run hint on the display's second line when no port is configured (`OPEN SETTINGS: CTRL+,`).
 - ☑ **T5.2** Everything the owner reported at G3/G4.
 - ☑ **T5.3** `CHANGELOG.md`; README screenshots from `--screenshot` at 2×.
 - ☑ **R5 Final review** (reviewer + Codex; the foreman may run the agent on Opus).
-- ☐ **T5.4** Tag `v1.0.0`; release green; the vault's project page updated by the owner.
+- ☑ **T5.4** Tag `v1.0.0`; release green; the vault's project page updated by the owner.
 
 ## Decisions log
 
@@ -121,3 +121,4 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-24, foreman (M5 design pass): accepted the designer's §10.3 rework (sheet 680 wide, no wrapping; `Esc` row split into clear and back), the About link line to the GitHub repository (§10.4), macOS caps `Esc` and `fn ↑` / `fn ↓` for PgUp/PgDn (the native glyphs are not in the subset font), the input-error line in Settings at body size, and hand-placed 16/24/32 px icons with a complete `.icns`. The owner can overrule the link and the `fn` labels.
 - 2026-10-24, foreman (T5.3): the README keeps the owner's real macOS capture (`docs/images/screenshot-macos.png`) as its screenshot instead of `--screenshot` renders; a real window shows native chrome and true font rendering. `CHANGELOG.md` follows Keep a Changelog; the [Unreleased] section becomes 1.0.0 at T5.4.
 - 2026-10-24, foreman (R5): rejected "PREV/NEXT resend at the catalogue ends" (FR-5: "stops at the ends, and sends"; settled in T1.3). Accepted as a documented exception to SPEC §5: the library's 2 s single-shot save retry also runs while connected, only while saves keep failing (read-only data dir). The version bump to 1.0.0 is T5.4, not part of the R5 fixes.
+- 2026-10-24, foreman (T5.4): user-facing docs made device-agnostic at the owner's request (README "Connecting the D-05", CHANGELOG, docs/MIDI.md; the verified Hapax behaviour kept as one example in MIDI.md). `v1.0.0` tagged at 73693a2; release run 40127471062 published https://github.com/MarcAstr0/d05-patch-switcher/releases/tag/v1.0.0 as a full release (AppImage, universal dmg, Windows zip, SHA256SUMS), each package's `--version` checked against the tag. Remaining owner item from T5.4: update the vault's project page.
