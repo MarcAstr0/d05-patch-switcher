@@ -799,7 +799,7 @@ control), control column from x 112.
 | y (from content top) | Row |
 |---|---|
 | 0 | Rule `MIDI OUTPUT` |
-| 20 | `PORT` · combo `(112, y, 260, 26)` · button `REFRESH` `(380, y, 100, 26)` (26 tall to match the combo: `setFixedHeight(26)`) |
+| 20 | `PORT` · combo `(112, y, 260, 26)` · button `REFRESH` `(380, y, 100, 26)` (26 tall to match the combo: object name `refreshButton`, sized by the `QPushButton#refreshButton` rule in `app.qss`; no per-widget style sheet) |
 | 54 | `CHANNEL` · spin box `(112, y, 72, 26)`, range 1..16 |
 | 88 | Connection line at x 112, height 20: LED `(112, y+8, 10, 4)` + text at x 130, `type.body`: `Connected to <port>` (`labelPrimary`, LED lit, no core) / `Port not found` (`labelRed`, LED off) / `Error: <text>` (`labelRed`, LED off, elided right at 350 px) |
 | 124 | Rule `MIDI INPUT` |
@@ -823,7 +823,7 @@ included). Initial focus: the output port combo.
 
 | Control | Spec |
 |---|---|
-| Dialog button | min width 100, height 28 (`REFRESH` 26, 10.1); background `buttonFace`; 1 px `buttonSlot` border, radius 2; text `type.panelLabel` caps `labelPrimary`; hover `buttonFaceHover`; pressed `buttonPressed`; focus 2 px `focusRing` border (padding reduced by 1); default button 1 px `labelRed` border; disabled `buttonDisabled`, text `labelDisabled` |
+| Dialog button | min width 100, height 28 (`REFRESH` 26, 10.1); background `buttonFace`; 1 px `buttonSlot` border, radius 2; text `type.panelLabel` caps `labelPrimary` (QSS cannot set its 0.5 spacing: the code calls `setFont(Theme::font(PanelLabel))` on every dialog and message-box `QPushButton` before it is shown); hover `buttonFaceHover`; pressed `buttonPressed`; focus 2 px `focusRing` border (padding reduced by 1); default button 1 px `labelRed` border; disabled `buttonDisabled`, text `labelDisabled` |
 | Combo box | height 26; `fieldBack`; 1 px `fieldBorder` (hover `fieldBorderHover`, focus 2 px `focusRing`); padding left 8; text `type.body`; drop-down area 20 px wide, no separator line, arrow image `:/theme/arrow-down.png` (8 x 4 solid wedge in `arrow`, 45-degree steps, rows 8, 6, 4, 2 px; `arrow-down@2x.png` 16 x 8 is picked at DPR 2); popup as `QMenu` (8.2) with `selection` for the current item |
 | Spin box | height 26, width 72, `fieldBack`, borders as combo, text centred `type.body`, `buttonSymbols = NoButtons` (keys and wheel change it) |
 | Checkbox | indicator 16 x 6 rect, spacing 10 to the text; unchecked `ledOff` with 1 px `fieldBorderHover` border (a `buttonSlot` border vanished on `panel` in the T2.4 mockup); checked `ledOn` with 1 px `ledOn` border; focus: indicator border `focusRing`; disabled: indicator `buttonDisabled` with 1 px `fieldBorder` border, text `labelDisabled`; text `type.body` |
@@ -926,6 +926,7 @@ Object names and dynamic properties the QSS relies on (T2.3 writes against these
 | `QLabel[role="note"]`, `[role="dim"]`, `[role="body"]`, `[role="formLabel"]` | dialog text roles |
 | `QLabel#connectionText[state="ok"]` / `[state="error"]` | Settings connection line |
 | `QPushButton` (inside dialogs) | dialog buttons, `:default` |
+| `QPushButton#refreshButton` | `REFRESH` in Settings, 26 px tall (10.1) |
 | `QPushButton#clearButton` | `CLEAR` in the confirmation (red text). Create the button, set the name, then `addButton(button, role)`: naming the button `addButton(text, role)` returns is too late for QSS |
 
 Object names and `role` / `state` properties are set before a widget is first shown;

@@ -434,6 +434,18 @@ QMessageBox QPushButton:disabled {
     border: 1px solid #121415;
 }
 
+/* REFRESH in Settings is 26 px overall to match the combo beside it (DESIGN 10.1).
+   The ID selector outranks the shared :focus rule, so its focus state is repeated. */
+QDialog QPushButton#refreshButton {
+    min-height: 24px;
+    max-height: 24px;
+}
+
+QDialog QPushButton#refreshButton:focus {
+    min-height: 22px;
+    max-height: 22px;
+}
+
 QMessageBox QPushButton#clearButton {
     color: #E8565C;
 }
