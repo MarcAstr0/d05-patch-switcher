@@ -15,6 +15,24 @@ like it belongs next to the synth.
 
 **Status: [v1.0.0](https://github.com/MarcAstr0/d05-patch-switcher/releases/tag/v1.0.0).** See `CHANGELOG.md` for what changed.
 
+## Web version
+
+**[Open D-05 Patch Switcher in your browser](https://marcastr0.github.io/d05-patch-switcher/)**,
+with nothing to install. It does the same as the desktop app, over Web MIDI, and also fits
+a phone screen.
+
+- Works in Chrome, Edge, Brave and Opera on desktop (one permission prompt) and in
+  Firefox 108 or later (asks once to install a per-site permission add-on).
+- Works in Chrome on Android, through a USB MIDI interface or forwarding device (see
+  [Connecting the D-05](#connecting-the-d-05)).
+- Does not work in Safari or in any browser on iPhone or iPad: they have no Web MIDI.
+- After the first visit it works offline and can be installed to the home screen or
+  the dock.
+- Names, favourites and recents stay in the browser. Use *Export Library* and *Import Library* in the
+  menu to move them to or from the desktop app's `library.json`.
+
+The source is in `web/`; see `docs/WEB.md`.
+
 ## What you need
 
 - A Roland Boutique D-05 reachable from your computer over MIDI. See
