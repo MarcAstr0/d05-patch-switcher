@@ -23,13 +23,14 @@ a phone screen.
 
 - Works in Chrome, Edge, Brave and Opera on desktop (one permission prompt) and in
   Firefox 108 or later (asks once to install a per-site permission add-on).
-- Works in Chrome on Android, through a USB MIDI interface or forwarding device (see
-  [Connecting the D-05](#connecting-the-d-05)).
+- Chrome on Android needs a USB MIDI interface or forwarding device between the phone
+  and the D-05 (see [Connecting the D-05](#connecting-the-d-05)); this path is not yet
+  tested on hardware.
 - Does not work in Safari or in any browser on iPhone or iPad: they have no Web MIDI.
 - After the first visit it works offline and can be installed to the home screen or
   the dock.
-- Names, favourites and recents stay in the browser. Use *Export Library* and *Import Library* in the
-  menu to move them to or from the desktop app's `library.json`.
+- Names, favourites and recents stay in the browser. Use *Export Library* and
+  *Import Library* in the menu to move them to or from the desktop app's `library.json`.
 
 The source is in `web/`; see `docs/WEB.md`.
 
