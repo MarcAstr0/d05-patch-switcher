@@ -107,7 +107,7 @@ and `docs/DESIGN-BRIEF-2.md` before dispatching. The web version is out of scope
 except W5. Gate G0 (hardware facts) was run by the owner with Fable on 2026-10-26 and
 is recorded in the three MIDI/identify docs; no gate is needed before M6.
 
-## M6 · Models, data and MIDI (builder) ☐
+## M6 · Models, data and MIDI (builder) ☑
 
 Headless. `d05` behaviour must not change: the existing tests and the existing
 sections of `data/test-vectors.json` stay green and byte-for-byte.
@@ -122,14 +122,14 @@ sections of `data/test-vectors.json` stay green and byte-for-byte.
 - ☑ **T6.7 MIDI layer.** `PortHub` (open each OS port once for input and once for output, reference-counted; demultiplex incoming messages to links by channel; realtime and non-Program-Change traffic dropped in the callback before any allocation), `MidiLink` per device (model-aware messages and follow parsing; the D-05 path byte-identical to today), `DeviceRouter` (three links, three trackers, FR-20 dispatch, poll only while some enabled device is disconnected). Tests on the fake: JP-08 and JU-06A send one message, the D-05 three; two devices on one fake port with channels 3 and 5 receive only their own events; same port and channel is refused; echo suppression per link; a JU-06A follow event drives the tracker; FR-20 on and off; the poll stops when all enabled devices connect.
 - ☑ **T6.8 `Identify` and CLI.** `docs/IDENTIFY.md` rule 1 as a pure function with a test table (`Boutique:Boutique MIDI 1 24:0` → D-05 likely; `Boutiq:Boutiq MIDI 1 28:0` → first generation, ambiguous; `JU-06A:…` → certain; `HAPAX Puerto 1` → none); rule 2 on Linux behind `#ifdef`, failing silently to rule 1. CLI per SPEC-2 FR-15: `--device`, `--engine`, `--identify`, exit code 5, `--send` in each model's form. `scripts/midi-smoke.sh` gains the JP-08 and JU-06A cases from the two MIDI docs, including the exit-5 case.
 - ☑ **R6 Review** (reviewer + Codex, `--base origin/main` after the push). Emphasis: the D-05 path unchanged, the engine table rows, shared-port demultiplexing, nothing allocates in the input callback.
-- ☐ **Push and CI** green on all three runners; the web job green (unchanged data sections).
+- ☑ **Push and CI** green on all three runners; the web job green (unchanged data sections).
 
 **Gate G6 (owner).** On the Linux box with each unit on its own USB port in turn (or
 all three if cables allow): `--identify` names each one; `--send` on the unit's
 channel for the JP-08 checklist steps 2–4 and the JU-06A steps 2–4 (both engines,
 `--engine`), plus `--send` for the D-05 as before. Report what each display showed.
 
-## M7 · Design (designer) ☐, runs in parallel with M6
+## M7 · Design (designer) ☑, runs in parallel with M6
 
 Touches only `docs/design/`, `assets/`. No C++. Brief: `docs/DESIGN-BRIEF-2.md`.
 
@@ -242,3 +242,4 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-26, G6 passed (owner; foreman ran the commands at f8cf092 on the Linux box, each unit alone on USB). `--identify`: `JU-06A:JU-06A MIDI 1 28:0` → JU-06A (certain); `Boutiq:Boutiq MIDI 1 28:0` → JP-08 (certain, rule 2 lifted the first-generation name via the serial); `Boutique:Boutique MIDI 1 28:0` → D-05 (certain via rule 2). JU-06A on channel 12: on 60, `60:1-1`, `60:4-5`, `60:8-8` showed `1-1`, `4-5`, `8-8`, and `106:4-5` with `--engine 60` exited 5 and the unit stayed on `8-8`; on 106 (which showed `---` after the flip, nothing having been selected there since power-on) `106:1-1`, `106:4-5`, `106:8-8` showed `1-1`, `4-5`, `8-8`. A first 106 run with the switch still on 60 landed those patches on the 60 engine, as the unit's behaviour predicts. JP-08 on channel 13: `1-1`, `4-5`, `8-8` showed `11`, `45`, `88`. D-05 on channel 3: `P1-11`, `P2-11`, `P6-88`, `U1-11` shown in order (a first attempt ran before the D-05 had enumerated and exited 2, as it should). The units are still on their old channels (JU-06A 12, JP-08 13); the live-rig move to 4 and 5 is the owner's, before G9.
 - 2026-10-26, foreman (R6): only a device switch the user makes (click, `Ctrl+Tab`, Settings) clears a JU-06A arm; a switch caused by a follow event (FR-20) does not, and the router classifies the incoming event with the JU-06A tracker before it switches, so an armed flip confirmation works whether or not the JU-06A was current (FR-20, last sentence). An incoming PC counts as a flip confirmation only while the armed engine differs from the believed engine.
 - 2026-10-26, owner: nameplates approved as designed (DESIGN-2 §3.1, §13.4): JP-08 Archivo SemiBold in orange, both JU-06A skins Archivo Bold in white, D-05 unchanged in Inter. The owner found the faces "pretty samey" but accepted them; distinctness between skins stays with colour, as the logos themselves are off limits. M8 (T8.1) adds the two subset fonts to the resources.
+- 2026-10-26, foreman: M6 and M7 closed. CI run 40419728768 (4163e1f) green on Linux, macOS and Windows; web job green (run on 7ecbb07). Two CI-only fixes on the way: a Linux-only stderr test and a Unix-only symlink test guarded, and the port-name conflict test made platform-aware (WinMM port keys on Windows).
