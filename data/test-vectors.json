@@ -1258,7 +1258,1170 @@
       "60:1-5"
      ]
     }
-   ]
+   ],
+   "engine": {
+    "$comment": "Event sequences for SPEC-2 section 6 (T6.6). See data/README-test-vectors.md.",
+    "sequences": [
+     {
+      "name": "send on the current engine",
+      "rows": [
+       "send"
+      ],
+      "note": "selecting an address of the current engine sends it and remembers its program",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": null,
+       "remembered106": null
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": null,
+       "remembered106": null,
+       "armed": null,
+       "hint": 0,
+       "current": null,
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "select",
+        "addr": "60:1-6",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": null,
+         "armed": null,
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "none",
+         "sent": [
+          "CB 05"
+         ]
+        }
+       },
+       {
+        "do": "select",
+        "addr": "60:4-5",
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": null,
+         "armed": null,
+         "hint": 0,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": [
+          "CB 05",
+          "CB 1C"
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "name": "arm then flip confirmation",
+      "rows": [
+       "arm",
+       "flip-confirm"
+      ],
+      "note": "nothing is sent while armed; the flip's PC 28 equals remembered[106]: engine becomes 106 and the armed patch is sent",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "select",
+        "addr": "106:1-1",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": "106:1-1",
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "flipSwitch",
+         "sent": []
+        }
+       },
+       {
+        "do": "pc",
+        "program": 28,
+        "expect": {
+         "engine": 106,
+         "remembered60": 5,
+         "remembered106": 0,
+         "armed": null,
+         "hint": 0,
+         "current": "106:1-1",
+         "prompt": "none",
+         "sent": [
+          "CB 00"
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "name": "arm then Ctrl+E",
+      "rows": [
+       "arm",
+       "ctrl-e"
+      ],
+      "note": "Ctrl+E answers the prompt: engine toggles and the armed patch is sent",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "select",
+        "addr": "106:1-1",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": "106:1-1",
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "flipSwitch",
+         "sent": []
+        }
+       },
+       {
+        "do": "ctrlE",
+        "expect": {
+         "engine": 106,
+         "remembered60": 5,
+         "remembered106": 0,
+         "armed": null,
+         "hint": 0,
+         "current": "106:1-1",
+         "prompt": "none",
+         "sent": [
+          "CB 00"
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "name": "arm then Esc",
+      "rows": [
+       "arm",
+       "clear-arm",
+       "ctrl-e"
+      ],
+      "note": "Esc clears the arm and nothing is ever sent; a later Ctrl+E is a plain toggle",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "select",
+        "addr": "106:1-1",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": "106:1-1",
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "flipSwitch",
+         "sent": []
+        }
+       },
+       {
+        "do": "esc",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "ctrlE",
+        "expect": {
+         "engine": 106,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "106:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       }
+      ]
+     },
+     {
+      "name": "another selection clears the arm",
+      "rows": [
+       "arm",
+       "clear-arm",
+       "send"
+      ],
+      "note": "a same-engine selection sends and disarms; a second other-engine selection replaces the arm",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "select",
+        "addr": "106:1-1",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": "106:1-1",
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "flipSwitch",
+         "sent": []
+        }
+       },
+       {
+        "do": "select",
+        "addr": "60:2-2",
+        "expect": {
+         "engine": 60,
+         "remembered60": 9,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "60:2-2",
+         "prompt": "none",
+         "sent": [
+          "CB 09"
+         ]
+        }
+       },
+       {
+        "do": "select",
+        "addr": "106:2-1",
+        "expect": {
+         "engine": 60,
+         "remembered60": 9,
+         "remembered106": 28,
+         "armed": "106:2-1",
+         "hint": 0,
+         "current": "60:2-2",
+         "prompt": "flipSwitch",
+         "sent": [
+          "CB 09"
+         ]
+        }
+       },
+       {
+        "do": "select",
+        "addr": "106:3-3",
+        "expect": {
+         "engine": 60,
+         "remembered60": 9,
+         "remembered106": 28,
+         "armed": "106:3-3",
+         "hint": 0,
+         "current": "60:2-2",
+         "prompt": "flipSwitch",
+         "sent": [
+          "CB 09"
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "name": "device switch clears the arm",
+      "rows": [
+       "arm",
+       "clear-arm"
+      ],
+      "note": "nothing is sent",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "select",
+        "addr": "106:1-1",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": "106:1-1",
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "flipSwitch",
+         "sent": []
+        }
+       },
+       {
+        "do": "deviceSwitch",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "none",
+         "sent": []
+        }
+       }
+      ]
+     },
+     {
+      "name": "hint and its undo on Ctrl+E",
+      "rows": [
+       "hint",
+       "ctrl-e"
+      ],
+      "note": "PC 28 equals remembered[106] only: followed on 60 and hint 106; Ctrl+E undoes the follow",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "pc",
+        "program": 28,
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 106,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "ctrlE",
+        "expect": {
+         "engine": 106,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "106:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       }
+      ]
+     },
+     {
+      "name": "hint undo restores an unknown program",
+      "rows": [
+       "hint",
+       "ctrl-e"
+      ],
+      "note": "remembered[60] was unknown before the follow and is unknown again after the undo",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": null,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": null,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": null,
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "pc",
+        "program": 28,
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 106,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "ctrlE",
+        "expect": {
+         "engine": 106,
+         "remembered60": null,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "106:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       }
+      ]
+     },
+     {
+      "name": "hint, another selection, then Ctrl+E",
+      "rows": [
+       "hint",
+       "ctrl-e",
+       "send"
+      ],
+      "note": "the selection ends the hint, so Ctrl+E is a plain toggle and the follow is not undone",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "pc",
+        "program": 28,
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 106,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "select",
+        "addr": "60:2-2",
+        "expect": {
+         "engine": 60,
+         "remembered60": 9,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "60:2-2",
+         "prompt": "none",
+         "sent": [
+          "CB 09"
+         ]
+        }
+       },
+       {
+        "do": "ctrlE",
+        "expect": {
+         "engine": 106,
+         "remembered60": 9,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "106:4-5",
+         "prompt": "none",
+         "sent": [
+          "CB 09"
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "name": "hint, other-engine selection, then Ctrl+E",
+      "rows": [
+       "hint",
+       "arm",
+       "ctrl-e"
+      ],
+      "note": "arming ends the hint; Ctrl+E sends the armed patch and nothing is undone",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "pc",
+        "program": 28,
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 106,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "select",
+        "addr": "106:1-1",
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": "106:1-1",
+         "hint": 0,
+         "current": "60:4-5",
+         "prompt": "flipSwitch",
+         "sent": []
+        }
+       },
+       {
+        "do": "ctrlE",
+        "expect": {
+         "engine": 106,
+         "remembered60": 28,
+         "remembered106": 0,
+         "armed": null,
+         "hint": 0,
+         "current": "106:1-1",
+         "prompt": "none",
+         "sent": [
+          "CB 00"
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "name": "hint cleared by an ordinary PC",
+      "rows": [
+       "hint",
+       "follow"
+      ],
+      "note": "an unrelated PC is a panel press and ends the hint",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "pc",
+        "program": 28,
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 106,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "pc",
+        "program": 9,
+        "expect": {
+         "engine": 60,
+         "remembered60": 9,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "60:2-2",
+         "prompt": "none",
+         "sent": []
+        }
+       }
+      ]
+     },
+     {
+      "name": "PC equal to both remembered programs",
+      "rows": [
+       "follow"
+      ],
+      "note": "no hint: it could equally be a panel press",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 28,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 28,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:4-5",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "pc",
+        "program": 28,
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       }
+      ]
+     },
+     {
+      "name": "PC 64..127 is ignored",
+      "rows": [
+       "ignore"
+      ],
+      "note": "ignored while armed (no confirmation) and while a hint is shown (hint stays)",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "select",
+        "addr": "106:1-1",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": "106:1-1",
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "flipSwitch",
+         "sent": []
+        }
+       },
+       {
+        "do": "pc",
+        "program": 70,
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": "106:1-1",
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "flipSwitch",
+         "sent": []
+        }
+       },
+       {
+        "do": "esc",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "pc",
+        "program": 28,
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 106,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "pc",
+        "program": 70,
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 106,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "pc",
+        "program": 127,
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 106,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "pc",
+        "program": 64,
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 106,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       }
+      ]
+     },
+     {
+      "name": "unknown remembered program on the armed engine",
+      "rows": [
+       "arm",
+       "follow",
+       "ctrl-e"
+      ],
+      "note": "prompt variant is FlipThenCtrlE even with an input path; no auto-confirmation; an unrelated PC leaves the arm in place (literal reading); Ctrl+E sends",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": null
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": null,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "select",
+        "addr": "106:1-1",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": null,
+         "armed": "106:1-1",
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "flipThenCtrlE",
+         "sent": []
+        }
+       },
+       {
+        "do": "pc",
+        "program": 5,
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": null,
+         "armed": "106:1-1",
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "flipThenCtrlE",
+         "sent": []
+        }
+       },
+       {
+        "do": "pc",
+        "program": 0,
+        "expect": {
+         "engine": 60,
+         "remembered60": 0,
+         "remembered106": null,
+         "armed": "106:1-1",
+         "hint": 0,
+         "current": "60:1-1",
+         "prompt": "flipThenCtrlE",
+         "sent": []
+        }
+       },
+       {
+        "do": "ctrlE",
+        "expect": {
+         "engine": 106,
+         "remembered60": 0,
+         "remembered106": 0,
+         "armed": null,
+         "hint": 0,
+         "current": "106:1-1",
+         "prompt": "none",
+         "sent": [
+          "CB 00"
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "name": "no input path or follow off",
+      "rows": [
+       "arm",
+       "ctrl-e"
+      ],
+      "note": "prompt is FlipThenCtrlE although both programs are known",
+      "channel": 12,
+      "flipDetectable": false,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "select",
+        "addr": "106:1-1",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": "106:1-1",
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "flipThenCtrlE",
+         "sent": []
+        }
+       },
+       {
+        "do": "ctrlE",
+        "expect": {
+         "engine": 106,
+         "remembered60": 5,
+         "remembered106": 0,
+         "armed": null,
+         "hint": 0,
+         "current": "106:1-1",
+         "prompt": "none",
+         "sent": [
+          "CB 00"
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "name": "start-up with a saved engine and no remembered programs",
+      "rows": [
+       "ctrl-e",
+       "follow"
+      ],
+      "note": "current is blank; Ctrl+E shows a blank patch; a PC is a plain follow",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 106,
+       "remembered60": null,
+       "remembered106": null
+      },
+      "expect": {
+       "engine": 106,
+       "remembered60": null,
+       "remembered106": null,
+       "armed": null,
+       "hint": 0,
+       "current": null,
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "ctrlE",
+        "expect": {
+         "engine": 60,
+         "remembered60": null,
+         "remembered106": null,
+         "armed": null,
+         "hint": 0,
+         "current": null,
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "pc",
+        "program": 3,
+        "expect": {
+         "engine": 60,
+         "remembered60": 3,
+         "remembered106": null,
+         "armed": null,
+         "hint": 0,
+         "current": "60:1-4",
+         "prompt": "none",
+         "sent": []
+        }
+       }
+      ]
+     },
+     {
+      "name": "Ctrl+E toggles between remembered patches",
+      "rows": [
+       "ctrl-e"
+      ],
+      "note": "no armed selection: the engine toggles, nothing is sent, current = remembered[engine]",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "ctrlE",
+        "expect": {
+         "engine": 106,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "106:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "ctrlE",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "none",
+         "sent": []
+        }
+       }
+      ]
+     },
+     {
+      "name": "flip confirmation when the armed engine is 60",
+      "rows": [
+       "arm",
+       "flip-confirm"
+      ],
+      "note": "mirror case: on 106, arming 60:1-6, the flip re-sends PC 5",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 106,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 106,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "106:4-5",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "select",
+        "addr": "60:2-2",
+        "expect": {
+         "engine": 106,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": "60:2-2",
+         "hint": 0,
+         "current": "106:4-5",
+         "prompt": "flipSwitch",
+         "sent": []
+        }
+       },
+       {
+        "do": "pc",
+        "program": 5,
+        "expect": {
+         "engine": 60,
+         "remembered60": 9,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "60:2-2",
+         "prompt": "none",
+         "sent": [
+          "CB 09"
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
   },
   "library": {
    "$comment": "v1: a version 1 file is read as devices.d05; after the next save the file equals 'written' and 'file' is kept as library.json.v1. v2: a version 2 file loads per device (favorites in catalogue order, recents, userNames) and, after a save, is written back equal to itself (unknown device 'xyz' and top-level 'note' preserved; empty blocks for models without data are written).",

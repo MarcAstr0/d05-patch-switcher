@@ -1,4 +1,5 @@
 // Runs data/test-vectors.json (shared with the web implementation) against the core classes.
+#include "core/EngineTracker.h"
 #include "core/Library.h"
 #include "core/PatchAddress.h"
 #include "core/PatchCatalog.h"
@@ -174,6 +175,92 @@ private slots:
             }
             const QString msg = checkSearch(cat, c);
             QVERIFY2(msg.isEmpty(), qPrintable(msg));
+        }
+    }
+
+    // models.ju06a.engine: SPEC-2 section 6 event sequences against EngineTracker.
+    void modelsEngine()
+    {
+        const QJsonArray seqs = m_doc.value(QStringLiteral("models")).toObject()
+                                    .value(QStringLiteral("ju06a")).toObject()
+                                    .value(QStringLiteral("engine")).toObject()
+                                    .value(QStringLiteral("sequences")).toArray();
+        QVERIFY(seqs.size() >= 12);
+        for (const QJsonValue &sv : seqs) {
+            const QJsonObject s = sv.toObject();
+            const QString name = s.value(QStringLiteral("name")).toString();
+            const int channel = s.value(QStringLiteral("channel")).toInt();
+            const QJsonObject init = s.value(QStringLiteral("initial")).toObject();
+            auto prog = [](const QJsonValue &v) { return v.isNull() ? EngineTracker::Unknown : v.toInt(); };
+
+            EngineTracker t;
+            QStringList sent;
+            connect(&t, &EngineTracker::sendRequested, this, [&](const PatchAddress &a) {
+                for (const QByteArray &m : a.midiMessages(channel, t.engine()))
+                    sent << QString::fromLatin1(m.toHex(' ').toUpper());
+            });
+            t.setFlipDetectable(s.value(QStringLiteral("flipDetectable")).toBool());
+            t.setState(init.value(QStringLiteral("engine")).toInt(),
+                       prog(init.value(QStringLiteral("remembered60"))),
+                       prog(init.value(QStringLiteral("remembered106"))));
+            sent.clear();
+
+            auto check = [&](const QJsonObject &e, const QString &where) -> QString {
+                auto addr = [](const std::optional<PatchAddress> &a) {
+                    return a ? a->toString() : QString();
+                };
+                auto want = [&](const char *k) { return e.value(QLatin1String(k)); };
+                const QString tag = QStringLiteral("[%1 %2] ").arg(name, where);
+                if (want("engine").toInt() != t.engine())
+                    return tag + QStringLiteral("engine %1").arg(t.engine());
+                if (prog(want("remembered60")) != t.remembered(60))
+                    return tag + QStringLiteral("remembered60 %1").arg(t.remembered(60));
+                if (prog(want("remembered106")) != t.remembered(106))
+                    return tag + QStringLiteral("remembered106 %1").arg(t.remembered(106));
+                if (want("armed").toString() != addr(t.armed()))
+                    return tag + QStringLiteral("armed '%1'").arg(addr(t.armed()));
+                if (want("hint").toInt() != t.hint())
+                    return tag + QStringLiteral("hint %1").arg(t.hint());
+                if (want("current").toString() != addr(t.current()))
+                    return tag + QStringLiteral("current '%1'").arg(addr(t.current()));
+                const QString p = want("prompt").toString();
+                const auto pk = t.prompt();
+                const QString got = pk == EngineTracker::Prompt::None ? QStringLiteral("none")
+                                    : pk == EngineTracker::Prompt::FlipSwitch ? QStringLiteral("flipSwitch")
+                                                                              : QStringLiteral("flipThenCtrlE");
+                if (p != got)
+                    return tag + QStringLiteral("prompt %1").arg(got);
+                if (toStrings(want("sent").toArray()) != sent)
+                    return tag + QStringLiteral("sent [%1]").arg(sent.join(QLatin1String(", ")));
+                return QString();
+            };
+
+            QString msg = check(s.value(QStringLiteral("expect")).toObject(), QStringLiteral("initial"));
+            QVERIFY2(msg.isEmpty(), qPrintable(msg));
+            int n = 0;
+            for (const QJsonValue &ev : s.value(QStringLiteral("events")).toArray()) {
+                const QJsonObject e = ev.toObject();
+                const QString what = e.value(QStringLiteral("do")).toString();
+                ++n;
+                if (what == QLatin1String("select")) {
+                    const auto a = PatchAddress::parse(e.value(QStringLiteral("addr")).toString(), Model::JU06A);
+                    QVERIFY2(a, qPrintable(name));
+                    t.select(*a);
+                } else if (what == QLatin1String("pc")) {
+                    t.programChange(e.value(QStringLiteral("program")).toInt());
+                } else if (what == QLatin1String("ctrlE")) {
+                    t.toggleEngine();
+                } else if (what == QLatin1String("esc")) {
+                    t.escape();
+                } else if (what == QLatin1String("deviceSwitch")) {
+                    t.deviceSwitch();
+                } else {
+                    QFAIL(qPrintable(QStringLiteral("unknown event ") + what));
+                }
+                msg = check(e.value(QStringLiteral("expect")).toObject(),
+                            QStringLiteral("event %1 (%2)").arg(n).arg(what));
+                QVERIFY2(msg.isEmpty(), qPrintable(msg));
+            }
         }
     }
 

@@ -38,6 +38,7 @@ qt_add_library(d05core STATIC
     src/core/PatchCatalog.h src/core/PatchCatalog.cpp
     src/core/SearchQuery.h  src/core/SearchQuery.cpp
     src/core/Library.h      src/core/Library.cpp
+    src/core/EngineTracker.h src/core/EngineTracker.cpp
     src/app/Paths.h         src/app/Paths.cpp
     src/app/AppSettings.h   src/app/AppSettings.cpp
     src/app/Cli.h           src/app/Cli.cpp
