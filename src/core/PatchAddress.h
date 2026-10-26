@@ -4,6 +4,7 @@
 
 #include <QByteArray>
 #include <QList>
+#include <QMetaType>
 #include <QString>
 #include <array>
 #include <optional>
@@ -96,3 +97,4 @@ private:
 };
 
 }  // namespace d05
+Q_DECLARE_METATYPE(d05::PatchAddress)

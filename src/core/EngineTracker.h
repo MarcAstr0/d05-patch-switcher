@@ -20,8 +20,10 @@ namespace d05 {
 // unprompted PC that matches the other engine's remembered program until the next of
 //   - select() of any address,
 //   - toggleEngine() (this is the one action that may undo the follow, see below),
-//   - any incoming PC 0..63 (it either sets a new hint or clears it).
-// Not ending it: PC 64..127 (ignored), escape(), deviceSwitch(). While the hint is shown,
+//   - any incoming PC 0..63 (it either sets a new hint or clears it),
+//   - escape(), on every call whether or not an arm was cleared (Esc is an action).
+// Not ending it: PC 64..127 (ignored), deviceSwitch() (a hint raised while another device was
+// current can still be answered with Ctrl+E after switching). While the hint is shown,
 // toggleEngine() undoes the follow: the engine that followed gets its previous remembered
 // program back (possibly unknown) and current = (new engine, p). After the hint has ended
 // toggleEngine() is a plain toggle and undoes nothing.
@@ -60,7 +62,8 @@ public slots:
     void select(const d05::PatchAddress &a);
     // Ctrl+E or engine control click.
     void toggleEngine();
-    // Esc. Returns true when it cleared an armed selection (so the caller does nothing else).
+    // Esc. Clears the arm and the hint. Returns true only when it cleared an armed selection
+    // (so the caller knows Esc was consumed).
     bool escape();
     // The window switched to or away from this device.
     void deviceSwitch();
@@ -94,4 +97,3 @@ private:
 };
 
 }  // namespace d05
-Q_DECLARE_METATYPE(d05::PatchAddress)

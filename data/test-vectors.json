@@ -2123,7 +2123,7 @@
        "follow",
        "ctrl-e"
       ],
-      "note": "prompt variant is FlipThenCtrlE even with an input path; no auto-confirmation; an unrelated PC leaves the arm in place (literal reading); Ctrl+E sends",
+      "note": "prompt variant is FlipThenCtrlE even with an input path; no auto-confirmation; Ctrl+E sends",
       "channel": 12,
       "flipDetectable": true,
       "initial": {
@@ -2157,38 +2157,10 @@
         }
        },
        {
-        "do": "pc",
-        "program": 5,
-        "expect": {
-         "engine": 60,
-         "remembered60": 5,
-         "remembered106": null,
-         "armed": "106:1-1",
-         "hint": 0,
-         "current": "60:1-6",
-         "prompt": "flipThenCtrlE",
-         "sent": []
-        }
-       },
-       {
-        "do": "pc",
-        "program": 0,
-        "expect": {
-         "engine": 60,
-         "remembered60": 0,
-         "remembered106": null,
-         "armed": "106:1-1",
-         "hint": 0,
-         "current": "60:1-1",
-         "prompt": "flipThenCtrlE",
-         "sent": []
-        }
-       },
-       {
         "do": "ctrlE",
         "expect": {
          "engine": 106,
-         "remembered60": 0,
+         "remembered60": 5,
          "remembered106": 0,
          "armed": null,
          "hint": 0,
@@ -2416,6 +2388,144 @@
          "sent": [
           "CB 09"
          ]
+        }
+       }
+      ]
+     },
+     {
+      "name": "panel PC while armed clears the arm",
+      "rows": [
+       "clear-arm",
+       "follow",
+       "hint"
+      ],
+      "note": "a non-confirming PC on the current engine is a panel selection and ends the arm; a later PC equal to remembered[other] is then the hint case, not a flip confirmation, and sends nothing",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "select",
+        "addr": "106:1-1",
+        "expect": {
+         "engine": 60,
+         "remembered60": 5,
+         "remembered106": 28,
+         "armed": "106:1-1",
+         "hint": 0,
+         "current": "60:1-6",
+         "prompt": "flipSwitch",
+         "sent": []
+        }
+       },
+       {
+        "do": "pc",
+        "program": 7,
+        "expect": {
+         "engine": 60,
+         "remembered60": 7,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "60:1-8",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "pc",
+        "program": 28,
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 106,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       }
+      ]
+     },
+     {
+      "name": "Esc ends the hint",
+      "rows": [
+       "hint",
+       "ctrl-e",
+       "ignore"
+      ],
+      "note": "Esc clears the hint even with nothing armed, so the following Ctrl+E is a plain toggle and undoes nothing",
+      "channel": 12,
+      "flipDetectable": true,
+      "initial": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28
+      },
+      "expect": {
+       "engine": 60,
+       "remembered60": 5,
+       "remembered106": 28,
+       "armed": null,
+       "hint": 0,
+       "current": "60:1-6",
+       "prompt": "none",
+       "sent": []
+      },
+      "events": [
+       {
+        "do": "pc",
+        "program": 28,
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 106,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "esc",
+        "expect": {
+         "engine": 60,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "60:4-5",
+         "prompt": "none",
+         "sent": []
+        }
+       },
+       {
+        "do": "ctrlE",
+        "expect": {
+         "engine": 106,
+         "remembered60": 28,
+         "remembered106": 28,
+         "armed": null,
+         "hint": 0,
+         "current": "106:4-5",
+         "prompt": "none",
+         "sent": []
         }
        }
       ]

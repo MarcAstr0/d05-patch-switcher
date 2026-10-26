@@ -123,10 +123,10 @@ void EngineTracker::toggleEngine()
 
 bool EngineTracker::escape()
 {
-    if (!m_armed)
-        return false;
+    const bool hadArm = m_armed.has_value();
     setArmed(std::nullopt);
-    return true;
+    setHint(0);
+    return hadArm;
 }
 
 void EngineTracker::deviceSwitch()
@@ -150,8 +150,10 @@ void EngineTracker::programChange(int p)
         doSend(a);
         return;
     }
+    // Not a flip confirmation: a panel selection, which ends any armed selection (FR-19).
+    setArmed(std::nullopt);
     const int previous = remembered(m_engine);
-    if (!m_armed && remembered(otherEngine()) == p && previous != p) {
+    if (remembered(otherEngine()) == p && previous != p) {
         m_undoPrevious = previous;
         setRemembered(m_engine, p);
         setCurrent(at(m_engine, p));

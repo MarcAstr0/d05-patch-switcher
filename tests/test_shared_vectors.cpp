@@ -194,9 +194,18 @@ private slots:
             auto prog = [](const QJsonValue &v) { return v.isNull() ? EngineTracker::Unknown : v.toInt(); };
 
             EngineTracker t;
+            QVERIFY2(channel >= 1 && channel <= 16, qPrintable(name + QStringLiteral(": channel")));
             QStringList sent;
+            int sendCount = 0;
+            QString sendError;
             connect(&t, &EngineTracker::sendRequested, this, [&](const PatchAddress &a) {
-                for (const QByteArray &m : a.midiMessages(channel, t.engine()))
+                ++sendCount;
+                if (a.engine() != t.engine() && sendError.isEmpty())
+                    sendError = QStringLiteral("send of %1 while engine() is %2").arg(a.toString()).arg(t.engine());
+                const QList<QByteArray> msgs = a.midiMessages(channel, a.engine());
+                if (msgs.isEmpty() && sendError.isEmpty())
+                    sendError = QStringLiteral("send of %1 produced no bytes").arg(a.toString());
+                for (const QByteArray &m : msgs)
                     sent << QString::fromLatin1(m.toHex(' ').toUpper());
             });
             t.setFlipDetectable(s.value(QStringLiteral("flipDetectable")).toBool());
@@ -204,6 +213,7 @@ private slots:
                        prog(init.value(QStringLiteral("remembered60"))),
                        prog(init.value(QStringLiteral("remembered106"))));
             sent.clear();
+            sendCount = 0;
 
             auto check = [&](const QJsonObject &e, const QString &where) -> QString {
                 auto addr = [](const std::optional<PatchAddress> &a) {
@@ -211,6 +221,15 @@ private slots:
                 };
                 auto want = [&](const char *k) { return e.value(QLatin1String(k)); };
                 const QString tag = QStringLiteral("[%1 %2] ").arg(name, where);
+                if (!sendError.isEmpty())
+                    return tag + sendError;
+                for (const char *k : {"engine", "remembered60", "remembered106", "armed", "hint", "current",
+                                      "prompt", "sent"}) {
+                    if (!e.contains(QLatin1String(k)))
+                        return tag + QStringLiteral("missing expectation key %1").arg(QLatin1String(k));
+                }
+                if (!want("sent").isArray())
+                    return tag + QStringLiteral("sent is not an array");
                 if (want("engine").toInt() != t.engine())
                     return tag + QStringLiteral("engine %1").arg(t.engine());
                 if (prog(want("remembered60")) != t.remembered(60))
@@ -238,7 +257,9 @@ private slots:
             QString msg = check(s.value(QStringLiteral("expect")).toObject(), QStringLiteral("initial"));
             QVERIFY2(msg.isEmpty(), qPrintable(msg));
             int n = 0;
-            for (const QJsonValue &ev : s.value(QStringLiteral("events")).toArray()) {
+            const QJsonArray events = s.value(QStringLiteral("events")).toArray();
+            QVERIFY2(!events.isEmpty(), qPrintable(name + QStringLiteral(": no events")));
+            for (const QJsonValue &ev : events) {
                 const QJsonObject e = ev.toObject();
                 const QString what = e.value(QStringLiteral("do")).toString();
                 ++n;
@@ -257,6 +278,7 @@ private slots:
                 } else {
                     QFAIL(qPrintable(QStringLiteral("unknown event ") + what));
                 }
+                QVERIFY2(sendCount == 0 || !sent.isEmpty(), qPrintable(name + QStringLiteral(": send without bytes")));
                 msg = check(e.value(QStringLiteral("expect")).toObject(),
                             QStringLiteral("event %1 (%2)").arg(n).arg(what));
                 QVERIFY2(msg.isEmpty(), qPrintable(msg));

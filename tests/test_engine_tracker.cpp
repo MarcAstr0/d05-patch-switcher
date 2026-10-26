@@ -9,6 +9,30 @@ using namespace d05;
 
 class TestEngineTracker : public QObject {
     Q_OBJECT
+public:
+    // Records every signal by name, in order; sends also record "engine() == address engine".
+    struct Recorder {
+        QStringList log;
+        bool wrongEngine = false;
+        explicit Recorder(EngineTracker &t)
+        {
+            QObject::connect(&t, &EngineTracker::engineChanged, &t, [this](int e) {
+                log << QStringLiteral("engineChanged:%1").arg(e);
+            });
+            QObject::connect(&t, &EngineTracker::armedChanged, &t, [this] { log << QStringLiteral("armedChanged"); });
+            QObject::connect(&t, &EngineTracker::hintChanged, &t, [this](int e) {
+                log << QStringLiteral("hintChanged:%1").arg(e);
+            });
+            QObject::connect(&t, &EngineTracker::currentChanged, &t, [this] { log << QStringLiteral("currentChanged"); });
+            QObject::connect(&t, &EngineTracker::rememberedChanged, &t, [this] { log << QStringLiteral("rememberedChanged"); });
+            QObject::connect(&t, &EngineTracker::sendRequested, &t, [this, &t](const d05::PatchAddress &a) {
+                if (a.engine() != t.engine())
+                    wrongEngine = true;
+                log << QStringLiteral("sendRequested:%1").arg(a.toString());
+            });
+        }
+    };
+
 private slots:
     void signalsOnArmAndFlip()
     {
@@ -29,6 +53,46 @@ private slots:
         QCOMPARE(sends.count(), 1);
         QCOMPARE(armed.count(), 2);
         QCOMPARE(t.prompt(), EngineTracker::Prompt::None);
+    }
+
+    void signalOrderOnConfirmingPc()
+    {
+        EngineTracker t;
+        t.setFlipDetectable(true);
+        t.setState(60, 5, 28);
+        Recorder r(t);
+        t.select(*PatchAddress::parse(QStringLiteral("106:1-1"), Model::JU06A));
+        QCOMPARE(r.log, QStringList{QStringLiteral("armedChanged")});
+        r.log.clear();
+        t.programChange(28);
+        const QStringList want{
+            QStringLiteral("armedChanged"),
+            QStringLiteral("engineChanged:106"),
+            QStringLiteral("rememberedChanged"),
+            QStringLiteral("currentChanged"),
+            QStringLiteral("sendRequested:106:1-1"),
+        };
+        QCOMPARE(r.log, want);
+        QVERIFY(!r.wrongEngine);
+    }
+
+    void signalOrderOnCtrlE()
+    {
+        EngineTracker t;
+        t.setState(60, 5, 28);
+        Recorder r(t);
+        t.select(*PatchAddress::parse(QStringLiteral("106:1-1"), Model::JU06A));
+        r.log.clear();
+        t.toggleEngine();
+        const QStringList want{
+            QStringLiteral("engineChanged:106"),
+            QStringLiteral("armedChanged"),
+            QStringLiteral("rememberedChanged"),
+            QStringLiteral("currentChanged"),
+            QStringLiteral("sendRequested:106:1-1"),
+        };
+        QCOMPARE(r.log, want);
+        QVERIFY(!r.wrongEngine);
     }
 
     void hintSignals()
