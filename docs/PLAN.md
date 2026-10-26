@@ -98,6 +98,80 @@ Started 2026-10-24 after v1.0.0, in the main tree (desktop work is finished).
 over OTG, straight into the D-05 or through a forwarding device; GW3 one pass in Firefox
 to confirm the permission add-on flow reads sensibly.
 
+## Version 2 · Boutique Patch Switcher (spec: `docs/SPEC-2.md`)
+
+Started 2026-10-26. Three models (D-05, JP-08, JU-06A), one window that re-skins per
+device, per-device ports and channels, JU-06A engine tracking, rename at the end.
+Read `docs/SPEC-2.md`, `docs/IDENTIFY.md`, `docs/MIDI-JP08.md`, `docs/MIDI-JU06A.md`
+and `docs/DESIGN-BRIEF-2.md` before dispatching. The web version is out of scope
+except W5. Gate G0 (hardware facts) was run by the owner with Fable on 2026-10-26 and
+is recorded in the three MIDI/identify docs; no gate is needed before M6.
+
+## M6 · Models, data and MIDI (builder) ☐
+
+Headless. `d05` behaviour must not change: the existing tests and the existing
+sections of `data/test-vectors.json` stay green and byte-for-byte.
+
+- ☑ **T6.0 Docs and agents** (foreman, no code): `CLAUDE.md` and `AGENTS.md` read order and "hardware facts" updated for three models (point at the per-model MIDI docs; keep the D-05 facts); `.claude/agents/*.md` descriptions say "Roland Boutique synths" and name `docs/SPEC-2.md` and `docs/DESIGN-BRIEF-2.md`; models in the agent files unchanged.
+- ☐ **T6.1 `Model` and `PatchAddress`** per SPEC-2 §3.1–3.2: `Model`, `ModelInfo`, the generalised address with `parse(text, model[, engine])`, `toString()`, `catalogueIndex()`, `midiMessages(channel)`; `midiTriplet()` kept and unchanged for the D-05. Tests: round-trip over all 896 + 64 + 128; the parse table from SPEC-2 §3.2 (`45`, `4-5`, `106:45`, bare JU-06A forms with and without an engine); rejects `0-1`, `9-9`, `4-9`, `107:1-1`, `60-45`, `P1-11` on the JP-08; the worked examples from the two new MIDI docs (`4-5` → `C4 1C` on channel 5; JU-06A `60:1-6` → `CB 05` on channel 12); a JU-06A address of the wrong engine yields no messages.
+- ☐ **T6.2 Data tables.** `data/jp08-patches.tsv` (64 rows: bank, number, name) and `data/ju06a-patches.tsv` (128 rows: engine, bank, number, name) extracted from the Roland sound-list PDFs in `/home/mario/Documentos/Manuales/Roland/` (`JP-08_Sound_List_e01_W.pdf`, `JU-06A_Sound_List_e01_W.pdf`) by a new `scripts/extract-boutique-lists.py` using `pdftotext -layout` (the lists are four-column tables, one page each; the JU-06A page has a `60` block then a `106` block). Names exactly as printed, including `’` and `&`. `data/README.md` documents both like the D-05 table. Tests: 64 and 128 rows; anchors JP-08 `1-1` *NEG Sync*, `4-5` *Sine Glass*, `8-8` *Space Boomerang*; JU-06A `60:1-1` *LD Echolocator*, `60:8-8` *1982 Synth Drum*, `106:1-1` *Brass*, `106:4-5` *Reso Up*, `106:8-6` *Louis’ Weapon*, `106:8-8` *Takeoff*; no empty names; no duplicates within an engine (duplicates across engines are allowed).
+- ☐ **T6.3 `PatchCatalog` per model.** Constructor takes the model and loads its TSV from the resource; factory and user names (user name wins for display, both searched); `prev/next` clamped per SPEC-2 FR-5 (the JU-06A never crosses engines). Tests per model, including `displayName` on a user-named JP-08 slot and the tooltip name.
+- ☐ **T6.4 `SearchQuery` per model.** The FR-3 table of SPEC-2 for the JP-08 and JU-06A, the D-05 grammar untouched. Vectors in `data/test-vectors.json` under `models.jp08.search` and `models.ju06a.search`, at least 20 each, including `85` → `8-5` (not *SY Rock 85*), `rock` → *SY Rock 85*, `1982` as text, `45` on the JU-06A → two rows, `106 brass`, `60:4`, `106:45`, a user name found by search, `4` as a bank filter, `0`/`9` digits as text.
+- ☐ **T6.5 `Library` version 2 and the data directory.** SPEC-2 §3.5: per-device blocks, v1 read as `devices.d05` with a `library.json.v1` copy kept once, unknown devices preserved, write as version 2; `Paths` moves to `boutique-patch-switcher` and copies the old directory's files on first start (`--config-dir` bypasses). Tests in temp dirs: v2 round-trip for three devices; a real v1 file (the fixture from W1) migrates and the copy exists; the old data dir is copied once and never modified; a broken file is still sidelined. Vectors: `models.library` with one v1 and one v2 file.
+- ☐ **T6.6 `EngineTracker`.** SPEC-2 §6 as a pure QObject with the signals named in §7. Vectors `models.ju06a.engine`: at least 12 event sequences covering every row of the §6 table, including: arm then flip confirmation (sends the armed patch, nothing sent before); arm then `Ctrl+E` (sends); arm then `Esc` (nothing sent, ever); the hint case and its undo on `Ctrl+E`; a PC equal to both remembered programs (no hint); PC 70 ignored; unknown remembered program on the armed engine (prompt variant, no auto-confirmation); start-up with a saved engine and no remembered programs.
+- ☐ **T6.7 MIDI layer.** `PortHub` (open each OS port once for input and once for output, reference-counted; demultiplex incoming messages to links by channel; realtime and non-Program-Change traffic dropped in the callback before any allocation), `MidiLink` per device (model-aware messages and follow parsing; the D-05 path byte-identical to today), `DeviceRouter` (three links, three trackers, FR-20 dispatch, poll only while some enabled device is disconnected). Tests on the fake: JP-08 and JU-06A send one message, the D-05 three; two devices on one fake port with channels 3 and 5 receive only their own events; same port and channel is refused; echo suppression per link; a JU-06A follow event drives the tracker; FR-20 on and off; the poll stops when all enabled devices connect.
+- ☐ **T6.8 `Identify` and CLI.** `docs/IDENTIFY.md` rule 1 as a pure function with a test table (`Boutique:Boutique MIDI 1 24:0` → D-05 likely; `Boutiq:Boutiq MIDI 1 28:0` → first generation, ambiguous; `JU-06A:…` → certain; `HAPAX Puerto 1` → none); rule 2 on Linux behind `#ifdef`, failing silently to rule 1. CLI per SPEC-2 FR-15: `--device`, `--engine`, `--identify`, exit code 5, `--send` in each model's form. `scripts/midi-smoke.sh` gains the JP-08 and JU-06A cases from the two MIDI docs, including the exit-5 case.
+- ☐ **R6 Review** (reviewer + Codex, `--base origin/main` after the push). Emphasis: the D-05 path unchanged, the engine table rows, shared-port demultiplexing, nothing allocates in the input callback.
+- ☐ **Push and CI** green on all three runners; the web job green (unchanged data sections).
+
+**Gate G6 (owner).** On the Linux box with each unit on its own USB port in turn (or
+all three if cables allow): `--identify` names each one; `--send` on the unit's
+channel for the JP-08 checklist steps 2–4 and the JU-06A steps 2–4 (both engines,
+`--engine`), plus `--send` for the D-05 as before. Report what each display showed.
+
+## M7 · Design (designer) ☐, runs in parallel with M6
+
+Touches only `docs/design/`, `assets/`. No C++. Brief: `docs/DESIGN-BRIEF-2.md`.
+
+- ☐ **T7.1 References** extended for the Jupiter-8 / JP-08 and JUNO-60 / JUNO-106 / JU-06A panels and displays, with sources and the decisions taken.
+- ☐ **T7.2 `docs/design/DESIGN-2.md`** per the brief's Deliverables 2: the skin system and token schema, the three component choices per skin with every state, list-row variants, Settings device list and pages, Shortcuts and About changes, per-skin palettes.
+- ☐ **T7.3 Tokens and assets.** `tokens.json` version 2 (base + four skin sets; `d05` resolves to today's values exactly), the `app.qss.in` template structure agreed with the builder, fonts if any (OFL, with licences), the new icon set for "Boutique Patch Switcher".
+- ☐ **T7.4 Mockups**: `mockup-jp08.png`, `mockup-ju06a-60.png`, `mockup-ju06a-106.png` (armed, prompt showing), `mockup-devices.png`, `mockup-settings-devices.png`, from sources in `docs/design/mockup/`.
+
+**Gate G7 (owner).** The foreman shows the mockups (Artifact page when available) and
+asks for approval or changes; one round of changes budgeted. M8 starts after approval
+and after G6 is answered.
+
+## M8 · GUI (builder, designer reviews) ☐, after G6 answered and G7 approved
+
+- ☐ **T8.1 Skins and displays.** `Theme` as a runtime palette; `gen-tokens.py` version 2 emitting one QSS per skin from the template with `--check` still verifying `Theme`, the QSS files and the mockup scripts; `LedDisplayWidget` per DESIGN-2.md with an atlas and repaint-on-change; `--screenshot-state` for every new state. The D-05 screenshots must be pixel-identical to the v1.0.0 ones at 1× and 2× (keep a reference set under `tests/reference/` if none exists; the designer may accept listed deviations).
+- ☐ **T8.2 Device switcher and Settings.** FR-16 and FR-9: the switcher, the device list and pages, `detected` marks and `Use`, the shared port-and-channel refusal, global toggles. Switching is synchronous with one repaint.
+- ☐ **T8.3 Per-model main window.** Group bar only on the D-05; engine control on the JU-06A; engine tag in the rows; prompt, hint and no-patch display states; `Ctrl+E`, `Ctrl+Tab`, `Esc` while armed; the first-run hint with detection; `F2` on any slot of the 64-patch models.
+- ☐ **T8.4 Follow across devices.** FR-20 wired through `DeviceRouter`; the JU-06A tracker works while another device is current; a device switch clears a pending armed selection.
+- ☐ **T8.5 Footprint** against SPEC-2 §5 with three fake devices (`--fake-midi` gains a `--fake-clock` option that emits clock at 120 BPM on each fake input) and, when the owner has the units connected, with the real three.
+- ☐ **D8 Design review** (designer): every state on every skin at 1× and 2×; numbered deviations; two rounds at most.
+- ☐ **R8 Review** (reviewer + Codex): emphasis on the engine state machine's UI paths, threading with three input threads, repaint discipline on skin switch, and the D-05 regression set.
+- ☐ **Push and CI** green.
+
+**Gate G8 (owner).** Hardware on the Linux box, units on USB: the full checklists in
+`docs/MIDI-JP08.md` (steps 1–7) and `docs/MIDI-JU06A.md` (steps 1–9, the flip and hint
+flows included) and `docs/MIDI.md` steps 3–6 for the D-05, with all three enabled and,
+if cables allow, connected at once, so that FR-20 and "the right unit changed" are
+seen. Report what each unit's display showed at each step.
+
+## M9 · Rename, packaging and v2.0.0 (builder) ☐
+
+- ☐ **T9.1 Rename.** Binary, bundle, desktop file, icon names, AppImage and dmg names, window title, About, README (title, screenshots from `--screenshot` for the two new skins beside the macOS capture), `CHANGELOG.md` 2.0.0 entry, web manifest and README URLs for the new Pages address; optionally the `d05` namespace and CMake target names if the whole suite stays green in the same commit. Owner action in the same task: rename the GitHub repository and confirm the redirect; the foreman updates `origin` and the CI badge.
+- ☐ **T9.2 CI and packages** green under the new names on all three runners; artifacts downloadable; each package's `--version` says 2.0.0 and `--identify` runs.
+- ☐ **W5 Web import** (web-builder): the web importer reads `devices.d05` from a version 2 `library.json` (and still reads version 1); one test with the desktop-written v2 fixture; nothing else in `web/` changes; deployed under the renamed Pages URL.
+- ☐ **R9 Final review** (reviewer + Codex; the foreman may run the agent on Opus).
+- ☐ **T9.3 Tag `v2.0.0`**; release green with the three packages; the vault's project page updated by the owner.
+
+**Gate G9 (owner).** The `.dmg` on the MacBook against the rig through the Hapax:
+three devices on the Hapax port with the live-rig channels (D-05 3, JU-06A 4, JP-08 5,
+after the units are moved to those channels), `docs/MIDI.md` steps 3–5 and the two
+new checklists' steps 3–5. Report.
+
 ## Decisions log
 
 Append-only. Date, who, what changed and why. The foreman writes here whenever a spec
@@ -150,3 +224,10 @@ detail is changed, a task is dropped, or a gate answer changes the plan.
 - 2026-10-24, GW2 first attempt (owner): on the Redmi 10A in Chrome, with the D-05 directly on USB OTG, Android does not enumerate the D-05 as a MIDI device (MIDI Scope sees nothing; Chrome listed only MIDI Scope's virtual `Scope` port), so no patch changed. Not an app defect. README and docs/MIDI.md now say Android needs a class-compliant interface or a forwarding device. GW2 to be completed through one of those.
 - 2026-10-24, GW3 passed (owner): the web version works in Firefox against the rig.
 - 2026-10-24, RW Codex review (re-run after the usage limit, against f8b932e): six findings, all still present on main and all fixed in web 0.9.2: no name-only port match across manufacturers, open-port identity includes the manufacturer, no connect resend after a TEST of the same target, Settings opens by itself only after an explicit CONNECT, follow state resets on port/channel changes, corrupt library text is set aside (or saving blocked) during a dirty reload.
+- 2026-10-26, owner: version 2 extends the app to the JP-08 and JU-06A under the name **Boutique Patch Switcher**; the repository is renamed at the end of the version. The web version is out of scope for version 2 (separate per-synth web apps are a possible later version); it gets only the library-import maintenance change (W5).
+- 2026-10-26, owner via Fable (gate G0, hardware facts measured on the Linux box, recorded in `docs/IDENTIFY.md`, `docs/MIDI-JP08.md`, `docs/MIDI-JU06A.md`): all three units are class-compliant on Linux with no driver; the model is identifiable by USB product ID for the D-05 and JU-06A, and by the USB serial prefix (`BQ_D`, `BQJP`, `BQJU`) for all three, which resolves the first generation's shared product ID; port names are `Boutique`, `Boutiq` and `JU-06A`. The JP-08 and JU-06A select patches with Program Change 0–63 only, `program = (bank − 1) × 8 + (number − 1)`, verified in both directions. Both were still on their old channels (13 and 12); the live-rig plan moves them to 5 and 4.
+- 2026-10-26, Fable: the JU-06A's engine switch is not silent. Each engine remembers its own current patch and a flip into an engine re-sends that patch's Program Change (nothing when that engine shows `---`). The chart still gives no way to ask the unit, so SPEC-2 §6 defines an app-side engine state with prompt-and-arm sends and an inference that is a confirmation when armed and a hint otherwise, never a silent switch. The app never sends a patch for the other engine.
+- 2026-10-26, Fable: one device per model, three fixed devices, because chain mode makes two units of one model a single instrument and nothing else needs more. Library version 2 is keyed by model id for the same reason. All enabled devices' ports stay open so that follow works across devices and switching is instant; the thread budget becomes one input thread per open input port.
+- 2026-10-26, Fable: on the 64-patch models a bare two-digit token is an address (`85` is `8-5`), unlike the D-05 where it is text, because the two-digit number is how those panels are addressed; `rock` still finds *SY Rock 85*. The owner may overrule at G7 or G8.
+- 2026-10-26, Fable: the JU-06A's `prev`/`next` never cross engines (a cross would need a flip); the catalogue still lists both engines so that search and favourites span them.
+- 2026-10-26, Fable: internal names (`d05` namespace, `d05core`/`d05ui` targets) may stay after the rename; only user-visible names must change (SPEC-2 §8). The data directory moves and the old one is copied, never modified.

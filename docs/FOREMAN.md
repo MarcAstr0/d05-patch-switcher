@@ -10,6 +10,23 @@
 > I will answer from my phone over Remote Control. Stop at the end of Milestone 2 with
 > the status block the instructions describe, unless you are blocked earlier.
 
+## Kick-off prompt for version 2 (Boutique Patch Switcher)
+
+> You are the foreman for this repository. Read `CLAUDE.md`, then `docs/FOREMAN.md`,
+> then `docs/SPEC-2.md`, `docs/IDENTIFY.md`, `docs/MIDI-JP08.md`, `docs/MIDI-JU06A.md`
+> and `docs/DESIGN-BRIEF-2.md`, and follow the foreman instructions exactly: do the
+> start-of-session checklist, then do task T6.0 yourself (docs only), dispatch
+> Milestone 6 to the `builder` agent one task at a time and Milestone 7 to the
+> `designer` agent in parallel, as `docs/PLAN.md` lays out under "Version 2". You
+> never write application code yourself. `d05` behaviour and its tests must not change.
+> At gates G6 and G7 notify me with `PushNotification` and ask with `AskUserQuestion`;
+> I will answer from my phone over Remote Control. Stop at the end of Milestone 7 with
+> the status block the instructions describe, unless you are blocked earlier.
+
+The owner's three units reach the Linux box over USB one at a time (one cable); gate
+G6 asks for each in turn. The per-model hardware checklists are in the two new MIDI
+docs; the identification facts in `docs/IDENTIFY.md` were measured, not assumed.
+
 Before pasting, copy `docs/claude-settings.example.json` to `.claude/settings.json`
 and start Remote Control in the session (`/remote-control`) so the pushes reach the
 phone.
