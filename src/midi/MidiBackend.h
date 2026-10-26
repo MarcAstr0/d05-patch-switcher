@@ -57,13 +57,20 @@ public:
     static constexpr quint32 AcceptAll = 0xFFFFFFFFu;
     void setAcceptMask(quint32 mask) { m_acceptMask.store(mask, std::memory_order_relaxed); }
     quint32 acceptMask() const { return m_acceptMask.load(std::memory_order_relaxed); }
+    // Generation of the input port the backend serves now (0 = none), set by PortHub before an
+    // input opens and cleared when it closes. Stamped on each message on the input thread.
+    void setInputGeneration(quint64 g) { m_inputGen.store(g, std::memory_order_release); }
+    quint64 inputGeneration() const { return m_inputGen.load(std::memory_order_acquire); }
     // Pure, allocation-free, safe on any thread.
     static bool accepts(quint32 mask, const unsigned char *data, std::size_t size);
 
 signals:
     // One complete incoming MIDI message (channel messages only; sysex, clock
     // and active sensing are filtered by the backend).
-    void received(const QByteArray &message);
+    // `generation` is the input generation (setInputGeneration) read on the input thread when
+    // the message arrived, so a message queued from a port that has since been closed or
+    // replaced is recognisable after it crosses to the main thread.
+    void received(const QByteArray &message, quint64 generation);
     // The open output port disappeared (only backends that can tell emit this).
     void outputLost();
     // Same for the open input port.
@@ -71,6 +78,7 @@ signals:
 
 private:
     std::atomic<quint32> m_acceptMask{AcceptAll};
+    std::atomic<quint64> m_inputGen{0};
 };
 
 }  // namespace d05

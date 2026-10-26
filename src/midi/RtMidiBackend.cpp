@@ -66,8 +66,9 @@ void inputCallback(double, std::vector<unsigned char> *message, void *userData)
     // allocation: this reads the vector RtMidi owns and one atomic, nothing else.
     if (!MidiBackend::accepts(self->acceptMask(), message->data(), message->size()))
         return;
+    const quint64 gen = self->inputGeneration();  // stamped here, on RtMidi's thread
     const QByteArray bytes(reinterpret_cast<const char *>(message->data()), qsizetype(message->size()));
-    QMetaObject::invokeMethod(self, [self, bytes] { emit self->received(bytes); }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(self, [self, bytes, gen] { emit self->received(bytes, gen); }, Qt::QueuedConnection);
 }
 
 }  // namespace

@@ -149,7 +149,9 @@ void EngineTracker::programChange(int p)
 {
     if (p < 0 || p > 63)
         return;
-    if (m_armed && remembered(m_armed->engine()) == p) {
+    // Only while the armed engine differs from the believed one: otherwise the PC is an ordinary
+    // panel press (e.g. Ctrl+E already switched the engine and the armed send failed).
+    if (m_armed && m_armed->engine() != m_engine && remembered(m_armed->engine()) == p) {
         // The flip re-sent the armed engine's old patch.
         const PatchAddress a = *m_armed;
         const bool changed = a.engine() != m_engine;

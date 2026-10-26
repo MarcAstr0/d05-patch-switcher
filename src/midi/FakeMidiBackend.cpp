@@ -1,5 +1,7 @@
 #include "midi/FakeMidiBackend.h"
 
+#include <QMetaObject>
+
 #include <cstdio>
 
 namespace d05 {
@@ -113,7 +115,10 @@ void FakeMidiBackend::injectReceived(const QByteArray &message)
     if (!accepts(acceptMask(), reinterpret_cast<const unsigned char *>(message.constData()),
                  size_t(message.size())))
         return;
-    emit received(message);
+    // Like the real backend: stamp now (the "input thread"), deliver through the event queue.
+    const quint64 gen = inputGeneration();
+    QMetaObject::invokeMethod(this, [this, message, gen] { emit received(message, gen); },
+                              Qt::QueuedConnection);
 }
 
 }  // namespace d05

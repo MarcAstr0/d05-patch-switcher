@@ -38,7 +38,8 @@ public:
     QString openOutputName() const { return m_outName; }
     // Print every sent message as hex on stderr (--fake-midi).
     void setPrintSent(bool on) { m_printSent = on; }
-    // Callable from any thread: emits received().
+    // Callable from any thread: stamps the input generation, then emits received() through the
+    // event queue, as the real backend does.
     void injectReceived(const QByteArray &message);
 
 private:

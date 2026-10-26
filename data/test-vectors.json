@@ -903,6 +903,31 @@
      ]
     },
     {
+     "query": "zebra break",
+     "userNames": {
+      "5-5": "Zebra Pad"
+     },
+     "expect": [
+      "5-5"
+     ]
+    },
+    {
+     "query": "zebra 5 break",
+     "userNames": {
+      "5-5": "Zebra Pad"
+     },
+     "expect": [
+      "5-5"
+     ]
+    },
+    {
+     "query": "zebra nosuchword",
+     "userNames": {
+      "5-5": "Zebra Pad"
+     },
+     "expect": []
+    },
+    {
      "query": "sync",
      "userNames": {
       "1-1": "My Sync"
@@ -1250,6 +1275,31 @@
      "expect": [
       "106:8-8"
      ]
+    },
+    {
+     "query": "zebra takeoff",
+     "userNames": {
+      "106:8-8": "Zebra Lead"
+     },
+     "expect": [
+      "106:8-8"
+     ]
+    },
+    {
+     "query": "zebra 8-8 takeoff",
+     "userNames": {
+      "106:8-8": "Zebra Lead"
+     },
+     "expect": [
+      "106:8-8"
+     ]
+    },
+    {
+     "query": "zebra nosuchword",
+     "userNames": {
+      "106:8-8": "Zebra Lead"
+     },
+     "expect": []
     },
     {
      "query": "pad 1",

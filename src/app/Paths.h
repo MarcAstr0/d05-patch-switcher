@@ -2,6 +2,8 @@
 
 #include <QString>
 
+#include <functional>
+
 namespace d05 {
 
 // Where per-user files live. The default is the app-data location
@@ -20,10 +22,15 @@ QString legacyDataDir();
 // copy did not complete; nothing was created under the final name.
 enum class MigrateResult { NotNeeded, Migrated, Failed };
 // Copies every top-level regular file of oldDir (hidden ones too) into newDir when newDir does
-// not exist and oldDir does (SPEC-2 3.5). The copy goes to "<newDir>.migrating" and is renamed to
-// newDir only once complete, so newDir existing means done; a stale staging directory is removed
-// first. oldDir is never modified.
+// not exist and oldDir does (SPEC-2 3.5). The copy goes to "<newDir>.migrating-<pid>" and is renamed
+// to newDir only once complete, so newDir existing means done; stale staging directories of that
+// pattern (not ours) are removed first, best effort. If another process creates newDir first,
+// the result is NotNeeded. oldDir is never modified.
 MigrateResult migrateDataDir(const QString &oldDir, const QString &newDir);
+// Tests: `beforeRename` runs after the copy, before the final rename (simulates a racing
+// process); `staleStagingSeconds` is the age from which another pid's staging directory is
+// removed. Call with no arguments to restore the defaults.
+void setMigrationTestHooks(std::function<void()> beforeRename = {}, int staleStagingSeconds = 600);
 // migrateDataDir(legacyDataDir(), dataDir()), except that it does nothing under --config-dir.
 MigrateResult migrateLegacyDataDir();
 // Rule after a Failed migration: the session runs against a throwaway directory (this sets the

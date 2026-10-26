@@ -56,6 +56,7 @@ class TestLibraryV2 : public QObject {
 private slots:
     void roundTripThreeDevices();
     void userNamesPerModel();
+    void attachCatalogAfterLoadKeepsCarriedNames();
     void signalsCarryModel();
     void realV1FixtureMigrates();
     void legacyCopyKeptOnce();
@@ -70,6 +71,8 @@ private slots:
     void failedCopyLeavesNothingAndRetries();
     void unreadableFileFailsThenRetries();
     void staleStagingCleaned();
+    void concurrentFirstStartLosingTheRenameIsNotNeeded();
+    void freshStagingOfAnotherProcessIsLeftAlone();
     void scratchDirKeepsFinalMissing();
     void hiddenFilesCopied();
     void readOnlySourceGivesWritableCopies();
@@ -143,6 +146,32 @@ void TestLibraryV2::userNamesPerModel()
     PatchCatalog only;
     Library solo(only, dir.filePath(QStringLiteral("solo.json")));
     QVERIFY(!solo.setUserName(J("1-1"), QStringLiteral("x")));
+}
+
+void TestLibraryV2::attachCatalogAfterLoadKeepsCarriedNames()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("library.json"));
+    writeBytes(path, R"({"version": 2, "devices": {
+        "d05": {"favorites": [], "recents": [], "userNames": {}},
+        "jp08": {"favorites": [], "recents": [], "userNames": {"1-1": "CN Intro Lead"}},
+        "ju06a": {"favorites": [], "recents": [], "userNames": {"106:1-2": "CN Brass"}}}})");
+    PatchCatalog d05;
+    PatchCatalog jp{Model::JP08};
+    PatchCatalog ju{Model::JU06A};
+    Library lib(d05, path);
+    QCOMPARE(lib.load(), Library::LoadResult::Loaded);  // jp08 and ju06a have no catalog yet
+    lib.attachCatalog(jp);
+    lib.attachCatalog(ju);
+    QCOMPARE(jp.userName(J("1-1")), QStringLiteral("CN Intro Lead"));
+    QCOMPARE(ju.userName(U("106:1-2")), QStringLiteral("CN Brass"));
+    QVERIFY(lib.toggleFavorite(D("P1-11")));  // any edit, then a save
+    QVERIFY(lib.flush());
+    const QJsonObject devs = readJson(path).value(QStringLiteral("devices")).toObject();
+    QCOMPARE(devs.value(QStringLiteral("jp08")).toObject().value(QStringLiteral("userNames")).toObject()
+                 .value(QStringLiteral("1-1")).toString(), QStringLiteral("CN Intro Lead"));
+    QCOMPARE(devs.value(QStringLiteral("ju06a")).toObject().value(QStringLiteral("userNames")).toObject()
+                 .value(QStringLiteral("106:1-2")).toString(), QStringLiteral("CN Brass"));
 }
 
 void TestLibraryV2::signalsCarryModel()
@@ -438,6 +467,44 @@ void TestLibraryV2::staleStagingCleaned()
     QVERIFY(!QFileInfo::exists(newDir + QStringLiteral(".migrating")));
     QVERIFY(!QFileInfo::exists(newDir + QStringLiteral("/junk.txt")));
     QCOMPARE(readAll(newDir + QStringLiteral("/library.json")), QByteArray("lib"));
+}
+
+void TestLibraryV2::concurrentFirstStartLosingTheRenameIsNotNeeded()
+{
+    QTemporaryDir root;
+    const QString oldDir = root.filePath(QStringLiteral("old"));
+    const QString newDir = root.filePath(QStringLiteral("new"));
+    writeBytes(oldDir + QStringLiteral("/library.json"), "lib");
+    // The other process finishes (and starts using the directory) between our copy and rename.
+    Paths::setMigrationTestHooks([&] {
+        writeBytes(newDir + QStringLiteral("/library.json"), "winner");
+        writeBytes(newDir + QStringLiteral("/settings.ini"), "w");
+    });
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::NotNeeded);
+    Paths::setMigrationTestHooks();
+    QCOMPARE(readAll(newDir + QStringLiteral("/library.json")), QByteArray("winner"));  // untouched
+    // Our staging directory is gone.
+    const QStringList left = QDir(root.path()).entryList(QStringList{QStringLiteral("new.migrating*")});
+    QVERIFY2(left.isEmpty(), qPrintable(left.join(QLatin1Char(' '))));
+}
+
+void TestLibraryV2::freshStagingOfAnotherProcessIsLeftAlone()
+{
+    QTemporaryDir root;
+    const QString oldDir = root.filePath(QStringLiteral("old"));
+    const QString newDir = root.filePath(QStringLiteral("new"));
+    writeBytes(oldDir + QStringLiteral("/library.json"), "lib");
+    const QString other = newDir + QStringLiteral(".migrating-1");
+    writeBytes(other + QStringLiteral("/a"), "x");
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::Migrated);
+    QVERIFY(QFileInfo::exists(other));  // possibly a live copy by another process
+    QVERIFY(!QFileInfo::exists(newDir + QStringLiteral("/a")));
+    // Once it is old enough it is swept (threshold 0 here).
+    QDir(newDir).removeRecursively();
+    Paths::setMigrationTestHooks({}, 0);
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::Migrated);
+    Paths::setMigrationTestHooks();
+    QVERIFY(!QFileInfo::exists(other));
 }
 
 void TestLibraryV2::scratchDirKeepsFinalMissing()

@@ -84,10 +84,6 @@ private:
     struct Backend {
         MidiBackend *b = nullptr;
         bool owned = false;
-        // Generation of the input port the backend serves now (0 = none). Read on RtMidi's
-        // thread when a message is queued, so a message queued from a port that has since been
-        // closed is recognised and dropped on the main thread.
-        std::shared_ptr<std::atomic<quint64>> inputGen = std::make_shared<std::atomic<quint64>>(0);
     };
     struct Port {
         QString name;
@@ -105,7 +101,6 @@ private:
         bool dead = false;  // detached during a dispatch; swept afterwards
     };
     struct DispatchGuard;
-    std::atomic<quint64> *genOf(MidiBackend *b);
     void endInput(Port *p);  // forgets the generation, closes the backend side, drops the port
 
     Reg *reg(const QObject *owner);

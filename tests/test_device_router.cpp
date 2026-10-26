@@ -387,6 +387,72 @@ private slots:
         QVERIFY(t->prompt() != EngineTracker::Prompt::None);
     }
 
+    void armedJu06aConfirmingPcSendsAndSwitchesTheWindowWhenFollowSwitchesIsOn()
+    {
+        Rig r;
+        r.configureAll(true);
+        r.router.setJu06aState(60, 3, 20);
+        EngineTracker *t = r.router.ju06aTracker();
+        QCOMPARE(r.router.currentDevice(), Model::D05);
+        QVERIFY(r.router.select(addr(Model::JU06A, "106:1-1", 106)));
+        QVERIFY(t->armed().has_value());
+        r.fake()->clearSent();
+        r.inject({0xC4, 20});  // the flip re-sends engine 106's old patch
+        QCOMPARE(r.router.currentDevice(), Model::JU06A);
+        QCOMPARE(t->engine(), 106);
+        QVERIFY(!t->armed().has_value());
+        QCOMPARE(r.fake()->sentMessages(), QList<QByteArray>{bytes({0xC4, 0})});
+    }
+
+    void armedJu06aConfirmingPcSendsAndTheWindowStaysWhenFollowSwitchesIsOff()
+    {
+        Rig r;
+        r.configureAll(true);
+        r.router.setFollowSwitchesDevice(false);
+        r.router.setJu06aState(60, 3, 20);
+        EngineTracker *t = r.router.ju06aTracker();
+        QVERIFY(r.router.select(addr(Model::JU06A, "106:1-1", 106)));
+        r.fake()->clearSent();
+        r.inject({0xC4, 20});
+        QCOMPARE(r.router.currentDevice(), Model::D05);
+        QCOMPARE(t->engine(), 106);
+        QVERIFY(!t->armed().has_value());
+        QCOMPARE(r.fake()->sentMessages(), QList<QByteArray>{bytes({0xC4, 0})});
+    }
+
+    void userSwitchStillClearsTheArmWhileFollowInducedSwitchDoesNot()
+    {
+        Rig r;
+        r.configureAll(true);
+        r.router.setJu06aState(60, 3, 20);
+        EngineTracker *t = r.router.ju06aTracker();
+        QVERIFY(r.router.select(addr(Model::JU06A, "106:1-1", 106)));
+        r.inject({0xC2, 10});  // JP-08 event switches the window by follow
+        QCOMPARE(r.router.currentDevice(), Model::JP08);
+        QVERIFY(t->armed().has_value());
+        r.router.setCurrentDevice(Model::JU06A);  // the user
+        QVERIFY(!t->armed().has_value());
+    }
+
+    void armOnTheCurrentEngineDoesNotHijackAPanelPress()
+    {
+        Rig r;
+        r.configureAll(true);
+        r.router.setJu06aState(60, 3, 20);
+        EngineTracker *t = r.router.ju06aTracker();
+        QVERIFY(r.router.select(addr(Model::JU06A, "106:1-1", 106)));  // armed
+        r.fake()->setFailSend(true);
+        t->toggleEngine();  // Ctrl+E: engine 106, the send fails, the arm is kept
+        QCOMPARE(t->engine(), 106);
+        QVERIFY(t->armed().has_value());
+        r.fake()->setFailSend(false);
+        r.fake()->clearSent();
+        r.inject({0xC4, 20});  // a panel press, not a flip confirmation
+        QVERIFY(r.fake()->sentMessages().isEmpty());
+        QVERIFY(!t->armed().has_value());
+        QCOMPARE(t->remembered(106), 20);
+    }
+
     void armThenConfirmingPcWithAFailingSendStaysArmed()
     {
         Rig r;

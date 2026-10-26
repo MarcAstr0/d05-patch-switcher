@@ -202,7 +202,7 @@ private slots:
                 ++sendCount;
                 if (a.engine() != t.engine() && sendError.isEmpty())
                     sendError = QStringLiteral("send of %1 while engine() is %2").arg(a.toString()).arg(t.engine());
-                const QList<QByteArray> msgs = a.midiMessages(channel, a.engine());
+                const QList<QByteArray> msgs = a.midiMessages(channel, t.engine());  // the engine the unit is on now
                 if (msgs.isEmpty() && sendError.isEmpty())
                     sendError = QStringLiteral("send of %1 produced no bytes").arg(a.toString());
                 for (const QByteArray &m : msgs)

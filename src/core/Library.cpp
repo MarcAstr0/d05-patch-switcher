@@ -53,7 +53,21 @@ Library::~Library()
 
 void Library::attachCatalog(PatchCatalog &catalog)
 {
-    m_catalogs[idx(catalog.model())] = &catalog;
+    const Model model = catalog.model();
+    const bool wasUnattached = m_catalogs[idx(model)] == nullptr;
+    m_catalogs[idx(model)] = &catalog;
+    // Names loaded while this model had no catalog were carried raw: move them into the catalog,
+    // or the next save (which writes the catalog's names) would drop them.
+    Device &d = m_dev[idx(model)];
+    if (wasUnattached && !d.rawNames.isEmpty()) {
+        for (auto it = d.rawNames.begin(); it != d.rawNames.end(); ++it) {
+            const auto a = parseFor(model, it.key());
+            if (a && it.value().isString() && (model != Model::D05 || a->isUser()))
+                catalog.setUserName(*a, it.value().toString());
+        }
+        d.rawNames = QJsonObject();
+        emit userNamesChanged(model);
+    }
 }
 
 bool Library::copyLegacyFile()

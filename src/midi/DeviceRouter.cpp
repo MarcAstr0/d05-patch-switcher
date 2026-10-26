@@ -25,11 +25,13 @@ DeviceRouter::DeviceRouter(PortHub *hub, QObject *parent)
     connect(m_tracker, &EngineTracker::engineChanged, ju, &MidiLink::setEngine);
     // The tracker commits a send only when the link really put it on the wire.
     m_tracker->setSender([ju](const PatchAddress &a) { return ju->sendPatch(a); });
-    // Slots run in connection order: the device switch first, then the tracker sees the program.
+    // Slots run in connection order: the tracker classifies the program first (an armed flip
+    // confirmation sends the armed patch whether or not the JU-06A is the current device), then
+    // the follow-induced device switch happens. Only a user switch clears an arm (setCurrentDevice).
+    connect(ju, &MidiLink::programReceived, m_tracker, &EngineTracker::programChange);
     connect(ju, &MidiLink::programReceived, this, [this](int) { onFollowEvent(Model::JU06A); });
     connect(link(Model::D05), &MidiLink::followReceived, this, [this] { onFollowEvent(Model::D05); });
     connect(link(Model::JP08), &MidiLink::followReceived, this, [this] { onFollowEvent(Model::JP08); });
-    connect(ju, &MidiLink::programReceived, m_tracker, &EngineTracker::programChange);
 }
 
 bool DeviceRouter::samePort(const QString &a, const QString &b)
@@ -165,10 +167,8 @@ void DeviceRouter::onFollowEvent(Model m)
     // device only.
     if (m == m_current || !m_followSwitches || !isEnabled(m) || !allInputsOpen())
         return;
-    const Model left = m_current;
     m_current = m;
-    if (left == Model::JU06A || m == Model::JU06A)
-        m_tracker->deviceSwitch();
+    // A switch caused by a follow event does not touch the JU-06A tracker's arm.
     emit currentDeviceChanged(m, true);
 }
 

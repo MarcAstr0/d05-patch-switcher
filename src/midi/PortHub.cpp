@@ -38,16 +38,10 @@ PortHub::~PortHub()
 void PortHub::adopt(MidiBackend *b, bool owned)
 {
     m_backends.append({b, owned});
-    // Runs on the emitting (RtMidi) thread: stamp the message with the port generation current
-    // now, then queue it to the main thread.
-    auto gen = m_backends.last().inputGen;
+    // received() is emitted on the main thread (the backend queued it) and carries the input
+    // generation the backend stamped on RtMidi's thread; onReceived drops stale ones.
     connect(b, &MidiBackend::received, this,
-            [this, b, gen](const QByteArray &m) {
-                const quint64 g = gen->load();
-                QMetaObject::invokeMethod(
-                    this, [this, b, g, m] { onReceived(b, g, m); }, Qt::QueuedConnection);
-            },
-            Qt::DirectConnection);
+            [this, b](const QByteArray &m, quint64 g) { onReceived(b, g, m); });
     connect(b, &MidiBackend::outputLost, this, [this, b] { onOutputLost(b); });
     connect(b, &MidiBackend::inputLost, this, [this, b] { onInputLost(b); });
     b->setAcceptMask(0);  // nothing registered yet
@@ -106,18 +100,9 @@ struct PortHub::DispatchGuard {
     PortHub *hub;
 };
 
-std::atomic<quint64> *PortHub::genOf(MidiBackend *b)
-{
-    for (const Backend &bk : std::as_const(m_backends))
-        if (bk.b == b)
-            return bk.inputGen.get();
-    return nullptr;
-}
-
 void PortHub::endInput(Port *p)
 {
-    if (auto *g = genOf(p->b))
-        g->store(0);
+    p->b->setInputGeneration(0);
     p->b->setAcceptMask(0);
     p->b->closeInput();
     eraseIf(m_ins, [p](const std::unique_ptr<Port> &q) { return q.get() == p; });
@@ -317,9 +302,9 @@ bool PortHub::acquireInput(const QObject *owner, const QString &osName, int chan
     }
     b->setAcceptMask(0);
     const quint64 gen = ++m_nextGen;
-    genOf(b)->store(gen);  // before the port opens, so its first message carries it
+    b->setInputGeneration(gen);  // before the port opens, so its first message carries it
     if (!b->openInput(osName, error)) {
-        genOf(b)->store(0);
+        b->setInputGeneration(0);
         return false;
     }
     auto port = std::make_unique<Port>();
