@@ -33,6 +33,7 @@ target_include_directories(d05_options INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src
 
 # --- d05core: core + midi + app logic, no Widgets (RtMidi lives with the MIDI layer) ---
 qt_add_library(d05core STATIC
+    src/core/Model.h        src/core/Model.cpp
     src/core/PatchAddress.h src/core/PatchAddress.cpp
     src/core/PatchCatalog.h src/core/PatchCatalog.cpp
     src/core/SearchQuery.h  src/core/SearchQuery.cpp
