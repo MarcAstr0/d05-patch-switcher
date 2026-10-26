@@ -9,6 +9,8 @@ function(d05_add_test name)
 endfunction()
 
 d05_add_test(test_presets_table test_presets_table.cpp)
+d05_add_test(test_boutique_tables test_boutique_tables.cpp)
+target_compile_definitions(test_boutique_tables PRIVATE D05_DATA_DIR="${CMAKE_SOURCE_DIR}/data")
 d05_add_test(test_patch_address test_patch_address.cpp)
 d05_add_test(test_model test_model.cpp)
 d05_add_test(test_patch_catalog test_patch_catalog.cpp)

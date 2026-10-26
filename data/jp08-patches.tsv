@@ -1,0 +1,65 @@
+bank	number	name
+1	1	NEG Sync
+1	2	NEG Pluck
+1	3	Juicy Funk
+1	4	Sync Sweep
+1	5	Cars Sync
+1	6	Sync Lead
+1	7	Hammer Lead
+1	8	Duke Lead
+2	1	Clav
+2	2	Harpsichord
+2	3	Echo Piano
+2	4	Mellow EP
+2	5	Honky Tonk
+2	6	Xylo
+2	7	Sitar
+2	8	Harp
+3	1	Lo Strings
+3	2	Mid Strings
+3	3	Hi Strings
+3	4	Mellow Strings
+3	5	Lo Brass
+3	6	Hi Brass
+3	7	S/H Brass
+3	8	Synth Brass
+4	1	Big Saw Lead
+4	2	Black Hole
+4	3	Jupey Flute
+4	4	Mutually
+4	5	Sine Glass
+4	6	Somber Pad
+4	7	Final Frontier
+4	8	Exchanger
+5	1	Fifth Sense
+5	2	Galaxy Pad
+5	3	Four Dimensional
+5	4	Trans-Pad
+5	5	Break of Dawn
+5	6	Flashback
+5	7	Radiation Belt
+5	8	Midnight Drive
+6	1	PWM Strings
+6	2	Pulsing Chord
+6	3	Epic Razor Chord
+6	4	RaveyBrs
+6	5	Knowing
+6	6	PWM Solo
+6	7	Trance Plk
+6	8	Morse Synth
+7	1	Harp Dreams
+7	2	Concrete
+7	3	Sold Bass
+7	4	The Sync Bass
+7	5	Attack Bass
+7	6	Prog Bass
+7	7	Monstro
+7	8	House Bass
+8	1	From Darkspace
+8	2	Cosmic Drone
+8	3	Surge
+8	4	Robot Spasm
+8	5	Scooping
+8	6	Emergency!!
+8	7	S.O.S Battleship
+8	8	Space Boomerang

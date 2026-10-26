@@ -1,0 +1,129 @@
+engine	bank	number	name
+60	1	1	LD Echolocator
+60	1	2	BS WalkMe Bass
+60	1	3	SY Poly Chord
+60	1	4	PD Crystal Pad
+60	1	5	PD Porta Pad
+60	1	6	KY Delicate Keys
+60	1	7	FX Drone Mass
+60	1	8	SY BuzzDrone
+60	2	1	SY PCH Chase
+60	2	2	SY Dusty Funk
+60	2	3	SY Rock 85
+60	2	4	SY Echo Poly
+60	2	5	SY Snow Drops
+60	2	6	KY Organish
+60	2	7	PD Dyno Sweep
+60	2	8	PD Ripple Pad
+60	3	1	PD Saturate Pad
+60	3	2	PD FoundUndergnd
+60	3	3	PD Kyoushin
+60	3	4	PD Reflecting
+60	3	5	PD Resonator
+60	3	6	BS Ouch Bass
+60	3	7	BS Juice Bass
+60	3	8	BS Killer Bass
+60	4	1	BS Parameter Bs
+60	4	2	BS Slow Blob
+60	4	3	BS Big Blade Bs
+60	4	4	LD Rip Lead
+60	4	5	LD Silo Lead
+60	4	6	LD Echo Chamber
+60	4	7	LD Soul Icon
+60	4	8	FX KickRise
+60	5	1	1982 Strings 2
+60	5	2	1982 Strings 3
+60	5	3	1982 Organ 1
+60	5	4	1982 Phase Brs
+60	5	5	1982 Piano 1
+60	5	6	1982 MellowPiano
+60	5	7	1982 Harpsichd 2
+60	5	8	1982 Guitar
+60	6	1	1982 Synth Harp
+60	6	2	1982 Bass 1
+60	6	3	1982 Clav 1
+60	6	4	1982 Pizzicato 1
+60	6	5	1982 Xylophone
+60	6	6	1982 Glocken
+60	6	7	1982 Violine
+60	6	8	1982 Trumpet
+60	7	1	1982 Tuba
+60	7	2	1982 Flute
+60	7	3	1982 Clarinet
+60	7	4	1982 Wah Bass
+60	7	5	1982 PhaseCombi
+60	7	6	1982 Reed 1
+60	7	7	1982 Pop Pluck
+60	7	8	1982 PWM Chorus
+60	8	1	1982 SynthOrgan
+60	8	2	1982 Space 1
+60	8	3	1982 Space 2
+60	8	4	1982 Whistle
+60	8	5	1982 UFO
+60	8	6	1982 Space 3
+60	8	7	1982 Surf
+60	8	8	1982 Synth Drum
+106	1	1	Brass
+106	1	2	Brass Swell
+106	1	3	Trumpet
+106	1	4	Flute
+106	1	5	Moving Strings
+106	1	6	Brass & Strings
+106	1	7	Choir
+106	1	8	Piano I
+106	2	1	Organ I
+106	2	2	Organ II
+106	2	3	Combo Organ
+106	2	4	Calliope
+106	2	5	Donald Pluck
+106	2	6	Celesta
+106	2	7	Electric Piano 1
+106	2	8	Electric Piano 2
+106	3	1	Clock Chime
+106	3	2	Steel Drums
+106	3	3	Xylophone
+106	3	4	Brass II
+106	3	5	Fanfare
+106	3	6	Strings
+106	3	7	Pizzicato
+106	3	8	High Strings
+106	4	1	80s JU Brass
+106	4	2	Hop
+106	4	3	PW Moment
+106	4	4	Noisy Poly
+106	4	5	Reso Up
+106	4	6	Trance Pluck
+106	4	7	Chord Line
+106	4	8	Juno Reso Bs
+106	5	1	Rude Bass
+106	5	2	Junoa Bass
+106	5	3	Sub Deep
+106	5	4	Heavy Solid Bs
+106	5	5	Plastik Bass
+106	5	6	Deep Bass
+106	5	7	Cargo Bass
+106	5	8	Big Boy
+106	6	1	Sweep Bass
+106	6	2	80s JU Lead
+106	6	3	Cloud Sines
+106	6	4	Unison Lead
+106	6	5	Metal Swell
+106	6	6	Bright n Warm
+106	6	7	Dirty Down Lead
+106	6	8	B4 U Came
+106	7	1	Brass Pad
+106	7	2	Brass Pad 2
+106	7	3	Sine Pad
+106	7	4	LFO Pad
+106	7	5	Slow Riser
+106	7	6	Priority Pad
+106	7	7	PWM Stringer
+106	7	8	Synth Dude
+106	8	1	AmbiHoover
+106	8	2	Grain Pad
+106	8	3	Mellow Wurly
+106	8	4	Drone Zone
+106	8	5	Jet Setter
+106	8	6	Louis’ Weapon
+106	8	7	Periscope
+106	8	8	Takeoff

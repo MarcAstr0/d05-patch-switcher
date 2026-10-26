@@ -39,3 +39,54 @@ The PDF itself is Roland's and is not committed.
 U1–U8 (another 512 addresses) have no fixed names: they hold whatever the owner
 wrote there. The application shows them by address and lets the user name them;
 those names live in the user's library file, not here.
+
+## `jp08-patches.tsv`
+
+The 64 factory patches of the Roland Boutique JP-08: eight banks × eight numbers.
+Tab-separated, UTF-8, one header row: `bank`, `number`, `name`.
+
+| Column | Meaning |
+|---|---|
+| `bank` | 1–8, the front-panel bank |
+| `number` | 1–8, the patch number within the bank |
+| `name` | the patch name exactly as printed in the sound list |
+
+The front-panel address is `<bank>-<number>`, e.g. `1-1` is *NEG Sync*. Names are
+unique within the table.
+
+## `ju06a-patches.tsv`
+
+The 128 factory patches of the Roland Boutique JU-06A: two sound engines
+(Juno-60 and Juno-106 modes) × eight banks × eight numbers. Same format, one header
+row: `engine`, `bank`, `number`, `name`.
+
+| Column | Meaning |
+|---|---|
+| `engine` | `60` or `106`, the engine the patch belongs to |
+| `bank` | 1–8 |
+| `number` | 1–8 |
+| `name` | the patch name exactly as printed, including `’` and `&` (`Louis’ Weapon`, `Brass & Strings`) |
+
+Rows are in catalogue order: all of `60`, then all of `106`. The same address exists in
+both engines with different names (`60:1-1` is *LD Echolocator*, `106:1-1` is *Brass*),
+so the key is `engine` + `bank` + `number`; names are unique within an engine, and a few
+repeat across engines.
+
+### Provenance
+
+Extracted from Roland's *JP-08 Sound List* (`JP-08_Sound_List_e01_W.pdf`) and
+*JU-06A Sound List* (`JU-06A_Sound_List_e01_W.pdf`), one page each, with
+`scripts/extract-boutique-lists.py`, which reads `pdftotext -layout` output (columns are
+separated by runs of two or more spaces; names contain single spaces only). The script
+asserts 64 and 64 + 64 rows with no repeated address and no empty name. Every name was
+then checked against the plain-text page: 192 of 192 matched, none fixed by hand.
+
+To regenerate:
+
+```sh
+python3 scripts/extract-boutique-lists.py JP-08_Sound_List_e01_W.pdf \
+    JU-06A_Sound_List_e01_W.pdf data/jp08-patches.tsv data/ju06a-patches.tsv
+```
+
+The PDFs are Roland's and are not committed. These tables are not yet compiled into the
+application (see `docs/PLAN.md`, T6.3).
