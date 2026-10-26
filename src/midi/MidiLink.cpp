@@ -283,6 +283,9 @@ void MidiLink::pollNow()
 
 void MidiLink::dropOutput(const QString &status)
 {
+    // The port is shared: close it for every user so none keeps a stale handle and the poll
+    // reopens it for all of them.
+    m_hub->invalidateOutput(this);
     m_hub->releaseOutput(this);
     const bool was = m_connected;
     m_connected = false;
@@ -301,6 +304,7 @@ void MidiLink::onOutputLost()
 
 void MidiLink::dropInput(const QString &status)
 {
+    m_hub->invalidateInput(this);
     m_hub->releaseInput(this);
     setConnectedIn(QString());
     m_rxMsb = m_rxLsb = -1;

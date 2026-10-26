@@ -246,6 +246,20 @@ private slots:
         QCOMPARE(code, Exit::Usage);
     }
 
+    void identifyAndListPortsWinOverAnIncompleteSend()
+    {
+        FakeMidiBackend f;
+        Run r = send(argv({"--fake-midi", "--identify", "--device", "jp08", "--send", "4-5"}), f);
+        QCOMPARE(r.code, 0);
+        QVERIFY(f.sentMessages().isEmpty());
+        r = send(argv({"--fake-midi", "--list-ports", "--device", "ju06a", "--send", "4-5"}), f);
+        QCOMPARE(r.code, 0);
+        QVERIFY(f.sentMessages().isEmpty());
+        // Without them the check still fires.
+        QCOMPARE(send(argv({"--fake-midi", "--device", "jp08", "--send", "4-5"}), f).code, 0);  // fake: allowed
+        QCOMPARE(send(argv({"--device", "jp08", "--port", "x", "--send", "4-5"}), f).code, Exit::Usage);
+    }
+
     void jp08Send()
     {
         FakeMidiBackend f;

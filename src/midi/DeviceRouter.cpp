@@ -23,7 +23,8 @@ DeviceRouter::DeviceRouter(PortHub *hub, QObject *parent)
     }
     MidiLink *ju = link(Model::JU06A);
     connect(m_tracker, &EngineTracker::engineChanged, ju, &MidiLink::setEngine);
-    connect(m_tracker, &EngineTracker::sendRequested, ju, [ju](const PatchAddress &a) { ju->sendPatch(a); });
+    // The tracker commits a send only when the link really put it on the wire.
+    m_tracker->setSender([ju](const PatchAddress &a) { return ju->sendPatch(a); });
     // Slots run in connection order: the device switch first, then the tracker sees the program.
     connect(ju, &MidiLink::programReceived, this, [this](int) { onFollowEvent(Model::JU06A); });
     connect(link(Model::D05), &MidiLink::followReceived, this, [this] { onFollowEvent(Model::D05); });
@@ -35,8 +36,14 @@ bool DeviceRouter::samePort(const QString &a, const QString &b)
 {
     if (a.isEmpty() || b.isEmpty())
         return false;
-    return a.compare(b, Qt::CaseInsensitive) == 0
-           || MidiLink::portKey(a).compare(MidiLink::portKey(b), Qt::CaseInsensitive) == 0;
+    if (a.compare(b, Qt::CaseInsensitive) == 0)
+        return true;
+    // Two different full OS names are two ports even when only their ids differ (two identical
+    // devices, MidiLink::portSpec). Keys are compared only when a value is a saved key.
+    const auto isKey = [](const QString &v) { return MidiLink::portKey(v) == v; };
+    if (!isKey(a) && !isKey(b))
+        return false;
+    return MidiLink::portKey(a).compare(MidiLink::portKey(b), Qt::CaseInsensitive) == 0;
 }
 
 std::optional<Model> DeviceRouter::conflict(Model m, const DeviceConfig &cfg) const
@@ -135,7 +142,7 @@ bool DeviceRouter::allConnected() const
 bool DeviceRouter::allInputsOpen() const
 {
     for (const Dev &d : m_dev)
-        if (d.cfg.enabled && !d.link->inputConnected())
+        if (d.cfg.enabled && d.cfg.follow && !d.link->inputConnected())
             return false;
     return true;
 }
@@ -169,10 +176,13 @@ bool DeviceRouter::select(const PatchAddress &a)
 {
     MidiLink *l = link(a.model());
     if (a.model() == Model::JU06A) {
-        if (a.engine() == m_tracker->engine() && !l->isConnected())
-            return false;  // would send; arming the other engine needs no connection
-        m_tracker->select(a);  // sends via sendRequested, or arms
-        return true;
+        if (a.engine() == m_tracker->engine() && !l->isConnected()) {
+            // Would send, and cannot. It is still a selection: it ends any arm and hint (FR-19),
+            // but the patch is not marked current. Arming the other engine needs no connection.
+            m_tracker->escape();
+            return false;
+        }
+        return m_tracker->select(a);  // sends through the sender, or arms
     }
     return l->isConnected() && l->sendPatch(a);
 }

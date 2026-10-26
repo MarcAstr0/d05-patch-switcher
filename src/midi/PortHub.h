@@ -6,8 +6,10 @@
 #include <QString>
 #include <QStringList>
 
+#include <atomic>
 #include <functional>
 #include <memory>
+#include <vector>
 
 namespace d05 {
 
@@ -42,7 +44,9 @@ public:
     explicit PortHub(BackendFactory factory, QObject *parent = nullptr);
     ~PortHub() override;
 
-    // Registration of a link (any QObject identity). Detach releases both ports.
+    // Registration of a link (any QObject identity). Detach releases both ports. It is safe from
+    // inside a client callback (even the owner's own): the registration is only marked dead then
+    // and swept when the outermost dispatch returns.
     void attach(const QObject *owner, Client client);
     void detach(const QObject *owner);
 
@@ -54,10 +58,17 @@ public:
     // most one of each; acquiring again releases the previous one first. On failure *error says why.
     bool acquireOutput(const QObject *owner, const QString &osName, QString *error);
     void releaseOutput(const QObject *owner);
+    // The owner found its output port unusable (a send failed, the port vanished from the list).
+    // The shared port is closed and released for every user; the other users are told through
+    // outputLost (the owner is not: it is the caller and does its own bookkeeping). No-op when the
+    // owner holds no output.
+    void invalidateOutput(const QObject *owner);
     // `channel` is 1..16, `wantBankSelect` also lets CC 0 / CC 32 through (the D-05 needs them).
     bool acquireInput(const QObject *owner, const QString &osName, int channel, bool wantBankSelect,
                       QString *error);
     void releaseInput(const QObject *owner);
+    // Same for the input side (inputLost for the other users).
+    void invalidateInput(const QObject *owner);
     void setInputChannel(const QObject *owner, int channel);
 
     bool sendOn(const QObject *owner, const QByteArray &message, QString *error);
@@ -73,11 +84,16 @@ private:
     struct Backend {
         MidiBackend *b = nullptr;
         bool owned = false;
+        // Generation of the input port the backend serves now (0 = none). Read on RtMidi's
+        // thread when a message is queued, so a message queued from a port that has since been
+        // closed is recognised and dropped on the main thread.
+        std::shared_ptr<std::atomic<quint64>> inputGen = std::make_shared<std::atomic<quint64>>(0);
     };
     struct Port {
         QString name;
         MidiBackend *b = nullptr;
         QList<const QObject *> users;
+        quint64 gen = 0;  // inputs only
     };
     struct Reg {
         const QObject *owner = nullptr;
@@ -86,7 +102,11 @@ private:
         Port *in = nullptr;
         int channel = 1;
         bool bankSelect = false;
+        bool dead = false;  // detached during a dispatch; swept afterwards
     };
+    struct DispatchGuard;
+    std::atomic<quint64> *genOf(MidiBackend *b);
+    void endInput(Port *p);  // forgets the generation, closes the backend side, drops the port
 
     Reg *reg(const QObject *owner);
     const Reg *reg(const QObject *owner) const;
@@ -94,7 +114,7 @@ private:
     MidiBackend *backendFor(bool input);  // an idle backend, a new one, or nullptr
     void adopt(MidiBackend *b, bool owned);
     void refreshMask(const Port *in);
-    void onReceived(MidiBackend *b, const QByteArray &message);
+    void onReceived(MidiBackend *b, quint64 gen, const QByteArray &message);
     void onOutputLost(MidiBackend *b);
     void onInputLost(MidiBackend *b);
 
@@ -104,6 +124,8 @@ private:
     std::vector<std::unique_ptr<Reg>> m_regs;
     std::vector<std::unique_ptr<Port>> m_outs;
     std::vector<std::unique_ptr<Port>> m_ins;
+    int m_dispatching = 0;
+    quint64 m_nextGen = 0;
 };
 
 }  // namespace d05

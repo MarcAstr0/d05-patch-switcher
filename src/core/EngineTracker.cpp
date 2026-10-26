@@ -76,24 +76,28 @@ void EngineTracker::setFlipDetectable(bool on)
         emit armedChanged();  // prompt kind may have changed
 }
 
-void EngineTracker::doSend(const PatchAddress &a)
+bool EngineTracker::doSend(const PatchAddress &a)
 {
+    if (m_sender && !m_sender(a))
+        return false;
     setRemembered(a.engine(), a.program());
     setCurrent(a);
-    emit sendRequested(a);
+    if (!m_sender)
+        emit sendRequested(a);
+    return true;
 }
 
-void EngineTracker::select(const PatchAddress &a)
+bool EngineTracker::select(const PatchAddress &a)
 {
     if (a.model() != Model::JU06A)
-        return;
+        return true;
     setHint(0);
     if (a.engine() == m_engine) {
         setArmed(std::nullopt);
-        doSend(a);
-    } else {
-        setArmed(a);
+        return doSend(a);
     }
+    setArmed(a);
+    return true;
 }
 
 void EngineTracker::toggleEngine()
@@ -114,8 +118,15 @@ void EngineTracker::toggleEngine()
     emit engineChanged(m_engine);
     if (m_armed && m_armed->engine() == m_engine) {
         const PatchAddress a = *m_armed;
-        setArmed(std::nullopt);
-        doSend(a);
+        if (m_sender) {
+            if (doSend(a))
+                setArmed(std::nullopt);
+            else
+                setCurrent(at(m_engine, remembered(m_engine)));  // arm stays, nothing was sent
+        } else {
+            setArmed(std::nullopt);
+            doSend(a);
+        }
     } else {
         setCurrent(at(m_engine, remembered(m_engine)));
     }
@@ -143,11 +154,19 @@ void EngineTracker::programChange(int p)
         const PatchAddress a = *m_armed;
         const bool changed = a.engine() != m_engine;
         m_engine = a.engine();
-        setArmed(std::nullopt);
+        if (!m_sender)
+            setArmed(std::nullopt);
         setHint(0);
         if (changed)
             emit engineChanged(m_engine);
-        doSend(a);
+        if (m_sender) {
+            if (doSend(a))
+                setArmed(std::nullopt);
+            else
+                setCurrent(at(m_engine, p));  // arm stays, nothing was sent
+        } else {
+            doSend(a);
+        }
         return;
     }
     // Not a flip confirmation: a panel selection, which ends any armed selection (FR-19).

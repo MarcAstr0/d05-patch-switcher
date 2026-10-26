@@ -68,7 +68,9 @@ public:
     // --- Sending -----------------------------------------------------------------------------
     // A selection on the device the address belongs to (Enter, click, prev/next, auto-send,
     // --send). D-05 and JP-08: sends. JU-06A: goes through the engine tracker, which sends or arms.
-    // False when the device is not connected (nothing is changed then) or the send failed.
+    // False when the device is not connected or the send failed; the JU-06A tracker's engine,
+    // remembered programs and current patch are then as they were (a disconnected JU-06A
+    // selection still ends an arm and a hint). See EngineTracker for the failed-send rules.
     bool select(const PatchAddress &a);
 
     // --- Poll --------------------------------------------------------------------------------
@@ -79,7 +81,8 @@ public:
     void setPollIntervalMs(int ms) { m_timer.setInterval(ms); }
     // True when every enabled device that was asked for a port has it open (FR-10).
     bool allConnected() const;
-    // True when every enabled device has its input link open (the FR-20 precondition).
+    // True when every enabled device with follow on has its input link open (the FR-20
+    // precondition). A device with follow off has no input by design and does not count.
     bool allInputsOpen() const;
     // Window activation: drops ports that vanished on every enabled device.
     void checkConnections();

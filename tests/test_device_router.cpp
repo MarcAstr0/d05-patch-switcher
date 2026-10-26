@@ -257,16 +257,12 @@ private slots:
         r.inject({0xC0, 87});  // D-05: lone PC after nothing, falls back to its group
         r.router.setFollowSwitchesDevice(true);
 
-        // On, but a disabled-input device blocks it: all enabled devices need an open input.
+        // On: a device with follow off has no input by design and does not block (FR-20).
         auto d5 = Rig::cfg(1, false);
         QVERIFY(r.router.configure(Model::D05, d5));
         r.inject({0xC4, 8});
-        QCOMPARE(r.router.currentDevice(), Model::JP08);
-        d5.follow = true;
-        QVERIFY(r.router.configure(Model::D05, d5));
-        r.inject({0xC4, 9});
         QCOMPARE(r.router.currentDevice(), Model::JU06A);
-        QCOMPARE(r.router.ju06aTracker()->remembered(60), 9);  // and the event was applied
+        QCOMPARE(r.router.ju06aTracker()->remembered(60), 8);  // and the event was applied
         QCOMPARE(sw.count(), 2);
     }
 
@@ -330,6 +326,166 @@ private slots:
         r.router.pollNow();
         QVERIFY(r.router.link(Model::JP08)->inputConnected());
         QVERIFY(!r.router.isPolling());
+    }
+
+    // --- Review fixes -------------------------------------------------------------------------
+
+    void followSwitchingIgnoresEnabledDevicesWithFollowOff()
+    {
+        Rig r;
+        QVERIFY(r.router.configure(Model::D05, Rig::cfg(1, true)));
+        QVERIFY(r.router.configure(Model::JP08, Rig::cfg(3, false)));  // no input by design
+        r.router.setCurrentDevice(Model::JP08);
+        QVERIFY(r.router.allInputsOpen());
+        r.inject({0xB0, 0, 87});
+        r.inject({0xB0, 32, 0});
+        r.inject({0xC0, 5});
+        QCOMPARE(r.router.currentDevice(), Model::D05);
+        // A follow device whose input is down still blocks it.
+        r.router.setCurrentDevice(Model::JP08);
+        auto lost = Rig::cfg(5, true);
+        lost.inputPort = S("Nowhere");
+        QVERIFY(r.router.configure(Model::JU06A, lost));
+        QVERIFY(!r.router.allInputsOpen());
+        r.inject({0xB0, 0, 87});
+        r.inject({0xB0, 32, 0});
+        r.inject({0xC0, 6});
+        QCOMPARE(r.router.currentDevice(), Model::JP08);  // blocked by the follow device that is blind
+    }
+
+    void failedSameEngineSendLeavesTheTrackerAsItWas()
+    {
+        Rig r;
+        r.configureAll(false);
+        r.router.setJu06aState(60, 3, 20);
+        EngineTracker *t = r.router.ju06aTracker();
+        r.fake()->setFailSend(true);
+        QVERIFY(!r.router.select(addr(Model::JU06A, "60:2-1", 60)));
+        QCOMPARE(t->remembered(60), 3);
+        QCOMPARE(t->current().value(), addr(Model::JU06A, "60:1-4", 60));
+        QVERIFY(!t->armed().has_value());
+        QVERIFY(!r.router.link(Model::JU06A)->sendPatch(addr(Model::JU06A, "60:2-1", 60)));
+    }
+
+    void armThenToggleWithTheOutputDownStaysArmed()
+    {
+        Rig r;
+        r.configureAll(false);
+        r.router.setJu06aState(60, 3, 20);
+        EngineTracker *t = r.router.ju06aTracker();
+        QVERIFY(r.router.select(addr(Model::JU06A, "106:1-1", 106)));
+        QVERIFY(t->armed().has_value());
+        r.fake()->setOutputPorts({}, false);
+        r.router.checkConnections();
+        QVERIFY(!r.router.link(Model::JU06A)->isConnected());
+        t->toggleEngine();
+        QCOMPARE(t->engine(), 106);  // the toggle stands
+        QCOMPARE(r.router.link(Model::JU06A)->engine(), 106);
+        QVERIFY(t->armed().has_value());  // the armed send did not happen
+        QCOMPARE(t->remembered(106), 20);
+        QCOMPARE(t->current().value(), addr(Model::JU06A, "106:3-5", 106));
+        QVERIFY(t->prompt() != EngineTracker::Prompt::None);
+    }
+
+    void armThenConfirmingPcWithAFailingSendStaysArmed()
+    {
+        Rig r;
+        r.configureAll(true);
+        r.router.setJu06aState(60, 3, 20);
+        r.router.setCurrentDevice(Model::JU06A);  // a switch would clear the arm
+        EngineTracker *t = r.router.ju06aTracker();
+        QVERIFY(r.router.select(addr(Model::JU06A, "106:1-1", 106)));
+        r.fake()->setFailSend(true);
+        r.fake()->clearSent();
+        r.inject({0xC4, 20});
+        QCOMPARE(t->engine(), 106);
+        QVERIFY(t->armed().has_value());
+        QCOMPARE(t->remembered(106), 20);
+        QCOMPARE(t->current().value(), addr(Model::JU06A, "106:3-5", 106));
+        QVERIFY(r.fake()->sentMessages().isEmpty());
+    }
+
+    void disconnectedSelectionStillClearsTheArm()
+    {
+        Rig r;
+        r.configureAll(false);
+        r.router.setJu06aState(60, 3, 20);
+        EngineTracker *t = r.router.ju06aTracker();
+        r.fake()->setOutputPorts({}, false);
+        r.router.checkConnections();
+        QVERIFY(r.router.select(addr(Model::JU06A, "106:1-1", 106)));  // arms, needs no connection
+        QVERIFY(t->armed().has_value());
+        QVERIFY(!r.router.select(addr(Model::JU06A, "60:2-1", 60)));
+        QVERIFY(!t->armed().has_value());
+        QCOMPARE(t->remembered(60), 3);
+        QCOMPARE(t->current().value(), addr(Model::JU06A, "60:1-4", 60));
+    }
+
+    void sharedOutputFailureInvalidatesEveryUser()
+    {
+        Rig r;
+        r.configureAll(false);
+        QCOMPARE(r.hub.openOutputCount(), 1);
+        r.router.setJu06aState(60, -1, -1);
+        r.fake()->setFailSend(true);
+        QVERIFY(!r.router.select(addr(Model::JP08, "1-1")));
+        r.fake()->setFailSend(false);
+        QVERIFY(!r.router.link(Model::JP08)->isConnected());
+        QVERIFY(!r.router.link(Model::JU06A)->isConnected());
+        QVERIFY(!r.router.link(Model::D05)->isConnected());
+        QCOMPARE(r.hub.openOutputCount(), 0);
+        QVERIFY(r.router.isPolling());
+        r.router.pollNow();
+        QVERIFY(r.router.allConnected());
+        QVERIFY(r.router.select(addr(Model::JU06A, "60:1-1", 60)));
+    }
+
+    void sharedOutputVanishDetectedByOneInvalidatesEveryUser()
+    {
+        Rig r;
+        r.configureAll(false);
+        r.fake()->setOutputPorts({}, false);  // unplugged, no notification
+        r.router.link(Model::JP08)->checkConnection();
+        QVERIFY(!r.router.link(Model::JU06A)->isConnected());
+        QVERIFY(!r.router.link(Model::D05)->isConnected());
+        QVERIFY(r.router.isPolling());
+        r.fake()->setOutputPorts({S("Hapax Out")}, false);
+        r.router.pollNow();
+        QVERIFY(r.router.allConnected());
+        QVERIFY(r.router.link(Model::D05)->isConnected());
+    }
+
+    void sharedInputVanishDetectedByOneInvalidatesEveryUser()
+    {
+        Rig r;
+        r.configureAll(true);
+        r.fake()->setInputPorts({}, false);
+        r.router.link(Model::JP08)->checkConnection();
+        QVERIFY(!r.router.link(Model::JU06A)->inputConnected());
+        QVERIFY(!r.router.link(Model::D05)->inputConnected());
+        r.fake()->setInputPorts({S("Hapax In")}, false);
+        r.router.pollNow();
+        QVERIFY(r.router.link(Model::JU06A)->inputConnected());
+        QVERIFY(r.router.link(Model::D05)->inputConnected());
+        r.inject({0xC2, 10});
+        QCOMPARE(r.router.link(Model::JP08)->current().value(), addr(Model::JP08, "2-3"));
+    }
+
+    void distinctFullPortNamesAreNotOneConflict()
+    {
+        Rig r;
+        r.outs = {S("Hapax:Hapax MIDI 1 24:0"), S("Hapax:Hapax MIDI 1 28:0")};
+        r.ins = r.outs;
+        auto a = Rig::cfg(3, false, "Hapax:Hapax MIDI 1 24:0");
+        auto b = Rig::cfg(3, false, "Hapax:Hapax MIDI 1 28:0");
+        QVERIFY(r.router.configure(Model::JP08, a));
+        QVERIFY(!r.router.conflict(Model::JU06A, b).has_value());
+        QVERIFY(r.router.configure(Model::JU06A, b));
+        // The same full name, or a saved key that names it, still conflicts.
+        QVERIFY(r.router.conflict(Model::D05, Rig::cfg(3, false, "Hapax:Hapax MIDI 1 24:0")).has_value());
+        QVERIFY(r.router.conflict(Model::D05, Rig::cfg(3, false, "Hapax:Hapax MIDI 1")).has_value());
+        a.follow = b.follow = true;
+        QVERIFY(!r.router.conflict(Model::D05, Rig::cfg(3, true, "Hapax:Hapax MIDI 1 30:0")).has_value());
     }
 };
 

@@ -30,15 +30,24 @@ Result byPortName(const QString &portName)
 
 std::optional<Result> bySerial(const QString &usbId, const QString &serial)
 {
-    if (!usbId.trimmed().startsWith(QLatin1String("0582:"), Qt::CaseInsensitive))
-        return std::nullopt;
+    // The measured pairs (docs/IDENTIFY.md): the product id and the serial prefix must agree.
+    struct Pair {
+        const char *usbId;
+        const char *prefix;
+        Model model;
+    };
+    static const Pair pairs[] = {
+        {"0582:01ff", "BQ_D", Model::D05},
+        {"0582:01b5", "BQJP", Model::JP08},
+        {"0582:023a", "BQJU", Model::JU06A},
+    };
+    const QString id = usbId.trimmed();
     const QString s = serial.trimmed();
-    if (s.startsWith(QLatin1String("BQJP")))
-        return Result{Model::JP08, Confidence::Certain, false};
-    if (s.startsWith(QLatin1String("BQJU")))
-        return Result{Model::JU06A, Confidence::Certain, false};
-    if (s.startsWith(QLatin1String("BQ_D")))
-        return Result{Model::D05, Confidence::Certain, false};
+    for (const Pair &p : pairs) {
+        if (id.compare(QLatin1String(p.usbId), Qt::CaseInsensitive) == 0
+            && s.startsWith(QLatin1String(p.prefix)))
+            return Result{p.model, Confidence::Certain, false};
+    }
     return std::nullopt;
 }
 
@@ -77,12 +86,27 @@ std::optional<int> alsaClientOf(const QString &portName)
 
 #ifdef Q_OS_LINUX
 namespace {
+// alsa-lib prints failures (a sequencer that cannot be opened) through its default error handler
+// on stderr; rule 2 fails silently, so a no-op handler is installed for the scope.
+void quietAlsaHandler(const char *, int, const char *, int, const char *, ...) {}
+class QuietAlsa {
+public:
+    QuietAlsa() : m_previous(snd_lib_error) { snd_lib_error_set_handler(quietAlsaHandler); }
+    ~QuietAlsa() { snd_lib_error_set_handler(m_previous); }
+    QuietAlsa(const QuietAlsa &) = delete;
+    QuietAlsa &operator=(const QuietAlsa &) = delete;
+
+private:
+    snd_lib_error_handler_t m_previous;
+};
+
 // The sound card behind an ALSA sequencer client, or -1. Opens one sequencer handle for the lot
 // and no port; any failure is silent.
 class SeqCards {
 public:
     SeqCards()
     {
+        QuietAlsa quiet;
         if (snd_seq_open(&m_seq, "default", SND_SEQ_OPEN_INPUT, 0) < 0)
             m_seq = nullptr;
     }
@@ -98,6 +122,7 @@ public:
     {
         if (!m_seq)
             return -1;
+        QuietAlsa quiet;
         snd_seq_client_info_t *info = nullptr;
         if (snd_seq_client_info_malloc(&info) < 0)
             return -1;

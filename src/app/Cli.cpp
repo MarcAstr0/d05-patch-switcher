@@ -153,7 +153,8 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
         o.screenshotSize = QSize(w, h);
     }
     if (p.isSet(send)) {
-        if (o.device != Model::D05 && !p.isSet(channel) && !p.isSet(fake))
+        // --list-ports and --identify win over --send (main.cpp): they need no channel.
+        if (o.device != Model::D05 && !p.isSet(channel) && !p.isSet(fake) && !o.listPorts && !o.identify)
             return fail(QStringLiteral("--device %1 needs --channel with --send (no saved settings for it yet)")
                             .arg(modelInfo(o.device).id));
         o.hasSend = true;

@@ -3,6 +3,7 @@
 #include "core/PatchAddress.h"
 
 #include <QObject>
+#include <functional>
 #include <optional>
 
 namespace d05 {
@@ -12,9 +13,21 @@ namespace d05 {
 // incoming Program Changes that are NOT echoes of the app's own sends (echo suppression is the
 // link's job), and performs the sends it asks for through sendRequested().
 //
-// State changes are applied when the signal is emitted: the tracker assumes a requested send
-// happens. Signals are emitted after the state is consistent; for a send, engineChanged() (if
-// any) comes first, so a receiver can build the message with engine() == address.engine().
+// Sends. With a sender installed (setSender, the router's way) the tracker asks it to put the
+// patch on the wire and commits remembered/current only when it returns true; without one it
+// assumes the send happens and emits sendRequested() (tests, tools). Signals are emitted after the
+// state is consistent; for a send, engineChanged() (if any) comes first, so the sender can build
+// the message with engine() == address.engine().
+//
+// A send that fails (sender returned false) leaves remembered programs and current() as they were
+// and never marks the patch as sent:
+//   - select() of the current engine: the arm and hint are cleared (it was a selection), the
+//     rest is unchanged; select() returns false.
+//   - toggleEngine() with a matching arm: the toggle itself is the user's statement about the
+//     unit and stands (engine changes, current = the new engine's remembered program), but the
+//     armed send did not happen, so the arm stays armed with its prompt.
+//   - programChange() confirming an arm: the PC is a fact about the unit, so the engine follows
+//     and current = (engine, p), but the armed send did not happen: the arm stays armed.
 //
 // When the hint ends (FR-19, "stays until the next action"): hint() is non-zero from an
 // unprompted PC that matches the other engine's remembered program until the next of
@@ -43,6 +56,11 @@ public:
 
     explicit EngineTracker(QObject *parent = nullptr);
 
+    // Puts a patch on the wire for the tracker; true when it was sent. Keeps the tracker free of
+    // MIDI types. Replaces the sendRequested() signal while set.
+    using Sender = std::function<bool(const PatchAddress &)>;
+    void setSender(Sender s) { m_sender = std::move(s); }
+
     // Load persisted state. engine must be 60 or 106 (else 60); remembered values 0..63 or Unknown.
     // current becomes (engine, remembered[engine]) or none. Clears armed and hint. Emits changes.
     void setState(int engine, int remembered60, int remembered106);
@@ -58,8 +76,9 @@ public:
     Prompt prompt() const;
 
 public slots:
-    // The user selected a JU-06A address (Enter, click, prev/next, auto-send, --send).
-    void select(const d05::PatchAddress &a);
+    // The user selected a JU-06A address (Enter, click, prev/next, auto-send, --send). False only
+    // when a send was attempted and the sender reported failure (arming returns true).
+    bool select(const d05::PatchAddress &a);
     // Ctrl+E or engine control click.
     void toggleEngine();
     // Esc. Clears the arm and the hint. Returns true only when it cleared an armed selection
@@ -83,7 +102,7 @@ private:
     void setHint(int engine);
     void setCurrent(const std::optional<PatchAddress> &a);
     void setRemembered(int engine, int program);
-    void doSend(const PatchAddress &a);  // state update for "app sends A" then sendRequested
+    bool doSend(const PatchAddress &a);  // sends A; commits remembered/current only if it was sent
     std::optional<PatchAddress> at(int engine, int program) const;
 
     int m_engine = 60;
@@ -94,6 +113,7 @@ private:
     int m_hint = 0;
     int m_undoPrevious = Unknown;  // remembered[engine at hint time] before the follow
     bool m_flipDetectable = false;
+    Sender m_sender;
 };
 
 }  // namespace d05

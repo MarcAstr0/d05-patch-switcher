@@ -6,6 +6,8 @@
 #include <QCoreApplication>
 #include <QTest>
 
+#include <memory>
+
 using namespace d05;
 
 namespace {
@@ -202,6 +204,58 @@ private slots:
         QCOMPARE(a.inLost, 1);
         QCOMPARE(b.inLost, 1);
         QVERIFY(!hub.isInputOpen(&b));
+    }
+
+    void staleQueuedMessageIsNotDeliveredAfterTheBackendIsReused()
+    {
+        FakeMidiBackend f;
+        f.setInputPorts({S("X"), S("Y")}, false);
+        PortHub hub(&f);
+        Sink a, b;
+        attach(hub, a);
+        attach(hub, b);
+        QString err;
+        QVERIFY(hub.acquireInput(&a, S("X"), 1, false, &err));
+        f.injectReceived(bytes({0xC0, 5}));  // queued from port X, not delivered yet
+        hub.releaseInput(&a);
+        QVERIFY(hub.acquireInput(&b, S("Y"), 1, false, &err));  // the same backend, now port Y
+        QCoreApplication::processEvents();
+        QVERIFY(b.got.isEmpty());
+        QVERIFY(a.got.isEmpty());
+        // A message from port Y itself still arrives.
+        f.injectReceived(bytes({0xC0, 6}));
+        QCoreApplication::processEvents();
+        QCOMPARE(b.got, QList<QByteArray>{bytes({0xC0, 6})});
+    }
+
+    void linkDetachedFromInsideItsOwnCallbackDoesNotDestroyTheRunningFunctor()
+    {
+        FakeMidiBackend f;
+        PortHub hub(&f);
+        Sink a, b;
+        auto alive = std::make_shared<int>(1);
+        std::weak_ptr<int> weak = alive;
+        bool stillAlive = false;
+        PortHub::Client c;
+        c.received = [&, alive](const QByteArray &) {
+            hub.detach(&a);  // what ~MidiLink does when the callback deletes its own link
+            stillAlive = !weak.expired();  // the captured state of this very functor
+        };
+        hub.attach(&a, std::move(c));
+        attach(hub, b);
+        alive.reset();
+        QString err;
+        QVERIFY(hub.acquireInput(&a, S("Fake D-05 Out"), 1, false, &err));
+        QVERIFY(hub.acquireInput(&b, S("Fake D-05 Out"), 1, false, &err));
+        f.injectReceived(bytes({0xC0, 5}));
+        QCoreApplication::processEvents();
+        QVERIFY(stillAlive);
+        QVERIFY(weak.expired());  // swept once the dispatch finished
+        QVERIFY(!hub.isInputOpen(&a));
+        QCOMPARE(b.got.size(), 1);  // the other link in the same dispatch still got it
+        // The identity can be attached again.
+        attach(hub, a);
+        QVERIFY(hub.acquireInput(&a, S("Fake D-05 Out"), 1, false, &err));
     }
 };
 

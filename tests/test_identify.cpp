@@ -5,6 +5,9 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <cstdio>
+#include <unistd.h>
+
 using namespace d05;
 using namespace d05::Identify;
 using C = Confidence;
@@ -75,6 +78,11 @@ private slots:
         QTest::newRow("other vendor") << "1234:01b5" << "BQJP2400123" << false << 0;
         QTest::newRow("no serial") << "0582:01b5" << "" << false << 0;
         QTest::newRow("no usbid") << "" << "BQJP1" << false << 0;
+        QTest::newRow("jp08 id with ju serial") << "0582:01b5" << "BQJU2400123" << false << 0;
+        QTest::newRow("ju06a id with jp serial") << "0582:023a" << "BQJP2400123" << false << 0;
+        QTest::newRow("d05 id with jp serial") << "0582:01ff" << "BQJP2400123" << false << 0;
+        QTest::newRow("unknown product id") << "0582:0001" << "BQJP2400123" << false << 0;
+        QTest::newRow("upper case id") << "0582:01FF" << "BQ_D2400123" << true << int(Model::D05);
     }
     void serialPrefixes()
     {
@@ -140,6 +148,31 @@ private slots:
         QCOMPARE(off.at(1).confidence, C::Certain);
         QCOMPARE(off.at(2).confidence, C::None);
     }
+
+#ifdef Q_OS_LINUX
+    void rule2IsSilentWhenTheSequencerCannotBeOpened()
+    {
+        // No alsa configuration at all: snd_seq_open("default") fails, which alsa-lib would print.
+        qputenv("ALSA_CONFIG_PATH", "/nonexistent/alsa.conf");
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QFile capture(dir.filePath(QStringLiteral("stderr.txt")));
+        QVERIFY(capture.open(QIODevice::ReadWrite));
+        fflush(stderr);
+        const int saved = dup(2);
+        QVERIFY(saved >= 0);
+        QVERIFY(dup2(capture.handle(), 2) >= 0);
+        const QList<Result> r = identifyPorts({QStringLiteral("Boutiq:Boutiq MIDI 1 9999:0")}, true);
+        fflush(stderr);
+        dup2(saved, 2);
+        close(saved);
+        qunsetenv("ALSA_CONFIG_PATH");
+        QCOMPARE(r.size(), 1);
+        QCOMPARE(r.at(0).confidence, C::Ambiguous);  // rule 1's answer stands
+        capture.seek(0);
+        QCOMPARE(capture.readAll(), QByteArray());
+    }
+#endif
 
     void confidenceWords()
     {

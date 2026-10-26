@@ -38,8 +38,16 @@ PortHub::~PortHub()
 void PortHub::adopt(MidiBackend *b, bool owned)
 {
     m_backends.append({b, owned});
-    connect(b, &MidiBackend::received, this, [this, b](const QByteArray &m) { onReceived(b, m); },
-            Qt::QueuedConnection);
+    // Runs on the emitting (RtMidi) thread: stamp the message with the port generation current
+    // now, then queue it to the main thread.
+    auto gen = m_backends.last().inputGen;
+    connect(b, &MidiBackend::received, this,
+            [this, b, gen](const QByteArray &m) {
+                const quint64 g = gen->load();
+                QMetaObject::invokeMethod(
+                    this, [this, b, g, m] { onReceived(b, g, m); }, Qt::QueuedConnection);
+            },
+            Qt::DirectConnection);
     connect(b, &MidiBackend::outputLost, this, [this, b] { onOutputLost(b); });
     connect(b, &MidiBackend::inputLost, this, [this, b] { onInputLost(b); });
     b->setAcceptMask(0);  // nothing registered yet
@@ -48,7 +56,7 @@ void PortHub::adopt(MidiBackend *b, bool owned)
 PortHub::Reg *PortHub::reg(const QObject *owner)
 {
     for (auto &r : m_regs)
-        if (r->owner == owner)
+        if (r->owner == owner && !r->dead)
             return r.get();
     return nullptr;
 }
@@ -56,7 +64,7 @@ PortHub::Reg *PortHub::reg(const QObject *owner)
 const PortHub::Reg *PortHub::reg(const QObject *owner) const
 {
     for (const auto &r : m_regs)
-        if (r->owner == owner)
+        if (r->owner == owner && !r->dead)
             return r.get();
     return nullptr;
 }
@@ -77,9 +85,42 @@ void PortHub::detach(const QObject *owner)
 {
     releaseOutput(owner);
     releaseInput(owner);
-    m_regs.erase(std::remove_if(m_regs.begin(), m_regs.end(),
-                                [owner](const std::unique_ptr<Reg> &r) { return r->owner == owner; }),
-                 m_regs.end());
+    if (m_dispatching > 0) {
+        // A client callback may be running right now (possibly this very one): keep the Reg and
+        // its functors alive until the dispatch is over.
+        if (Reg *r = reg(owner))
+            r->dead = true;
+        return;
+    }
+    eraseIf(m_regs, [owner](const std::unique_ptr<Reg> &r) { return r->owner == owner; });
+}
+
+// Counts the callbacks being dispatched; sweeps the registrations detached meanwhile at the end.
+struct PortHub::DispatchGuard {
+    explicit DispatchGuard(PortHub *h) : hub(h) { ++hub->m_dispatching; }
+    ~DispatchGuard()
+    {
+        if (--hub->m_dispatching == 0)
+            eraseIf(hub->m_regs, [](const std::unique_ptr<Reg> &r) { return r->dead; });
+    }
+    PortHub *hub;
+};
+
+std::atomic<quint64> *PortHub::genOf(MidiBackend *b)
+{
+    for (const Backend &bk : std::as_const(m_backends))
+        if (bk.b == b)
+            return bk.inputGen.get();
+    return nullptr;
+}
+
+void PortHub::endInput(Port *p)
+{
+    if (auto *g = genOf(p->b))
+        g->store(0);
+    p->b->setAcceptMask(0);
+    p->b->closeInput();
+    eraseIf(m_ins, [p](const std::unique_ptr<Port> &q) { return q.get() == p; });
 }
 
 MidiBackend *PortHub::lister()
@@ -191,6 +232,45 @@ void PortHub::releaseOutput(const QObject *owner)
     }
 }
 
+void PortHub::invalidateOutput(const QObject *owner)
+{
+    Reg *r = reg(owner);
+    if (!r || !r->out)
+        return;
+    Port *p = r->out;
+    const QList<const QObject *> users = p->users;
+    for (const QObject *o : users)
+        if (Reg *u = reg(o))
+            u->out = nullptr;
+    p->b->closeOutput();
+    eraseIf(m_outs, [p](const std::unique_ptr<Port> &q) { return q.get() == p; });
+    DispatchGuard guard(this);
+    for (const QObject *o : users) {
+        const Reg *u = reg(o);
+        if (o != owner && u && u->client.outputLost)
+            u->client.outputLost();
+    }
+}
+
+void PortHub::invalidateInput(const QObject *owner)
+{
+    Reg *r = reg(owner);
+    if (!r || !r->in)
+        return;
+    Port *p = r->in;
+    const QList<const QObject *> users = p->users;
+    for (const QObject *o : users)
+        if (Reg *u = reg(o))
+            u->in = nullptr;
+    endInput(p);
+    DispatchGuard guard(this);
+    for (const QObject *o : users) {
+        const Reg *u = reg(o);
+        if (o != owner && u && u->client.inputLost)
+            u->client.inputLost();
+    }
+}
+
 void PortHub::refreshMask(const Port *in)
 {
     quint32 mask = 0;
@@ -236,11 +316,16 @@ bool PortHub::acquireInput(const QObject *owner, const QString &osName, int chan
         return false;
     }
     b->setAcceptMask(0);
-    if (!b->openInput(osName, error))
+    const quint64 gen = ++m_nextGen;
+    genOf(b)->store(gen);  // before the port opens, so its first message carries it
+    if (!b->openInput(osName, error)) {
+        genOf(b)->store(0);
         return false;
+    }
     auto port = std::make_unique<Port>();
     port->name = osName;
     port->b = b;
+    port->gen = gen;
     port->users.append(owner);
     r->in = port.get();
     m_ins.push_back(std::move(port));
@@ -257,9 +342,7 @@ void PortHub::releaseInput(const QObject *owner)
     r->in = nullptr;
     p->users.removeAll(owner);
     if (p->users.isEmpty()) {
-        p->b->setAcceptMask(0);
-        p->b->closeInput();
-        eraseIf(m_ins, [p](const std::unique_ptr<Port> &q) { return q.get() == p; });
+        endInput(p);
     } else {
         refreshMask(p);
     }
@@ -314,25 +397,27 @@ int PortHub::openOutputCount() const
     return n;
 }
 
-void PortHub::onReceived(MidiBackend *b, const QByteArray &message)
+void PortHub::onReceived(MidiBackend *b, quint64 gen, const QByteArray &message)
 {
     if (message.size() < 2)
         return;
+    DispatchGuard guard(this);
     const int ch = (uchar(message[0]) & 0x0F) + 1;
     // A callback may release or detach a link: work from a copy of the targets.
     QList<const QObject *> targets;
     for (const auto &r : m_regs)
-        if (r->in && r->in->b == b && r->channel == ch)
+        if (!r->dead && r->in && r->in->b == b && r->in->gen == gen && r->channel == ch)
             targets.append(r->owner);
     for (const QObject *o : std::as_const(targets)) {
         const Reg *r = reg(o);
-        if (r && r->in && r->in->b == b && r->client.received)
+        if (r && r->in && r->in->b == b && r->in->gen == gen && r->client.received)
             r->client.received(message);
     }
 }
 
 void PortHub::onOutputLost(MidiBackend *b)
 {
+    DispatchGuard guard(this);
     QList<const QObject *> users;
     for (const auto &p : m_outs)
         if (p->b == b)
@@ -353,6 +438,7 @@ void PortHub::onOutputLost(MidiBackend *b)
 
 void PortHub::onInputLost(MidiBackend *b)
 {
+    DispatchGuard guard(this);
     QList<const QObject *> users;
     for (const auto &p : m_ins)
         if (p->b == b)

@@ -63,7 +63,7 @@ backend, so no new dependency), then read:
 /sys/class/sound/card<N>/device/../product       Boutiq
 ```
 
-The serial prefix decides: `BQJP` = JP-08, `BQJU` = JU-06A, `BQ_D` = D-05. Any other
+The serial prefix decides, together with the measured product ID: `0582:01b5` + `BQJP` = JP-08, `0582:023a` + `BQJU` = JU-06A, `0582:01ff` + `BQ_D` = D-05. Any other pairing (for example a first-generation JU-06 on `01b5`, whose serial was not measured) falls back to rule 1. Any other
 `BQ..` prefix is a Boutique the app does not support; the user still gets the manual
 model choice. If any file is missing or unreadable, fall back to rule 1 silently. This
 rule lifts the `Boutiq` case from "ambiguous" to "certain" on Linux. Not implemented on

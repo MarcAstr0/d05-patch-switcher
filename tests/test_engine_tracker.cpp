@@ -76,6 +76,49 @@ private slots:
         QVERIFY(!r.wrongEngine);
     }
 
+    void failedSendsLeaveRememberedAndCurrentAlone()
+    {
+        EngineTracker t;
+        bool ok = false;
+        int calls = 0;
+        t.setSender([&](const d05::PatchAddress &) {
+            ++calls;
+            return ok;
+        });
+        const auto a60 = *PatchAddress::parse(QStringLiteral("60:2-1"), Model::JU06A);
+        const auto a106 = *PatchAddress::parse(QStringLiteral("106:1-1"), Model::JU06A);
+        t.setState(60, 5, 28);
+        const auto cur = t.current();
+        // Plain select: not sent, nothing remembered, the arm and hint are still cleared.
+        QVERIFY(!t.select(a60));
+        QCOMPARE(t.remembered(60), 5);
+        QCOMPARE(t.current(), cur);
+        // Ctrl+E: the toggle stands, the armed send did not happen, the arm stays.
+        QVERIFY(t.select(a106));
+        t.toggleEngine();
+        QCOMPARE(t.engine(), 106);
+        QVERIFY(t.armed().has_value());
+        QCOMPARE(t.remembered(106), 28);
+        QCOMPARE(t.current().value(), *PatchAddress::parse(QStringLiteral("106:4-5"), Model::JU06A));
+        // Confirming PC with a failing send: the same.
+        t.setState(60, 5, 28);
+        t.setFlipDetectable(true);
+        QVERIFY(t.select(a106));
+        t.programChange(28);
+        QCOMPARE(t.engine(), 106);
+        QVERIFY(t.armed().has_value());
+        QCOMPARE(t.remembered(106), 28);
+        // When the send works the usual commit follows.
+        ok = true;
+        t.setState(60, 5, 28);
+        QVERIFY(t.select(a106));
+        t.programChange(28);
+        QVERIFY(!t.armed().has_value());
+        QCOMPARE(t.current().value(), a106);
+        QCOMPARE(t.remembered(106), 0);
+        QVERIFY(calls >= 4);
+    }
+
     void signalOrderOnCtrlE()
     {
         EngineTracker t;
