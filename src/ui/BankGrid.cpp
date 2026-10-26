@@ -113,6 +113,7 @@ PanelButton::Look BankGrid::lookFor(int slot) const
 {
     PanelButton::Look look;
     look.kind = PanelButton::Kind::Led;
+    look.faces = slot < 8 ? PanelButton::FaceSet::Bank : PanelButton::FaceSet::Button;
     if (slot < 8) {
         const int bank = slot + 1;
         look.lit = m_stage == Stage::Idle ? bank == m_current.bank()
@@ -144,7 +145,7 @@ void BankGrid::paintNumerals(QPainter *p, int y, bool bright)
     const QFont font = Theme::font(Theme::Role::PanelLabel);
     const qreal dpr = p->device()->devicePixelRatioF();
     p->setFont(font);
-    p->setPen(bright ? Theme::labelPrimary : Theme::labelAccent);
+    p->setPen(bright ? Theme::colors().labelPrimary : Theme::colors().labelNumeral);
     for (int i = 0; i < 8; ++i) {
         const int cx = 4 + 50 * i + PanelButton::FaceW / 2;
         p->drawText(QPoint(qRound(cx - PanelButton::textAdvance(numerals[i], font, dpr) / 2), y + 9), numerals[i]);
@@ -153,9 +154,10 @@ void BankGrid::paintNumerals(QPainter *p, int y, bool bright)
 
 void BankGrid::paintBackdrop(QPainter *p)
 {
-    SectionRule::paint(p, 4, 0, 394, QStringLiteral("PATCH BANK"), true);
+    const Theme::Skin &skin = Theme::skin();
+    SectionRule::paint(p, 4, 0, 394, skin.bankTitle, true);
     paintNumerals(p, 14, m_stage == Stage::AwaitBank);
-    SectionRule::paint(p, 4, 63, 394, QStringLiteral("PATCH NUMBER"), true);
+    SectionRule::paint(p, 4, 63, 394, skin.numberTitle, true);
     paintNumerals(p, 77, m_stage == Stage::AwaitNumber);
 }
 

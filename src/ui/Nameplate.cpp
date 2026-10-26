@@ -16,10 +16,10 @@ const QString &wordmarkText()
     static const QString s = QStringLiteral("PATCH SWITCHER");
     return s;
 }
+// The sub line of the current skin: "FOR ROLAND D-05" on the d05 skin (DESIGN-2.md 2.4).
 const QString &subText()
 {
-    static const QString s = QStringLiteral("FOR ROLAND D-05");
-    return s;
+    return Theme::skin().wordmarkSub;
 }
 int advanceOf(Theme::Role role, const QString &s)
 {
@@ -32,8 +32,8 @@ Nameplate::Nameplate(const QString &logoPath, QWidget *parent)
 {
     setFixedHeight(SlotHeight);
     setAttribute(Qt::WA_TransparentForMouseEvents);
-    m_wordFont = Theme::font(Theme::Role::Wordmark);
-    m_subFont = Theme::font(Theme::Role::WordmarkSub);
+    refreshSkin();
+    connect(Theme::notifier(), &Theme::Notifier::skinChanged, this, [this] { refreshSkin(); });
     if (!logoPath.isEmpty() && QFile::exists(logoPath)) {
         // Read the header first: a huge or unreadable file is never decoded.
         QImageReader reader(logoPath);
@@ -44,7 +44,17 @@ Nameplate::Nameplate(const QString &logoPath, QWidget *parent)
         }
     }
     rescale();
+}
+
+// The wordmark face, its width and the sub line follow the skin (DESIGN-2.md 2.6, 3.1);
+// rebuilt only on a skin change, never while painting.
+void Nameplate::refreshSkin()
+{
+    m_wordFont = Theme::font(Theme::Role::Wordmark);
+    m_subFont = Theme::font(Theme::Role::WordmarkSub);
+    m_subText = subText();
     m_wordmarkAdvance = advanceOf(Theme::Role::Wordmark, wordmarkText());
+    update();
 }
 
 int Nameplate::wordmarkWidth()
@@ -112,13 +122,13 @@ void Nameplate::paintEvent(QPaintEvent *)
         return;
     }
     p.setFont(m_wordFont);
-    p.setPen(Theme::labelAccent);
+    p.setPen(Theme::wordmarkColour());
     p.drawText(QPoint(0, 20), wordmarkText());
     const int ruleX = m_wordmarkAdvance + 14;
-    p.fillRect(QRect(ruleX, 9, 1, 12), Theme::ruleSecondary);
+    p.fillRect(QRect(ruleX, 9, 1, 12), Theme::colors().ruleSecondary);
     p.setFont(m_subFont);
-    p.setPen(Theme::labelSecondary);
-    p.drawText(QPoint(ruleX + 15, 20), subText());
+    p.setPen(Theme::colors().labelSecondary);
+    p.drawText(QPoint(ruleX + 15, 20), m_subText);
 }
 
 }  // namespace d05

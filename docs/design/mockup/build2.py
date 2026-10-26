@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds the version 2 mockups (T7.4) from docs/design/DESIGN-2.md and tokens-2.json.
+"""Builds the version 2 mockups (T7.4) from docs/design/DESIGN-2.md and tokens.json.
 
 Usage (from anywhere):  python3 docs/design/mockup/build2.py
 
@@ -17,7 +17,7 @@ Writes SVG sources into docs/design/mockup/ and renders them with Inkscape at 1x
 
 Reuses the version 1 helpers in build.py (Svg, text measuring with Pillow + raqm, the LCD
 drawing for the D-05) and does not modify that file, whose T and ROLES tables are checked
-by gen-tokens.py against tokens.json version 1. Colours come from tokens-2.json resolved per
+by gen-tokens.py against tokens.json version 1. Colours come from tokens.json resolved per
 skin, so the mockups are exactly the token values the builder gets. Needs what build.py
 needs: python3, Pillow with raqm, inkscape 1.x. Does not launch any browser.
 
@@ -37,7 +37,7 @@ sys.dont_write_bytecode = True  # no __pycache__ next to the sources
 import build as B  # noqa: E402  (version 1 helpers)
 
 ROOT = B.ROOT
-TOK = json.load(open(os.path.join(ROOT, "docs", "design", "tokens-2.json"), encoding="utf-8"))
+TOK = json.load(open(os.path.join(ROOT, "docs", "design", "tokens.json"), encoding="utf-8"))
 DATA = os.path.join(ROOT, "data")
 
 # New type roles (DESIGN-2 3) registered with the version 1 measuring helpers.

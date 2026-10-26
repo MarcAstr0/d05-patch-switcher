@@ -29,6 +29,7 @@ PatchListView::PatchListView(QWidget *parent)
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
     setAttribute(Qt::WA_MacShowFocusRect, false);
+    connect(Theme::notifier(), &Theme::Notifier::skinChanged, this, [this] { viewport()->update(); });
     // The scroll bars were created (and their style rules cached) before the object name
     // existed, so `QListView#patchList QScrollBar` did not match them. Re-polish.
     for (QWidget *w : {static_cast<QWidget *>(this), static_cast<QWidget *>(verticalScrollBar()),
@@ -59,11 +60,11 @@ void PatchListView::paintEvent(QPaintEvent *event)
     const int top = viewport()->height() * 38 / 100;
     const int titleBase = top + qRound(tfm.ascent());
     p.setFont(m_titleFont);
-    p.setPen(Theme::labelSecondary);
+    p.setPen(Theme::colors().labelSecondary);
     p.drawText(QPoint(qRound((w - tfm.horizontalAdvance(m_title)) / 2), titleBase), m_title);
     const int noteTop = top + qRound(tfm.ascent() + tfm.descent()) + 8;
     p.setFont(m_noteFont);
-    p.setPen(Theme::labelDim);
+    p.setPen(Theme::colors().labelDim);
     p.drawText(QPoint(qRound((w - nfm.horizontalAdvance(m_note)) / 2), noteTop + qRound(nfm.ascent())), m_note);
 }
 

@@ -1,5 +1,7 @@
 #include "ui/PanelButtonField.h"
 
+#include "ui/Theme.h"
+
 #include <QHelpEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -13,6 +15,7 @@ PanelButtonField::PanelButtonField(QWidget *parent)
 {
     setFocusPolicy(Qt::TabFocus);
     setMouseTracking(true);
+    connect(Theme::notifier(), &Theme::Notifier::skinChanged, this, [this] { update(); });
 }
 
 int PanelButtonField::slotAt(const QPoint &pos) const

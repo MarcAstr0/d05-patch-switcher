@@ -26,6 +26,7 @@ namespace d05 {
 class BankGrid;
 class DisplayWidget;
 class GroupBar;
+class LedDisplayWidget;
 class Library;
 class MidiLink;
 class Nameplate;
@@ -82,6 +83,7 @@ public:
 
     // Parts, for tests and the screenshot driver.
     DisplayWidget *display() const { return m_display; }
+    LedDisplayWidget *ledDisplay() const { return m_led; }
     PatchListView *list() const { return m_list; }
     PatchListModel *model() const { return m_model; }
     QLineEdit *searchField() const { return m_search; }
@@ -138,6 +140,7 @@ private:
     void buildWidgets();
     void buildActions();
     void layoutAll();
+    void applySkin();
     bool sendAddress(const PatchAddress &address);
     void onSent(const PatchAddress &address);
     // `moveHighlight` false for a quiet send (resend, TEST): the list stays where the user is.
@@ -215,6 +218,7 @@ private:
     QFrame *m_band = nullptr;
     Nameplate *m_nameplate = nullptr;
     DisplayWidget *m_display = nullptr;
+    LedDisplayWidget *m_led = nullptr;
     GroupBar *m_groupBar = nullptr;
     BankGrid *m_grid = nullptr;
     PanelButton *m_prev = nullptr;

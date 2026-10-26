@@ -56,7 +56,8 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
     const QCommandLineOption shotState(QStringLiteral("screenshot-state"),
                                        QStringLiteral("State for --screenshot: default, search, favorites, recents, "
                                                       "disconnected, settings, nomatch, entry, rename, "
-                                                      "clearrecents, settings-error, shortcuts, about or firstrun."),
+                                                      "clearrecents, settings-error, shortcuts, about, firstrun, jp08, ju06a-60, "
+                                                      "ju06a-106, flip-prompt, flip-hint, devices or settings-devices."),
                                        QStringLiteral("state"));
     const QCommandLineOption shotSize(QStringLiteral("screenshot-size"),
                                       QStringLiteral("Window size for --screenshot, WxH (default 960x560, "
@@ -170,7 +171,11 @@ QStringList screenshotStates()
             QStringLiteral("recents"),      QStringLiteral("disconnected"), QStringLiteral("settings"),
             QStringLiteral("nomatch"),      QStringLiteral("entry"),        QStringLiteral("rename"),
             QStringLiteral("clearrecents"), QStringLiteral("settings-error"), QStringLiteral("shortcuts"),
-            QStringLiteral("about"),        QStringLiteral("firstrun")};
+            QStringLiteral("about"),        QStringLiteral("firstrun"),
+            // Version 2 (SPEC-2 FR-15, DESIGN-2.md 12).
+            QStringLiteral("jp08"),         QStringLiteral("ju06a-60"),     QStringLiteral("ju06a-106"),
+            QStringLiteral("flip-prompt"),  QStringLiteral("flip-hint"),    QStringLiteral("devices"),
+            QStringLiteral("settings-devices")};
 }
 
 int runListPorts(MidiBackend &backend, QTextStream &out, QTextStream &err)

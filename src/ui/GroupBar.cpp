@@ -2,6 +2,7 @@
 
 #include "core/PatchAddress.h"
 #include "ui/SectionRule.h"
+#include "ui/Theme.h"
 
 #include <QPainter>
 
@@ -69,7 +70,7 @@ void GroupBar::activate(int slot)
 
 void GroupBar::paintBackdrop(QPainter *p)
 {
-    SectionRule::paint(p, 4, 0, 394, QStringLiteral("PATCH GROUP"), true);
+    SectionRule::paint(p, 4, 0, 394, Theme::skin().groupTitle, true);
 }
 
 }  // namespace d05

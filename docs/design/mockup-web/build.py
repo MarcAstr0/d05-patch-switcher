@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.join(ROOT, "docs", "design", "mockup"))
 import build as M  # noqa: E402  (desktop mockup helpers)
 
 TOK = json.load(open(os.path.join(ROOT, "docs", "design", "tokens.json"), encoding="utf-8"))
-T = {k: v["hex"] for k, v in TOK["colors"].items()}
+T = {k: v["hex"] for k, v in TOK["base"]["colors"].items() if v["group"] in ("2.1", "2.2", "2.3", "2.4")}  # version 1 subset
 assert {k: v.upper() for k, v in T.items()} == {k: v.upper() for k, v in M.T.items()}, \
     "tokens.json and mockup/build.py differ: run docs/design/gen-tokens.py --check"
 for name, r in TOK["webType"].items():

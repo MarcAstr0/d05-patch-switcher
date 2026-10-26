@@ -121,8 +121,8 @@ cp OFL.txt assets/fonts/OFL-Archivo.txt
 ```
 
 The text is the nameplate string (`extraFonts.Archivo.coverage` in
-`docs/design/tokens-2.json`); `resolve-tokens-2.py --check` fails if a glyph of it is
-missing. Every other option is left at its default; in particular the ttfautohint
+`docs/design/tokens.json`); `python3 docs/design/gen-tokens.py --check` fails if a glyph of it
+is missing. Every other option is left at its default; in particular the ttfautohint
 instructions are kept. A second run produced byte-identical files. sha256 of the
 committed results:
 

@@ -1,0 +1,703 @@
+/*
+ * Boutique Patch Switcher style sheet, skin ju06a-106 (Qt 6.4 QSS).
+ * GENERATED FILE when it is named <skin>.qss: docs/design/gen-tokens.py writes
+ * assets/theme/<skin>.qss for every skin in docs/design/tokens.json from this template,
+ * assets/theme/app.qss.in. Edit the template or the tokens, never the output.
+ * Source of every value: docs/design/DESIGN.md (D-05) and docs/design/DESIGN-2.md (skins).
+ * Theme loads :/theme/<skin>.qss on every skin switch. Everything drawn with QPainter
+ * (displays, section rules, panel buttons, group bar, engine control, bank grid,
+ * nameplate and device switcher, list rows, status bar LED) is not styled here; Theme
+ * exposes the same resolved tokens as a runtime palette.
+ *
+ * Template syntax (DESIGN-2.md 2.5): an at sign and a colour token name in braces is replaced
+ * by the token's resolved #RRGGBB for the skin; the same with the word skin, by the skin id;
+ * a line holding only the same with TOKEN_BLOCK, by the token comment block. Any other
+ * such placeholder is a generator error.
+ *
+ * Skin: ju06a-106 (JU-06A, engine 106)
+ * ----------------------------------------------------------------------------------
+ * COLOUR TOKENS (DESIGN.md section 2, DESIGN-2.md section 2.3). No other colours appear anywhere.
+ * ----------------------------------------------------------------------------------
+ * 2.1 Panel and surfaces
+ *   panel             #505155  window background, upper panel, status bar, dialogs
+ *   band              #47484C  lower band (grid, controls, list)
+ *   bandEdge          #626367  1 px line on top of the band and the status bar
+ *   well              #2A2B2E  list background
+ *   wellEdgeDark      #1C1D1F  top and left 1 px border of the list well and fields
+ *   wellEdgeLight     #5E5F63  bottom and right 1 px border of the list well
+ *   fieldBack         #232427  search field, combos, spin box, inline editor, tooltip
+ *   fieldBorder       #6A6B70  field border, normal; menu border and separator; disabled checkbox
+ *   fieldBorderHover  #7E7F84  field border, hover; unchecked checkbox border
+ *   rowHover          #333437  list row under the mouse
+ *   selection         #46484D  highlighted list row, menu item hover
+ *   selectionBarIdle  #8E9095  3 px selection bar when the list is not focused
+ *   matchBack         #33507A  search-match background; text selection in fields
+ * 2.2 Display
+ *   bezel             #151517  display window
+ *   bezelRim          #3C3D41  1 px frame left, right, bottom of the window
+ *   bezelRimTop       #77787D  1 px frame on the top edge of the window
+ *   lcdBack           #071104  lit field background
+ *   lcdOn             #98CF1C  lit dots
+ *   lcdGhost          #0F1D09  unlit dots (switch lcdShowGhost, default true)
+ * 2.3 Lettering and rules
+ *   labelPrimary      #F4F3EE  legends, list names, values, dialog text
+ *   labelSecondary    #CFCEC7  secondary labels, addresses, status labels, tags
+ *   labelDim          #A3A39E  placeholder text, unnamed user slots, hints
+ *   labelDisabled     #8C8C88  any disabled text
+ *   labelAccent       #B4CDEE  patch-section titles and numerals, the wordmark
+ *   ruleAccent        #3F6896  rules of the patch section
+ *   ruleSecondary     #AFAEA6  rules of secondary sections, wordmark divider
+ *   labelRed          #FFA096  AUTO SEND, NOT FOUND, errors, default-button border
+ *   arrow             #BDB9A0  PREV / NEXT wedges, combo arrow
+ *   starOff           #7C7D81  unfilled star outline
+ *   tagBorder         #7C7D81  box around the key-mode letter
+ * 2.4 Buttons and LEDs
+ *   buttonSlot        #2A2B2E  1 px recess around every button face
+ *   buttonFace        #80A4A0  face, normal
+ *   buttonFaceHover   #8EB1AD  face, hover
+ *   buttonPressed     #6A8B87  face, pressed
+ *   buttonHighlight   #9DBDB9  1 px top inside edge of the face (not pressed)
+ *   buttonFaceLit     #80A4A0  face of a button whose LED is lit
+ *   buttonDisabled    #5C5D61  face, disabled
+ *   ledOn             #FF3B2F  lit LED
+ *   ledCore           #FF9C8C  lighter core inside a lit LED
+ *   ledOff            #4A2B28  unlit LED
+ *   focusRing         #C4DCFA  every keyboard focus indicator (2 px)
+ * 2.5 LED readout (64-patch skins)
+ *   ledBack           #0B0203  LED readout field
+ *   ledSegOn          #FF3A2A  lit segment
+ *   ledSegGhost       #240A08  unlit segment (switch ledShowGhost)
+ * 2.6 Panel faces by role
+ *   bankFace          #80A4A0  bank face, normal
+ *   bankFaceHover     #8EB1AD  bank face, hover
+ *   bankPressed       #6A8B87  bank face, pressed
+ *   bankHighlight     #9DBDB9  bank face, top highlight
+ *   bankFaceLit       #80A4A0  bank face, lit
+ *   viewFace          #D3CDB2  view face, normal
+ *   viewFaceHover     #DED9C0  view face, hover
+ *   viewPressed       #B5AF96  view face, pressed
+ *   viewHighlight     #E6E2CE  view face, top highlight
+ *   viewFaceLit       #D3CDB2  view face, lit
+ *   commitFace        #EE9F3C  commit face, normal
+ *   commitFaceHover   #F5AB4C  commit face, hover
+ *   commitPressed     #CC8530  commit face, pressed
+ *   commitHighlight   #F7BB6E  commit face, top highlight
+ *   commitFaceLit     #EE9F3C  commit face, lit
+ *   transportFace     #D3CDB2  transport face, normal
+ *   transportFaceHover#DED9C0  transport face, hover
+ *   transportPressed  #B5AF96  transport face, pressed
+ *   transportHighlight#E6E2CE  transport face, top highlight
+ *   transportFaceLit  #D3CDB2  transport face, lit
+ *   buttonLegend      #1C1D1F  legend on a face (kind B)
+ *   wedge             #222426  PREV / NEXT wedges
+ *   lensRim           #2A2B2D  ring around a round LED
+ *   controlFace       #36373B  dialog buttons, key caps, scrollbar handle
+ *   controlFaceHover  #424347  dialog buttons and handle, hover
+ *   controlPressed    #2C2D30  dialog buttons and handle, pressed
+ * 2.7 Version 2 lettering and section rules
+ *   labelNumeral      #F4F3EE  numerals 1 to 8 over the grid
+ *   labelCommit       #FFC173  AUTO SEND label
+ *   ruleTitleBack     #202326  title plate of a doubleBar rule
+ *   ruleTitleText     #E2E0D4  title text of a doubleBar rule
+ *   ruleBand          #3F6896  fill of a band rule (patch section)
+ *   ruleBandText      #F4F4F0  title text of a band rule
+ *   ruleBand2         #A3262D  fill of the engine band rule
+ *   ruleBand2Text     #F7F2EC  title text of the engine band
+ *
+ * ----------------------------------------------------------------------------------
+ * TYPE ROLES (DESIGN.md section 3). Family "Inter" (assets/fonts, OFL 1.1) unless the line names another (DESIGN-2.md 3.1), sizes in
+ * px. Weight 400 = Regular, 500 = Medium. "Caps" strings are stored in capitals by the
+ * code: QSS cannot change case.
+ * ----------------------------------------------------------------------------------
+ *   role              weight  size  spacing  case        colour
+ *   type.panelLabel    500     10    0.5      caps        per use
+ *   type.listName      400     14    0        as stored   labelPrimary
+ *   type.listAddress   500     13    cells    caps        labelSecondary
+ *   type.listMeta      500     10    0.5      caps        labelSecondary
+ *   type.field         400     14    0        as typed    labelPrimary
+ *   type.statusLabel   500     10    0.5      caps        labelSecondary
+ *   type.statusValue   400     11    0        as named    labelPrimary
+ *   type.body          400     13    0        sentence    labelPrimary
+ *   type.note          400     12    0        sentence    labelSecondary
+ *   type.emptyTitle    500     11    1.0      caps        labelSecondary
+ *   type.keycap        500     10    0.5      as named    labelPrimary
+ *   type.wordmark      700     16    1.0      caps        labelPrimary  Archivo
+ *   type.wordmarkSub   500     10    1.0      caps        labelSecondary
+ *   type.displayName3  500     28    0        as stored   labelPrimary
+ *   type.displayName4  500     37    0        as stored   labelPrimary
+ *   type.displayName5  500     46    0        as stored   labelPrimary
+ *   type.displayContext3500     13    1.0      caps        per state
+ *   type.displayContext4500     17    1.5      caps        per state
+ *   type.displayContext5500     21    2.0      caps        per state
+ *   type.ruleTitle     500     10    1.0      caps        ruleTitleText / ruleBandText
+ *   type.switcherTab   500     10    1.0      caps        per state
+ * Application font (Theme): Inter Regular 13 px.
+ *
+ * ----------------------------------------------------------------------------------
+ * NOTES FOR THE BUILDER (Qt 6.4 QSS limits; 1 to 5 checked in a Qt 6.4.2 harness)
+ * ----------------------------------------------------------------------------------
+ * 1. Letter spacing is not a QSS property. Where a role above has spacing, Theme sets
+ *    it in C++ with QFont::setLetterSpacing(QFont::AbsoluteSpacing, n) on the widget's
+ *    font; the size and weight set here do not reset it.
+ * 2. Object names and the dynamic properties [role="..."] and [state="..."] must be
+ *    set before the widget is first shown. Changing one later needs
+ *    style()->unpolish(w); style()->polish(w); (QSS does not re-evaluate by itself).
+ *    A skin switch is qApp->setStyleSheet(<skin>.qss) once; Qt re-polishes every widget.
+ *    The Clear Recents box is a QDialog named clearRecentsBox (DESIGN 10.5); the
+ *    QMessageBox selectors below are kept for the old code path and are harmless.
+ * 3. #band must be a QFrame (a plain QWidget ignores QSS borders).
+ * 4. Combo popups take the item rules below only with
+ *    combo->setItemDelegate(new QStyledItemDelegate(combo)).
+ * 5. The combo arrow is a raster pair, assets/theme/arrow-down.png (8 x 4) and
+ *    arrow-down@2x.png (16 x 8), compiled into the resources under :/theme/. Its colour
+ *    is the token `arrow`, which no skin overrides, so one pair serves every skin.
+ * 6. :hover rules were not exercised (the offscreen harness has no pointer); check
+ *    them by hand in the review screenshots.
+ */
+
+
+/* ---------------------------------------------------------------- backgrounds -- */
+
+QMainWindow,
+QDialog,
+QMessageBox {
+    background-color: #505155;
+    color: #F4F3EE;
+}
+
+QFrame#band {
+    background-color: #47484C;
+    border: none;
+    border-top: 1px solid #626367;
+}
+
+/* ------------------------------------------------- search field, DESIGN 7.1 -- */
+
+QLineEdit#searchField {
+    background-color: #232427;
+    color: #F4F3EE;
+    font-size: 14px;
+    font-weight: 400;
+    border-style: solid;
+    border-width: 1px;
+    border-top-color: #1C1D1F;
+    border-left-color: #1C1D1F;
+    border-bottom-color: #6A6B70;
+    border-right-color: #6A6B70;
+    border-radius: 0px;
+    padding: 0px 10px;
+    min-height: 30px;
+    max-height: 30px;
+    selection-background-color: #33507A;
+    selection-color: #F4F3EE;
+}
+
+QLineEdit#searchField:hover {
+    border: 1px solid #7E7F84;
+}
+
+QLineEdit#searchField:focus {
+    border: 2px solid #C4DCFA;
+    padding: 0px 9px;
+    min-height: 28px;
+    max-height: 28px;
+}
+
+/* -------------------------------------------- patch list well, DESIGN 7.2, 7.6 -- */
+
+QListView#patchList {
+    background-color: #2A2B2E;
+    color: #F4F3EE;
+    border-style: solid;
+    border-width: 1px;
+    border-top-color: #1C1D1F;
+    border-left-color: #1C1D1F;
+    border-bottom-color: #5E5F63;
+    border-right-color: #5E5F63;
+    border-radius: 0px;
+    outline: 0;
+    padding: 0px;
+}
+
+QListView#patchList:focus {
+    border: 1px solid #C4DCFA;
+}
+
+QListView#patchList QScrollBar:vertical {
+    background-color: #2A2B2E;
+    width: 10px;
+    margin: 0px;
+    border: none;
+}
+
+QListView#patchList QScrollBar::handle:vertical {
+    background-color: #36373B;
+    min-height: 24px;
+    margin: 0px 2px;
+    border: none;
+    border-radius: 0px;
+}
+
+QListView#patchList QScrollBar::handle:vertical:hover {
+    background-color: #424347;
+}
+
+QListView#patchList QScrollBar::handle:vertical:pressed {
+    background-color: #2C2D30;
+}
+
+QListView#patchList QScrollBar::add-line:vertical,
+QListView#patchList QScrollBar::sub-line:vertical {
+    height: 0px;
+    border: none;
+    background: none;
+}
+
+QListView#patchList QScrollBar::add-page:vertical,
+QListView#patchList QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+/* --------------------------------------------- user-slot editor, DESIGN 7.4 -- */
+
+QLineEdit#nameEditor {
+    background-color: #232427;
+    color: #F4F3EE;
+    font-size: 14px;
+    font-weight: 400;
+    border: 1px solid #C4DCFA;
+    border-radius: 0px;
+    padding: 0px 1px;
+    selection-background-color: #33507A;
+    selection-color: #F4F3EE;
+}
+
+/* ------------------------------------------------------ status bar, DESIGN 8.1 -- */
+
+QStatusBar#statusBar {
+    background-color: #505155;
+    border: none;
+    border-top: 1px solid #626367;
+    min-height: 21px;
+    max-height: 21px;
+}
+
+QStatusBar#statusBar::item {
+    border: none;
+}
+
+QStatusBar#statusBar QLabel {
+    background: transparent;
+    padding: 0px;
+    margin: 0px;
+}
+
+/* OUT, CH, IN */
+QStatusBar#statusBar QLabel[role="statusLabel"] {
+    color: #CFCEC7;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+/* FOLLOW */
+QStatusBar#statusBar QLabel[role="statusFollow"] {
+    color: #F4F3EE;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+/* NOT FOUND */
+QStatusBar#statusBar QLabel[role="statusError"] {
+    color: #FFA096;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+/* port names, channel number */
+QStatusBar#statusBar QLabel[role="statusValue"] {
+    color: #F4F3EE;
+    font-size: 11px;
+    font-weight: 400;
+}
+
+/* "None" when no port is set */
+QStatusBar#statusBar QLabel[role="statusDim"] {
+    color: #A3A39E;
+    font-size: 11px;
+    font-weight: 400;
+}
+
+/* right-aligned message */
+QStatusBar#statusBar QLabel[role="statusMessage"] {
+    color: #CFCEC7;
+    font-size: 11px;
+    font-weight: 400;
+}
+
+/* ------------------------------------------------- menus, DESIGN 8.2 -- */
+
+QMenu {
+    background-color: #505155;
+    color: #F4F3EE;
+    font-size: 13px;
+    font-weight: 400;
+    border: 1px solid #6A6B70;
+    border-radius: 0px;
+    padding: 4px 0px;
+}
+
+QMenu::item {
+    background-color: transparent;
+    padding: 6px 24px 6px 12px;
+    min-height: 16px;
+}
+
+QMenu::item:selected {
+    background-color: #46484D;
+    color: #F4F3EE;
+}
+
+QMenu::item:disabled {
+    color: #8C8C88;
+    background-color: transparent;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #6A6B70;
+    margin: 4px 0px;
+}
+
+/* ------------------------------------------------ tooltips, DESIGN 8.3 -- */
+
+QToolTip {
+    background-color: #232427;
+    color: #F4F3EE;
+    font-size: 12px;
+    font-weight: 400;
+    border: 1px solid #6A6B70;
+    border-radius: 0px;
+    padding: 4px 6px;
+}
+
+/* ------------------------------------------- dialog text roles, DESIGN 10 -- */
+
+QDialog QLabel,
+QMessageBox QLabel {
+    color: #F4F3EE;
+    font-size: 13px;
+    font-weight: 400;
+    background: transparent;
+}
+
+QLabel[role="body"] {
+    color: #F4F3EE;
+    font-size: 13px;
+    font-weight: 400;
+}
+
+QLabel[role="note"] {
+    color: #CFCEC7;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+QLabel[role="dim"] {
+    color: #A3A39E;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+/* Settings form labels: caps, right edge at x 100 (alignment set in code). */
+QLabel[role="formLabel"] {
+    color: #F4F3EE;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+QLabel#connectionText[state="ok"] {
+    color: #F4F3EE;
+    font-size: 13px;
+    font-weight: 400;
+}
+
+QLabel#connectionText[state="error"] {
+    color: #FFA096;
+    font-size: 13px;
+    font-weight: 400;
+}
+
+/* Settings input problem line, DESIGN 10.1: right of the input combo. */
+QLabel#inputStatusText {
+    color: #FFA096;
+    font-size: 13px;
+    font-weight: 400;
+}
+
+/* Shortcuts sheet key caps, DESIGN 10.3: 18 px tall overall, min 18 px wide. */
+QLabel#keycap {
+    color: #F4F3EE;
+    background-color: #36373B;
+    font-size: 10px;
+    font-weight: 500;
+    border: 1px solid #2A2B2E;
+    border-bottom: 2px solid #2A2B2E;
+    border-radius: 2px;
+    padding: 1px 6px;
+    min-height: 13px;
+    max-height: 13px;
+    min-width: 4px;
+    qproperty-alignment: AlignCenter;
+}
+
+/* ----------------------------------------- dialog buttons, DESIGN 10.2 -- */
+/* 28 px tall overall, min 100 px wide overall. Text is caps, set by the code. */
+
+QDialog QPushButton,
+QMessageBox QPushButton {
+    background-color: #36373B;
+    color: #F4F3EE;
+    font-size: 10px;
+    font-weight: 500;
+    border: 1px solid #2A2B2E;
+    border-radius: 2px;
+    padding: 0px 12px;
+    min-width: 74px;
+    min-height: 26px;
+    max-height: 26px;
+}
+
+QDialog QPushButton:hover,
+QMessageBox QPushButton:hover {
+    background-color: #424347;
+}
+
+QDialog QPushButton:pressed,
+QMessageBox QPushButton:pressed {
+    background-color: #2C2D30;
+}
+
+QDialog QPushButton:default,
+QMessageBox QPushButton:default {
+    border: 1px solid #FFA096;
+}
+
+QDialog QPushButton:focus,
+QMessageBox QPushButton:focus {
+    border: 2px solid #C4DCFA;
+    padding: 0px 11px;
+    min-width: 74px;
+    min-height: 24px;
+    max-height: 24px;
+}
+
+QDialog QPushButton:disabled,
+QMessageBox QPushButton:disabled {
+    background-color: #5C5D61;
+    color: #8C8C88;
+    border: 1px solid #2A2B2E;
+}
+
+/* REFRESH in Settings is 26 px overall to match the combo beside it (DESIGN 10.1).
+   The ID selector outranks the shared :focus rule, so its focus state is repeated. */
+QDialog QPushButton#refreshButton {
+    min-height: 24px;
+    max-height: 24px;
+}
+
+QDialog QPushButton#refreshButton:focus {
+    min-height: 22px;
+    max-height: 22px;
+}
+
+/* USE next to the port combos in Settings (DESIGN-2.md 7.3): 26 px overall like REFRESH,
+   72 px wide overall. */
+QDialog QPushButton#useOutputButton,
+QDialog QPushButton#useInputButton {
+    min-width: 46px;
+    max-width: 46px;
+    min-height: 24px;
+    max-height: 24px;
+}
+
+QDialog QPushButton#useOutputButton:focus,
+QDialog QPushButton#useInputButton:focus {
+    min-width: 46px;
+    max-width: 46px;
+    min-height: 22px;
+    max-height: 22px;
+}
+
+QMessageBox QPushButton#clearButton,
+QDialog#clearRecentsBox QPushButton#clearButton {
+    color: #FFA096;
+}
+
+/* ------------------------------------------------- combo box, DESIGN 10.2 -- */
+/* 26 px tall overall. */
+
+QComboBox {
+    combobox-popup: 0;
+    background-color: #232427;
+    color: #F4F3EE;
+    font-size: 13px;
+    font-weight: 400;
+    border: 1px solid #6A6B70;
+    border-radius: 0px;
+    padding: 0px 0px 0px 8px;
+    min-height: 24px;
+    max-height: 24px;
+    selection-background-color: #46484D;
+    selection-color: #F4F3EE;
+}
+
+QComboBox:hover {
+    border: 1px solid #7E7F84;
+}
+
+QComboBox:focus {
+    border: 2px solid #C4DCFA;
+    padding: 0px 0px 0px 7px;
+    min-height: 22px;
+    max-height: 22px;
+}
+
+QComboBox:disabled {
+    color: #8C8C88;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    width: 20px;
+    border: none;
+    background: transparent;
+}
+
+/* 8 x 4 solid wedge in `arrow` (see note 5); Qt picks the @2x file at DPR 2. */
+QComboBox::down-arrow {
+    image: url(:/theme/arrow-down.png);
+    width: 8px;
+    height: 4px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #505155;
+    color: #F4F3EE;
+    border: 1px solid #6A6B70;
+    padding: 4px 0px;
+    outline: 0;
+    selection-background-color: #46484D;
+    selection-color: #F4F3EE;
+}
+
+QComboBox QAbstractItemView::item {
+    min-height: 28px;
+    padding: 0px 12px;
+    border: none;
+}
+
+QComboBox QAbstractItemView::item:selected,
+QComboBox QAbstractItemView::item:hover {
+    background-color: #46484D;
+    color: #F4F3EE;
+}
+
+/* -------------------------------------------------- spin box, DESIGN 10.2 -- */
+/* 72 x 26 overall; arrows hidden (keys and wheel change the value). */
+
+QSpinBox {
+    background-color: #232427;
+    color: #F4F3EE;
+    font-size: 13px;
+    font-weight: 400;
+    border: 1px solid #6A6B70;
+    border-radius: 0px;
+    padding: 0px;
+    min-width: 70px;
+    max-width: 70px;
+    min-height: 24px;
+    max-height: 24px;
+    selection-background-color: #33507A;
+    selection-color: #F4F3EE;
+    qproperty-buttonSymbols: NoButtons;
+    qproperty-alignment: AlignCenter;
+}
+
+QSpinBox:hover {
+    border: 1px solid #7E7F84;
+}
+
+QSpinBox:focus {
+    border: 2px solid #C4DCFA;
+    min-width: 68px;
+    max-width: 68px;
+    min-height: 22px;
+    max-height: 22px;
+}
+
+QSpinBox::up-button,
+QSpinBox::down-button {
+    width: 0px;
+    border: none;
+}
+
+/* -------------------------------------------- checkbox (an LED), DESIGN 10.2 -- */
+/* Indicator 16 x 6 overall (14 x 4 plus a 1 px border). */
+
+QCheckBox {
+    color: #F4F3EE;
+    font-size: 13px;
+    font-weight: 400;
+    spacing: 10px;
+    background: transparent;
+}
+
+QCheckBox:disabled {
+    color: #8C8C88;
+}
+
+QCheckBox::indicator {
+    width: 14px;
+    height: 4px;
+    background-color: #4A2B28;
+    border: 1px solid #7E7F84;
+    border-radius: 0px;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #FF3B2F;
+    border: 1px solid #FF3B2F;
+}
+
+QCheckBox::indicator:focus {
+    border: 1px solid #C4DCFA;
+}
+
+QCheckBox::indicator:disabled {
+    background-color: #5C5D61;
+    border: 1px solid #6A6B70;
+}
+
+/* ------------------------------------------- Settings, version 2 (DESIGN-2.md 7) -- */
+
+/* Engine information on the JU-06A page: read-only values. */
+QLabel[role="engineValue"] {
+    color: #F4F3EE;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* "unknown" and other absent values. */
+QLabel[role="engineUnknown"] {
+    color: #A3A39E;
+    font-size: 13px;
+    font-weight: 400;
+}
+
+/* The refusal under the channel row ("Channel 4 on Hapax MIDI 1 is used by the D-05"). */
+QLabel#channelConflictText {
+    color: #FFA096;
+    font-size: 12px;
+    font-weight: 400;
+}

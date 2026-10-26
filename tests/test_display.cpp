@@ -95,9 +95,9 @@ private slots:
 
     void themeTokensAndFonts()
     {
-        QCOMPARE(Theme::lcdOn.name().toUpper(), QStringLiteral("#98CF1C"));
-        QCOMPARE(Theme::panel.name().toUpper(), QStringLiteral("#202326"));
-        QCOMPARE(qApp->palette().color(QPalette::Window), Theme::panel);
+        QCOMPARE(Theme::colors().lcdOn.name().toUpper(), QStringLiteral("#98CF1C"));
+        QCOMPARE(Theme::colors().panel.name().toUpper(), QStringLiteral("#202326"));
+        QCOMPARE(qApp->palette().color(QPalette::Window), Theme::colors().panel);
         QVERIFY(!qApp->styleSheet().isEmpty());
         QCOMPARE(qApp->font().pixelSize(), 13);
         QCOMPARE(Theme::font(Theme::Role::Wordmark).pixelSize(), 15);
@@ -223,14 +223,14 @@ private slots:
         const QImage img = d.fieldImage();
         const int P = d.deviceDot();
         // 'A' row 0 is .###. : column 1 lit, column 0 unlit (ghost).
-        QCOMPARE(QColor(img.pixel(3 * P, 2 * P)), Theme::lcdOn);
-        QCOMPARE(QColor(img.pixel(2 * P, 2 * P)), Theme::lcdGhost);
+        QCOMPARE(QColor(img.pixel(3 * P, 2 * P)), Theme::colors().lcdOn);
+        QCOMPARE(QColor(img.pixel(2 * P, 2 * P)), Theme::colors().lcdGhost);
         // The gap between dots stays lcdBack.
-        QCOMPARE(QColor(img.pixel(3 * P + P - 1, 2 * P)), Theme::lcdBack);
+        QCOMPARE(QColor(img.pixel(3 * P + P - 1, 2 * P)), Theme::colors().lcdBack);
         d.setLcdShowGhost(false);
         const QImage img2 = d.fieldImage();
-        QCOMPARE(QColor(img2.pixel(3 * P, 2 * P)), Theme::lcdOn);
-        QCOMPARE(QColor(img2.pixel(2 * P, 2 * P)), Theme::lcdBack);
+        QCOMPARE(QColor(img2.pixel(3 * P, 2 * P)), Theme::colors().lcdOn);
+        QCOMPARE(QColor(img2.pixel(2 * P, 2 * P)), Theme::colors().lcdBack);
     }
 
     void repaintsOnlyOnTextChange()
@@ -585,11 +585,11 @@ private slots:
         // "P1-11": 'P' row 0 is #### . : column 0 lit, column 4 unlit (ghost).
         const int x0 = (16 + 19) * 2 + 12;
         const int y0 = (46 + 11) * 2 + 12;
-        QCOMPARE(QColor(img.pixel(x0, y0)), Theme::lcdOn);
-        QCOMPARE(QColor(img.pixel(x0 + 4 * 6, y0)), Theme::lcdGhost);
+        QCOMPARE(QColor(img.pixel(x0, y0)), Theme::colors().lcdOn);
+        QCOMPARE(QColor(img.pixel(x0 + 4 * 6, y0)), Theme::colors().lcdGhost);
         // Cell 1 starts 6P = 36 px on; '1' row 0 (0x04) lights column 2 only.
-        QCOMPARE(QColor(img.pixel(x0 + 36 + 2 * 6, y0)), Theme::lcdOn);
-        QCOMPARE(QColor(img.pixel(x0 + 36, y0)), Theme::lcdGhost);
+        QCOMPARE(QColor(img.pixel(x0 + 36 + 2 * 6, y0)), Theme::colors().lcdOn);
+        QCOMPARE(QColor(img.pixel(x0 + 36, y0)), Theme::colors().lcdGhost);
     }
 };
 

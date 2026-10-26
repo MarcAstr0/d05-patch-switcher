@@ -46,7 +46,7 @@ protected:
     void paintEvent(QPaintEvent *) override
     {
         QPainter p(this);
-        p.fillRect(rect(), m_lit ? Theme::ledOn : Theme::ledOff);
+        p.fillRect(rect(), m_lit ? Theme::colors().ledOn : Theme::colors().ledOff);
     }
 
 private:

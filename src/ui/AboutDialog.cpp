@@ -56,7 +56,7 @@ AboutDialog::AboutDialog(const QString &version, QWidget *parent)
     paragraph(QStringLiteral("Selects patches on a Roland Boutique D-05 over MIDI."), "body");
     // The link: accent colour, no underline, mouse only so OK keeps the only focus (DESIGN 10.4).
     m_link = paragraph(QStringLiteral("<a href=\"%1\" style=\"color:%2; text-decoration:none\">github.com/MarcAstr0/d05-patch-switcher</a>")
-                           .arg(projectUrl(), Theme::labelAccent.name()),
+                           .arg(projectUrl(), Theme::colors().labelAccent.name()),
                        "note");
     m_link->setTextFormat(Qt::RichText);
     m_link->setOpenExternalLinks(true);

@@ -35,6 +35,16 @@ target_compile_definitions(test_display PRIVATE D05_BINARY="$<TARGET_FILE:d05-pa
                                                  D05_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_dependencies(test_display d05-patch-switcher)
 
+d05_add_test(test_skins test_skins.cpp)
+target_link_libraries(test_skins PRIVATE d05ui Qt6::Widgets)
+
+# The D-05 skin against the version 1.0.0 screenshots in tests/reference/ (Linux only).
+d05_add_test(test_reference test_reference.cpp)
+target_link_libraries(test_reference PRIVATE Qt6::Widgets)
+target_compile_definitions(test_reference PRIVATE D05_BINARY="$<TARGET_FILE:d05-patch-switcher>"
+                                                   D05_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference")
+add_dependencies(test_reference d05-patch-switcher)
+
 d05_add_test(test_main_window test_main_window.cpp)
 target_link_libraries(test_main_window PRIVATE d05ui Qt6::Widgets)
 

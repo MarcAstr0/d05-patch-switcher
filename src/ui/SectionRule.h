@@ -22,8 +22,11 @@ public:
     bool accent() const { return m_accent; }
     QSize sizeHint() const override;
 
-    // Draws the rule into (x, y, width, Height).
-    static void paint(QPainter *p, int x, int y, int width, const QString &title, bool accent);
+    // Draws the rule into (x, y, width, Height). Accent rules take the current skin's style
+    // (hairline, doubleBar or band, DESIGN-2.md 5.1); secondary rules are always the hairline.
+    // `engine` selects the ENGINE band colours of the JU-06A skins.
+    static void paint(QPainter *p, int x, int y, int width, const QString &title, bool accent,
+                      bool engine = false);
 
 protected:
     void paintEvent(QPaintEvent *event) override;

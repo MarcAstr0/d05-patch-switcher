@@ -144,23 +144,30 @@ PatchDelegate::PatchDelegate(QObject *parent)
     m_star.closeSubpath();
     for (int i = 0; i <= MaxNameLength; ++i)
         m_counter[i] = QString::number(i) + QStringLiteral("/18");
-    m_metaRed = QPen(Theme::labelRed);
-    m_starOffPen = QPen(Theme::starOff, 1);
-    m_starHoverPen = QPen(Theme::labelSecondary, 1);
-    m_selection = QBrush(Theme::selection);
-    m_barFocus = QBrush(Theme::focusRing);
-    m_barIdle = QBrush(Theme::selectionBarIdle);
-    m_hover = QBrush(Theme::rowHover);
-    m_ledOn = QBrush(Theme::ledOn);
-    m_ledCore = QBrush(Theme::ledCore);
-    m_match = QBrush(Theme::matchBack);
-    m_tag = QBrush(Theme::tagBorder);
-    m_starOn = QBrush(Theme::labelPrimary);
-    m_addrPrimary = QPen(Theme::labelPrimary);
-    m_addrSecondary = QPen(Theme::labelSecondary);
-    m_namePrimary = QPen(Theme::labelPrimary);
-    m_nameDim = QPen(Theme::labelDim);
-    m_meta = QPen(Theme::labelSecondary);
+    refreshColours();
+    connect(Theme::notifier(), &Theme::Notifier::skinChanged, this, [this] { refreshColours(); });
+}
+
+// The pens and brushes are built once per skin (DESIGN-2.md 2.6), never while painting.
+void PatchDelegate::refreshColours()
+{
+    m_metaRed = QPen(Theme::colors().labelRed);
+    m_starOffPen = QPen(Theme::colors().starOff, 1);
+    m_starHoverPen = QPen(Theme::colors().labelSecondary, 1);
+    m_selection = QBrush(Theme::colors().selection);
+    m_barFocus = QBrush(Theme::colors().focusRing);
+    m_barIdle = QBrush(Theme::colors().selectionBarIdle);
+    m_hover = QBrush(Theme::colors().rowHover);
+    m_ledOn = QBrush(Theme::colors().ledOn);
+    m_ledCore = QBrush(Theme::colors().ledCore);
+    m_match = QBrush(Theme::colors().matchBack);
+    m_tag = QBrush(Theme::colors().tagBorder);
+    m_starOn = QBrush(Theme::colors().labelPrimary);
+    m_addrPrimary = QPen(Theme::colors().labelPrimary);
+    m_addrSecondary = QPen(Theme::colors().labelSecondary);
+    m_namePrimary = QPen(Theme::colors().labelPrimary);
+    m_nameDim = QPen(Theme::colors().labelDim);
+    m_meta = QPen(Theme::colors().labelSecondary);
 }
 
 void PatchDelegate::layoutRow(const PatchListModel::Row &row, int width, RowLayout *out) const

@@ -8,12 +8,14 @@
 #include "midi/MidiLink.h"
 #include "ui/BankGrid.h"
 #include "ui/DisplayWidget.h"
+#include "ui/LedDisplayWidget.h"
 #include "ui/MainWindow.h"
 #include "ui/AboutDialog.h"
 #include "ui/PanelButton.h"
 #include "ui/ShortcutsDialog.h"
 #include "ui/PatchListView.h"
 #include "ui/SettingsDialog.h"
+#include "ui/Theme.h"
 
 #include <QApplication>
 #include <QLineEdit>
@@ -55,10 +57,72 @@ struct OverrideGuard {
 };
 }  // namespace
 
+namespace {
+
+// Puts the D-05 skin back when a screenshot state has used another: the skin is process-wide and
+// the tests render several states in one process.
+struct SkinGuard {
+    ~SkinGuard() { Theme::setSkin(QStringLiteral("d05")); }
+};
+
+// The skin a state renders with (DESIGN-2.md 12); every other state is the D-05.
+QString skinForState(const QString &state)
+{
+    if (state == QLatin1String("jp08"))
+        return QStringLiteral("jp08");
+    if (state == QLatin1String("ju06a-60") || state == QLatin1String("flip-hint"))
+        return QStringLiteral("ju06a-60");
+    if (state == QLatin1String("ju06a-106") || state == QLatin1String("flip-prompt")
+        || state == QLatin1String("settings-devices"))
+        return QStringLiteral("ju06a-106");
+    return QStringLiteral("d05");
+}
+
+// What the LED display shows in a skin state. The window still drives the D-05 only (the router
+// reaches the UI in T8.2 and T8.3), so these scenes are set directly: the contents of the
+// mockups in docs/design (DESIGN-2.md 10) and the context strings of DESIGN-2.md 4.2.
+struct LedScene {
+    QString readout;
+    QString name;
+    QString context;
+    LedDisplayWidget::Tone tone = LedDisplayWidget::Tone::Secondary;
+};
+
+LedScene sceneForState(const QString &state)
+{
+#ifdef Q_OS_MACOS
+    const QString key = QStringLiteral("CMD");
+#else
+    const QString key = QStringLiteral("CTRL");
+#endif
+    if (state == QLatin1String("jp08"))
+        return {QStringLiteral("35"), QStringLiteral("Lo Brass"), Theme::skin().idleContext,
+                LedDisplayWidget::Tone::Secondary};
+    if (state == QLatin1String("ju06a-60"))
+        return {QStringLiteral("4-5"), QStringLiteral("LD Silo Lead"), Theme::skin().idleContext,
+                LedDisplayWidget::Tone::Secondary};
+    if (state == QLatin1String("ju06a-106"))
+        return {QStringLiteral("1-1"), QStringLiteral("Brass"), Theme::skin().idleContext,
+                LedDisplayWidget::Tone::Secondary};
+    if (state == QLatin1String("flip-prompt"))  // armed for the 60 engine while believing 106
+        return {QStringLiteral("1-1"), QStringLiteral("Brass"), QStringLiteral("FLIP SWITCH TO 60"),
+                LedDisplayWidget::Tone::Lit};
+    if (state == QLatin1String("flip-hint"))  // hint for the 106 engine while believing 60
+        return {QStringLiteral("4-5"), QStringLiteral("LD Silo Lead"),
+                QStringLiteral("FLIPPED TO 106? %1+E").arg(key), LedDisplayWidget::Tone::Primary};
+    return {};
+}
+
+}  // namespace
+
 int runScreenshot(const CliOptions &opts)
 {
     QTextStream err(stderr);
     const QString &state = opts.screenshotState;
+
+    // The skin first, before any widget exists: they are built in it.
+    const SkinGuard skinGuard;
+    Theme::setSkin(skinForState(state));
 
     OverrideGuard guard;
     std::unique_ptr<QTemporaryDir> tmp;
@@ -105,13 +169,17 @@ int runScreenshot(const CliOptions &opts)
         window.list()->setFocus();  // the mockup's second frame has the list focused
     }
 
-    if (state == QLatin1String("settings") || state == QLatin1String("settings-error")) {
+    if (state == QLatin1String("settings") || state == QLatin1String("settings-error")
+        || state == QLatin1String("settings-devices")) {
         // The dialog alone, as in docs/design/mockup-settings.png: the fake output open, no
         // input, channel 1, resend-on-connect on. The error variant asks for a port the fake
-        // does not have: "Port not found", TEST disabled.
+        // does not have: "Port not found", TEST disabled. settings-devices is, until T8.2 adds
+        // the device list and pages (DESIGN-2.md 7), this same version 1 dialog in the JU-06A
+        // JUNO-106 skin; `devices` below is likewise the plain D-05 window until the switcher
+        // (DESIGN-2.md 4.4) exists.
         AppSettings::Values values;
-        values.outputPort = state == QLatin1String("settings") ? QStringLiteral("Fake D-05 In")
-                                                               : QStringLiteral("Hapax MIDI 1");
+        values.outputPort = state == QLatin1String("settings-error") ? QStringLiteral("Hapax MIDI 1")
+                                                                     : QStringLiteral("Fake D-05 In");
         values.resendOnConnect = true;
         SettingsDialog dialog(link, values);
         dialog.show();
@@ -145,6 +213,10 @@ int runScreenshot(const CliOptions &opts)
         return Exit::Ok;
     }
 
+    if (Theme::skin().display == Theme::DisplayKind::Led) {  // the readout, name and context of the state
+        const LedScene scene = sceneForState(state);
+        window.ledDisplay()->setContent(scene.readout, scene.name, scene.context, scene.tone);
+    }
     window.resize(opts.screenshotSize);
     window.show();
     window.activateWindow();

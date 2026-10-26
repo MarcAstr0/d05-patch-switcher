@@ -855,7 +855,7 @@ private slots:
         auto *delegate = qobject_cast<PatchDelegate *>(r.w->list()->itemDelegate());
         delegate->prepare(*r.w->model(), width);
         QImage img(width, PatchDelegate::RowHeight, QImage::Format_RGB32);
-        img.fill(Theme::well);
+        img.fill(Theme::colors().well);
         QPainter painter(&img);
         QStyleOptionViewItem opt;
         opt.widget = r.w->list();
@@ -870,7 +870,7 @@ private slots:
         const int visibleRight = 84 + fm.horizontalAdvance(name, elided.size() - 1);
         int first = -1, last = -1;
         for (int x = 0; x < width; ++x) {
-            if (QColor(img.pixel(x, 5)) == Theme::matchBack) {
+            if (QColor(img.pixel(x, 5)) == Theme::colors().matchBack) {
                 if (first < 0)
                     first = x;
                 last = x;
@@ -1020,7 +1020,7 @@ private slots:
         const auto &row = r.w->model()->row(0);
         PatchDelegate delegate;
         QImage img(r.w->list()->viewport()->width(), PatchDelegate::RowHeight, QImage::Format_RGB32);
-        img.fill(Theme::well);
+        img.fill(Theme::colors().well);
         QPainter painter(&img);
         QStyleOptionViewItem opt;
         opt.widget = r.w->list();
@@ -1031,11 +1031,11 @@ private slots:
         // DESIGN 7.3: matchBack at y 4..23, starting at x 84 + advance(name, start).
         QFontMetrics fm(Theme::font(Theme::Role::ListName));
         const int x = 84 + fm.horizontalAdvance(row.name, row.ranges[0].start) + 2;
-        QCOMPARE(QColor(img.pixel(x, 4)), Theme::matchBack);  // top row of the rect: above every glyph
-        QCOMPARE(QColor(img.pixel(x, 3)), Theme::well);
-        QCOMPARE(QColor(img.pixel(x, 24)), Theme::well);
+        QCOMPARE(QColor(img.pixel(x, 4)), Theme::colors().matchBack);  // top row of the rect: above every glyph
+        QCOMPARE(QColor(img.pixel(x, 3)), Theme::colors().well);
+        QCOMPARE(QColor(img.pixel(x, 24)), Theme::colors().well);
         // The key-mode box border (DESIGN 7.2): 1 px tagBorder at (Wl - 52, 6).
-        QCOMPARE(QColor(img.pixel(img.width() - 52, 10)), Theme::tagBorder);
+        QCOMPARE(QColor(img.pixel(img.width() - 52, 10)), Theme::colors().tagBorder);
     }
 };
 

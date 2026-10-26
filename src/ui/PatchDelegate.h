@@ -64,6 +64,8 @@ private:
         QVector<QPair<int, int>> highlights;  // x relative to the name start, width; clipped
     };
     void layoutRow(const PatchListModel::Row &, int width, RowLayout *out) const;
+    void refreshColours();
+
     QVector<RowLayout> m_layouts;
     int m_layoutWidth = -1;
     QFont m_nameFont;

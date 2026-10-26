@@ -22,7 +22,7 @@ public:
     bool hasLogo() const { return !m_sourceSize.isEmpty(); }
     // Logical size the logo is drawn at (empty without a logo).
     QSize logoSize() const;
-    // Width of the wordmark as drawn (tests, About box).
+    // Width of the wordmark as drawn in the current skin (tests, About box).
     static int wordmarkWidth();
 
     QSize sizeHint() const override { return {SlotMaxWidth, SlotHeight}; }
@@ -34,6 +34,7 @@ protected:
 
 private:
     void rescale();
+    void refreshSkin();
 
     QString m_path;
     QSize m_sourceSize;  // from the header; empty when there is no usable logo
@@ -43,6 +44,7 @@ private:
     QFont m_wordFont;
     QFont m_subFont;
     int m_wordmarkAdvance = 0;
+    QString m_subText;
 };
 
 }  // namespace d05

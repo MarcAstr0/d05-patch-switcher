@@ -398,7 +398,7 @@ void DisplayWidget::ensureResources()
 
     ++m_frameBuilds;
     m_frame = QPixmap(pixW, pixH);  // device pixels; the DPR is set after painting
-    m_frame.fill(Theme::lcdBack);
+    m_frame.fill(Theme::colors().lcdBack);
     {
         QPainter p(&m_frame);
         for (int l = 0; l < Lines; ++l)
@@ -420,7 +420,7 @@ void DisplayWidget::buildAtlas()
     const int P = m_P;
     const int d = qMax(1, P - m_g);
     m_atlas = QImage(kGlyphCount * 5 * P, 7 * P, QImage::Format_RGB32);
-    m_atlas.fill(Theme::lcdBack);
+    m_atlas.fill(Theme::colors().lcdBack);
     QPainter p(&m_atlas);
     p.setPen(Qt::NoPen);
     for (int g = 0; g < kGlyphCount; ++g) {
@@ -429,7 +429,7 @@ void DisplayWidget::buildAtlas()
                 const bool on = (kGlyphs[g][r] >> (4 - c)) & 1;
                 if (!on && !m_showGhost)
                     continue;
-                p.fillRect(g * 5 * P + c * P, r * P, d, d, on ? Theme::lcdOn : Theme::lcdGhost);
+                p.fillRect(g * 5 * P + c * P, r * P, d, d, on ? Theme::colors().lcdOn : Theme::colors().lcdGhost);
             }
         }
     }
@@ -460,11 +460,11 @@ void DisplayWidget::paintEvent(QPaintEvent *)
     QPainter p(this);
     const int w = width();
     const int h = height();
-    p.fillRect(0, 0, w, h, Theme::bezel);
-    p.fillRect(0, 0, w, 1, Theme::bezelRimTop);
-    p.fillRect(0, 1, 1, h - 1, Theme::bezelRim);
-    p.fillRect(w - 1, 1, 1, h - 1, Theme::bezelRim);
-    p.fillRect(1, h - 1, w - 2, 1, Theme::bezelRim);
+    p.fillRect(0, 0, w, h, Theme::colors().bezel);
+    p.fillRect(0, 0, w, 1, Theme::colors().bezelRimTop);
+    p.fillRect(0, 1, 1, h - 1, Theme::colors().bezelRim);
+    p.fillRect(w - 1, 1, 1, h - 1, Theme::colors().bezelRim);
+    p.fillRect(1, h - 1, w - 2, 1, Theme::colors().bezelRim);
     p.drawPixmap(kMarginX, kMarginY, m_frame);
 }
 

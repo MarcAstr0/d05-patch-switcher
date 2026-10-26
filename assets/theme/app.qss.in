@@ -9,9 +9,10 @@
  * nameplate and device switcher, list rows, status bar LED) is not styled here; Theme
  * exposes the same resolved tokens as a runtime palette.
  *
- * Template syntax (DESIGN-2.md 2.5): @{<colour token>} is replaced by the token's resolved
- * #RRGGBB for the skin; @{skin} by the skin id; the line holding only @{TOKEN_BLOCK}
- * by the token comment block. Any other @{...} is a generator error.
+ * Template syntax (DESIGN-2.md 2.5): an at sign and a colour token name in braces is replaced
+ * by the token's resolved #RRGGBB for the skin; the same with the word skin, by the skin id;
+ * a line holding only the same with TOKEN_BLOCK, by the token comment block. Any other
+ * such placeholder is a generator error.
  *
 @{TOKEN_BLOCK}
  *

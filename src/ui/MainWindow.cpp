@@ -9,6 +9,7 @@
 #include "ui/BankGrid.h"
 #include "ui/DisplayWidget.h"
 #include "ui/GroupBar.h"
+#include "ui/LedDisplayWidget.h"
 #include "ui/Nameplate.h"
 #include "ui/PanelButton.h"
 #include "ui/PatchDelegate.h"
@@ -119,7 +120,7 @@ protected:
     void paintEvent(QPaintEvent *) override
     {
         QPainter p(this);
-        p.fillRect(rect(), m_lit ? Theme::ledOn : Theme::ledOff);
+        p.fillRect(rect(), m_lit ? Theme::colors().ledOn : Theme::colors().ledOff);
     }
 
 private:
@@ -249,7 +250,7 @@ MainWindow::MainWindow(PatchCatalog &catalog, Library &library, MidiLink &link, 
     buildWidgets();
     buildActions();
     resize(960, 560);
-    layoutAll();
+    applySkin();  // also lays out
 
     applyCurrent(m_current);
     updateDisplayConnection();
@@ -276,6 +277,8 @@ void MainWindow::buildWidgets()
 
     m_nameplate = new Nameplate(Paths::logoPath(), m_central);
     m_display = new DisplayWidget(m_central);
+    m_led = new LedDisplayWidget(m_central);
+    m_led->hide();  // shown instead of the LCD on the JP-08 and JU-06A skins (applySkin)
     m_groupBar = new GroupBar(m_central);
     m_grid = new BankGrid(m_central);
 
@@ -303,6 +306,12 @@ void MainWindow::buildWidgets()
     m_autoSend->setCheckable(true);  // the LED follows the checked state (DESIGN 6.5)
     m_system = new PanelButton(PanelButton::Kind::Plain, m_central);
     m_system->setObjectName(QStringLiteral("systemButton"));
+    // Face sets by role (DESIGN-2.md 5.2); on the D-05 skin they are the version 1 button colours.
+    for (PanelButton *b : {m_viewAll, m_viewFav, m_viewRecent})
+        b->setFaceSet(PanelButton::FaceSet::View);
+    m_autoSend->setFaceSet(PanelButton::FaceSet::Commit);
+    for (PanelButton *b : {m_prev, m_next, m_system})
+        b->setFaceSet(PanelButton::FaceSet::Transport);
 
     m_search = new QLineEdit(m_central);
     m_search->setObjectName(QStringLiteral("searchField"));
@@ -400,6 +409,11 @@ void MainWindow::buildWidgets()
         if (!m_inLayout)
             layoutAll();  // a DPR or screen change moved the band without a window resize
     });
+    connect(m_led, &LedDisplayWidget::sizeChanged, this, [this] {
+        if (!m_inLayout)
+            layoutAll();
+    });
+    connect(Theme::notifier(), &Theme::Notifier::skinChanged, this, [this] { applySkin(); });
     connect(&m_link, &MidiLink::statusChanged, this, [this](const QString &status) {
         if (status.startsWith(QStringLiteral("Error")))
             showMessage(status);
@@ -493,15 +507,44 @@ PanelButton *MainWindow::viewButton(PatchListModel::View view) const
 
 // ---------------------------------------------------------------------------- layout
 
+// The parts of the window that depend on the skin (DESIGN-2.md 2.6): which display fills the
+// slot, whether the group slot holds the group bar, the search placeholder. Called once at
+// construction and from Theme::skinChanged(), which Theme::setSkin() emits with this window's
+// updates disabled, so the window paints once. The style sheet and the painted widgets follow
+// the palette on their own; the group-slot content of the JU-06A skins is T8.3.
+void MainWindow::applySkin()
+{
+    const Theme::Skin &skin = Theme::skin();
+    const bool led = skin.display == Theme::DisplayKind::Led;
+    m_display->setVisible(!led);
+    m_led->setVisible(led);
+    if (led)  // until the window drives it (T8.3): dashes and the idle context
+        m_led->setContent(QString(skin.ledCells, QLatin1Char('-')), QString(), skin.idleContext,
+                          LedDisplayWidget::Tone::Secondary);
+    // The JP-08's group slot is empty and the JU-06A's holds the engine control (T8.3).
+    m_groupBar->setVisible(skin.groupSlot == Theme::GroupSlot::GroupBar);
+    m_search->setPlaceholderText(skin.searchPlaceholder);
+    layoutAll();
+    update();
+}
+
 void MainWindow::layoutAll()
 {
     const QScopedValueRollback<bool> guard(m_inLayout, true);
     const int W = width();
     const int H = height();
 
-    m_display->setStep(DisplayWidget::pitchForWidth(W), W);
-    const QSize ds = m_display->sizeHint();
-    m_display->setGeometry(kMargin, 46, ds.width(), ds.height());
+    // The slot holds the LCD or the LED display, whichever the skin names; both report the same
+    // size, so nothing below moves when the skin changes (DESIGN-2.md 4.1).
+    const bool led = Theme::skin().display == Theme::DisplayKind::Led;
+    const int step = DisplayWidget::pitchForWidth(W);
+    QWidget *active = led ? static_cast<QWidget *>(m_led) : static_cast<QWidget *>(m_display);
+    if (led)
+        m_led->setStep(step, W);
+    else
+        m_display->setStep(step, W);
+    const QSize ds = active->sizeHint();
+    active->setGeometry(kMargin, 46, ds.width(), ds.height());
     m_nameplate->setGeometry(kMargin, 10, qMin(Nameplate::SlotMaxWidth, W - 2 * kMargin), Nameplate::SlotHeight);
 
     const int B = 46 + ds.height() + 14;
@@ -526,12 +569,13 @@ void MainWindow::layoutAll()
     m_list->setGeometry(X, B + 104, R, H - kStatusHeight - B - 116);
 
     auto *band = static_cast<Band *>(m_band);
-    const QColor &primary = Theme::labelPrimary;
+    const QColor &primary = Theme::colors().labelPrimary;
+    const QColor &commit = Theme::colors().labelCommit;
     band->setLabels({
         {QStringLiteral("ALL"), facesX[0] + 22, 15 + 9, primary},
         {QStringLiteral("FAVOURITES"), facesX[1] + 22, 15 + 9, primary},
         {QStringLiteral("RECENTS"), facesX[2] + 22, 15 + 9, primary},
-        {QStringLiteral("AUTO SEND"), facesX[3] + 22, 15 + 9, Theme::labelRed},
+        {QStringLiteral("AUTO SEND"), facesX[3] + 22, 15 + 9, commit},
         {QStringLiteral("SYSTEM"), facesX[4] + 22, 15 + 9, primary},
         {QStringLiteral("PREV"), kMargin + 22, 218 + 9, primary},
         {QStringLiteral("NEXT"), kMargin + 50 + 22, 218 + 9, primary},

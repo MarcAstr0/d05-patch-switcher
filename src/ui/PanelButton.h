@@ -16,6 +16,10 @@ class PanelButton : public QAbstractButton {
     Q_OBJECT
 public:
     enum class Kind { Led, LegendLed, Plain, WedgeLeft, WedgeRight };
+    // Which of the five colour sets of DESIGN-2.md 5.2 colours the face: the number row, group
+    // bar and engine buttons (`button`), the bank row, ALL / FAVOURITES / RECENTS, AUTO SEND,
+    // and PREV / NEXT / SYSTEM. On the D-05 all five resolve to the version 1 button colours.
+    enum class FaceSet { Button, Bank, View, Commit, Transport };
 
     // Everything paintFace() needs about one button.
     struct Look {
@@ -26,6 +30,8 @@ public:
         bool pressed = false;
         bool focused = false;
         bool disabled = false;
+        bool armed = false;  // lens skins: ring and dark centre (DESIGN-2.md 5.2); only if not lit
+        FaceSet faces = FaceSet::Button;
     };
 
     static constexpr int FaceW = 44;
@@ -37,6 +43,8 @@ public:
     Kind kind() const { return m_kind; }
     void setLegend(const QString &legend);
     QString legend() const { return m_legend; }
+    FaceSet faceSet() const { return m_faces; }
+    void setFaceSet(FaceSet faces);
     // Lit LED: set by hand, or follows the checked state of a checkable button.
     void setLit(bool lit);
     bool lit() const { return m_lit || (isCheckable() && isChecked()); }
@@ -47,8 +55,8 @@ public:
         return QRect(face.x() - Margin, face.y() - Margin, FaceW + 2 * Margin, FaceH + 2 * Margin);
     }
 
-    // The advance of `text` in `font` at `dpr`, cached so painting measures nothing: the cache
-    // is dropped when the font or the device pixel ratio differs from the one it was built for.
+    // The advance of `text` in `font` at `dpr`, cached so painting measures nothing: one cache
+    // per (font, device pixel ratio), for the handful of fonts a window paints with.
     static qreal textAdvance(const QString &text, const QFont &font, qreal dpr);
     // How many times a text advance was measured (tests: painting must not add to it).
     static int metricsBuildCount();
@@ -72,6 +80,7 @@ private:
     QString m_legend;
     bool m_lit = false;
     bool m_hover = false;
+    FaceSet m_faces = FaceSet::Button;
 };
 
 }  // namespace d05

@@ -18,7 +18,7 @@ import sys
 
 from PIL import Image
 
-# Token values (tokens-2.json): d05 tile, LED readout of the JU-06A skins, faces of three skins.
+# Token values (tokens.json): d05 tile, LED readout of the JU-06A skins, faces of three skins.
 C = dict(panel="#202326", band="#26292B", bandEdge="#3A3E41", bezelRim="#2E3134", bezel="#050606",
          ledBack="#0A0302", segOn="#FF3A2A", segGhost="#1C0806",
          d05Face="#3F4244", d05LedOff="#2A1A1A",
