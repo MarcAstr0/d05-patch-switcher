@@ -10,9 +10,12 @@ namespace {
 
 // Folds one UTF-16 unit: lowercase, first character of its canonical decomposition
 // (so accents drop), combining marks vanish (returns a null QChar).
-QChar foldChar(QChar c)
+// apostrophes: JP-08 / JU-06A only, U+2019 compares equal to '.
+QChar foldChar(QChar c, bool apostrophes = false)
 {
     const char16_t u = c.unicode();
+    if (apostrophes && u == 0x2019)
+        return QLatin1Char('\'');
     if (u < 0x80)
         return (u >= 'A' && u <= 'Z') ? QChar(char16_t(u + 32)) : c;
     if (c.isSurrogate())
@@ -24,12 +27,12 @@ QChar foldChar(QChar c)
     return d.isEmpty() ? QChar() : d.at(0).toCaseFolded();
 }
 
-QString foldString(const QString &s)
+QString foldString(const QString &s, bool apostrophes = false)
 {
     QString out;
     out.reserve(s.size());
     for (QChar c : s) {
-        const QChar f = foldChar(c);
+        const QChar f = foldChar(c, apostrophes);
         if (!f.isNull())
             out.append(f);
     }
@@ -155,7 +158,7 @@ void SearchQuery::parseSmall(const QStringList &parts, bool ju06a)
             }
         }
         if (t.kind == Kind::Text) {
-            t.folded = foldString(raw);
+            t.folded = foldString(raw, true);
             if (t.folded.isEmpty())
                 continue;
         }
@@ -206,30 +209,48 @@ bool SearchQuery::matches(const PatchAddress &a, const QString &name, QVector<Ra
     if (!needText)
         return true;
 
-    // Finds `t` in `s`; fills start/length in `s` indices.
-    auto find = [](const QString &s, const Token &t, int *start, int *length) {
-        if (isAscii(s)) {
+    // A name folded once per call (non-ASCII names only; ASCII names are searched in place).
+    const bool apos = m_model != Model::D05;
+    struct Folded {
+        const QString *orig = nullptr;
+        bool ascii = true;
+        QString folded;
+        QVector<int> map;  // folded index -> original index
+    };
+    auto prepare = [apos](const QString &s) {
+        Folded f;
+        f.orig = &s;
+        f.ascii = isAscii(s);
+        if (!f.ascii) {
+            f.folded.reserve(s.size());
+            f.map.reserve(s.size());
+            for (int i = 0; i < s.size(); ++i) {
+                const QChar c = foldChar(s.at(i), apos);
+                if (!c.isNull()) {
+                    f.folded.append(c);
+                    f.map.append(i);
+                }
+            }
+        }
+        return f;
+    };
+    const Folded fname = prepare(name);
+    const Folded falt = altName.isEmpty() ? Folded() : prepare(altName);
+
+    // Finds `t` in the name; fills start/length in original-string indices.
+    auto find = [apos](const Folded &f, const Token &t, int *start, int *length) {
+        const QString &s = *f.orig;
+        if (f.ascii) {
             *start = s.indexOf(t.folded, 0, Qt::CaseInsensitive);
             *length = t.folded.size();
             return *start >= 0;
         }
-        QString folded;
-        QVector<int> map;  // folded index -> original index
-        folded.reserve(s.size());
-        map.reserve(s.size());
-        for (int i = 0; i < s.size(); ++i) {
-            const QChar f = foldChar(s.at(i));
-            if (!f.isNull()) {
-                folded.append(f);
-                map.append(i);
-            }
-        }
-        const int fi = folded.indexOf(t.folded);
+        const int fi = f.folded.indexOf(t.folded);
         if (fi < 0)
             return false;
-        *start = map.at(fi);
-        int end = map.at(fi + t.folded.size() - 1) + 1;
-        while (end < s.size() && foldChar(s.at(end)).isNull())
+        *start = f.map.at(fi);
+        int end = f.map.at(fi + t.folded.size() - 1) + 1;
+        while (end < s.size() && foldChar(s.at(end), apos).isNull())
             ++end;  // keep trailing combining marks inside the range
         *length = end - *start;
         return true;
@@ -240,10 +261,10 @@ bool SearchQuery::matches(const PatchAddress &a, const QString &name, QVector<Ra
         if (t.kind != Kind::Text)
             continue;
         int start = 0, length = 0;
-        if (find(name, t, &start, &length)) {
+        if (find(fname, t, &start, &length)) {
             if (ranges)
                 found.append({start, length});
-        } else if (altName.isEmpty() || !find(altName, t, &start, &length)) {
+        } else if (altName.isEmpty() || !find(falt, t, &start, &length)) {
             return false;
         }
     }

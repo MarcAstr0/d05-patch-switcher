@@ -279,6 +279,31 @@ private slots:
         QVERIFY(t.matches(P("106:8-8", Model::JU06A), QStringLiteral("Zebra Lead"), &r, QStringLiteral("Takeoff")));
         QCOMPARE(r, (QVector<Range>{{0, 5}}));
         QVERIFY(!t.matches(P("106:8-8", Model::JU06A), QStringLiteral("Zebra Lead"), &r));
+        // typographic apostrophe folds to ' on both sides (JP-08 / JU-06A only)
+        const QString louis = QString::fromUtf8("Louis\xe2\x80\x99 Weapon");
+        for (const char *q : {"louis'", "louis\xe2\x80\x99", "s' w"}) {
+            QVector<Range> lr;
+            const SearchQuery sq(QString::fromUtf8(q), Model::JU06A);
+            QVERIFY(sq.matches(P("106:8-6", Model::JU06A), louis, &lr));
+            QVERIFY(!lr.isEmpty());
+            QCOMPARE(lr.first().start, q[0] == 's' ? 4 : 0);
+        }
+        {
+            QVector<Range> lr;
+            QVERIFY(SearchQuery(QString::fromUtf8("louis\xe2\x80\x99"), Model::JU06A)
+                        .matches(P("106:8-6", Model::JU06A), louis, &lr));
+            QCOMPARE(lr, (QVector<Range>{{0, 6}}));
+            QVERIFY(SearchQuery(QString::fromUtf8("weapon"), Model::JP08)
+                        .matches(P("1-1", Model::JP08), louis, &lr));
+            QCOMPARE(lr, (QVector<Range>{{7, 6}}));
+            // straight-quote name, curly query; and the factory (alt) name path
+            QVERIFY(SearchQuery(QString::fromUtf8("louis\xe2\x80\x99"), Model::JP08)
+                        .matches(P("1-1", Model::JP08), QStringLiteral("Louis' X")));
+            QVERIFY(SearchQuery(QStringLiteral("louis'"), Model::JU06A)
+                        .matches(P("106:8-6", Model::JU06A), QStringLiteral("Mine"), nullptr, louis));
+        }
+        // the D-05 does not fold apostrophes
+        QVERIFY(!SearchQuery(QStringLiteral("louis'"), Model::D05).matches(A("P3-45"), louis));
         // D-05 constructor unchanged
         QVERIFY(SearchQuery(QStringLiteral("p345"), Model::D05).matches(A("P3-45"), QStringLiteral("Foo")));
     }
