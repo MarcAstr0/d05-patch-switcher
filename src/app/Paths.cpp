@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 
 namespace d05::Paths {
 
@@ -37,38 +38,55 @@ QString dataDir()
     return appDataParent() + QStringLiteral("/boutique-patch-switcher");
 }
 
-bool migrateDataDir(const QString &oldDir, const QString &newDir)
+MigrateResult migrateDataDir(const QString &oldDir, const QString &newDir)
 {
     if (QFileInfo::exists(newDir) || !QFileInfo(oldDir).isDir())
-        return false;
-    if (!QDir().mkpath(newDir))
-        return false;
-    QStringList copied;
-    bool ok = true;
-    const QFileInfoList files = QDir(oldDir).entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
+        return MigrateResult::NotNeeded;
+    // Copy into a staging directory next to the target and rename it into place only when every
+    // file is there: the final directory appearing is the completion signal.
+    const QString staging = newDir + QStringLiteral(".migrating");
+    if (QFileInfo::exists(staging))
+        QDir(staging).removeRecursively();  // left behind by a crash or an earlier failure
+    auto fail = [&] {
+        QDir(staging).removeRecursively();
+        return MigrateResult::Failed;
+    };
+    if (!QDir().mkpath(staging))
+        return fail();
+    const QFileInfoList files =
+        QDir(oldDir).entryInfoList(QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot);
     for (const QFileInfo &fi : files) {
-        const QString target = newDir + QLatin1Char('/') + fi.fileName();
-        if (QFile::copy(fi.absoluteFilePath(), target))
-            copied << target;
-        else {
-            ok = false;
-            break;
-        }
+        if (!fi.isFile())
+            continue;
+        const QString target = staging + QLatin1Char('/') + fi.fileName();
+        if (!QFile::copy(fi.absoluteFilePath(), target))
+            return fail();
+        // A read-only source must not give read-only copies.
+        const QFile::Permissions perms = QFile::permissions(target);
+        if (!QFile::setPermissions(target, perms | QFile::ReadOwner | QFile::WriteOwner))
+            return fail();
     }
-    if (!ok) {
-        // Leave nothing half-done, so the next start tries again. Only the new directory is touched.
-        for (const QString &t : copied)
-            QFile::remove(t);
-        QDir().rmdir(newDir);
-    }
-    return ok;
+    if (!QDir().rename(staging, newDir))
+        return fail();
+    return MigrateResult::Migrated;
 }
 
-bool migrateLegacyDataDir()
+MigrateResult migrateLegacyDataDir()
 {
     if (!g_override.isEmpty())
-        return false;  // --config-dir bypasses the migration
+        return MigrateResult::NotNeeded;  // --config-dir bypasses the migration
     return migrateDataDir(legacyDataDir(), dataDir());
+}
+
+bool useScratchDataDir()
+{
+    static QTemporaryDir *scratch = nullptr;  // lives until the process ends
+    if (!scratch)
+        scratch = new QTemporaryDir();
+    if (!scratch->isValid())
+        return false;
+    setOverride(scratch->path());
+    return true;
 }
 
 QString libraryPath() { return dataDir() + QStringLiteral("/library.json"); }

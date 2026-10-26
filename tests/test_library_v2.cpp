@@ -68,6 +68,14 @@ private slots:
     void dataDirNoOldNoNew();
     void configDirBypassesMigration();
     void failedCopyLeavesNothingAndRetries();
+    void unreadableFileFailsThenRetries();
+    void staleStagingCleaned();
+    void scratchDirKeepsFinalMissing();
+    void hiddenFilesCopied();
+    void readOnlySourceGivesWritableCopies();
+    void strayTempIsNotTheKeptCopy();
+    void failedLegacyCopyThenWrite();
+    void userNameEqualToFactoryName();
 };
 
 void TestLibraryV2::roundTripThreeDevices()
@@ -329,7 +337,7 @@ void TestLibraryV2::dataDirCopiedOnceAndOldUntouched()
     QCOMPARE(before.size(), 3);
     QTest::qWait(30);
 
-    QVERIFY(Paths::migrateDataDir(oldDir, newDir));
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::Migrated);
     QCOMPARE(readAll(newDir + QStringLiteral("/library.json")), before.value(QStringLiteral("library.json")).data);
     QCOMPARE(readAll(newDir + QStringLiteral("/settings.ini")), before.value(QStringLiteral("settings.ini")).data);
     QCOMPARE(readAll(newDir + QStringLiteral("/logo.png")), QByteArray("png"));
@@ -339,7 +347,7 @@ void TestLibraryV2::dataDirCopiedOnceAndOldUntouched()
 
     // Copied once: a later start, with the new directory in use, copies nothing.
     writeBytes(newDir + QStringLiteral("/library.json"), "{\"version\":2}");
-    QVERIFY(!Paths::migrateDataDir(oldDir, newDir));
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::NotNeeded);
     QCOMPARE(readAll(newDir + QStringLiteral("/library.json")), QByteArray("{\"version\":2}"));
 
     // The old directory is exactly as it was: same files, bytes and modification times.
@@ -356,10 +364,10 @@ void TestLibraryV2::dataDirNoOldNoNew()
     QTemporaryDir root;
     const QString oldDir = root.filePath(QStringLiteral("old"));
     const QString newDir = root.filePath(QStringLiteral("new"));
-    QVERIFY(!Paths::migrateDataDir(oldDir, newDir));  // fresh install: nothing to copy
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::NotNeeded);  // fresh install: nothing to copy
     QVERIFY(!QFileInfo::exists(newDir));
     QDir().mkpath(oldDir);  // an empty old directory still counts as there
-    QVERIFY(Paths::migrateDataDir(oldDir, newDir));
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::Migrated);
     QVERIFY(QFileInfo(newDir).isDir());
 }
 
@@ -367,7 +375,7 @@ void TestLibraryV2::configDirBypassesMigration()
 {
     QTemporaryDir cfg;
     Paths::setOverride(cfg.path());
-    QVERIFY(!Paths::migrateLegacyDataDir());
+    QCOMPARE(Paths::migrateLegacyDataDir(), Paths::MigrateResult::NotNeeded);
     QCOMPARE(QDir(cfg.path()).entryList(QDir::NoDotAndDotDot | QDir::AllEntries).size(), 0);
     Paths::setOverride(QString());
 }
@@ -381,10 +389,171 @@ void TestLibraryV2::failedCopyLeavesNothingAndRetries()
     writeBytes(oldDir + QStringLiteral("/b.json"), "b");
     // newDir cannot be created under a regular file.
     writeBytes(root.filePath(QStringLiteral("blocker")), "x");
-    QVERIFY(!Paths::migrateDataDir(oldDir, root.filePath(QStringLiteral("blocker/new"))));
+    QCOMPARE(Paths::migrateDataDir(oldDir, root.filePath(QStringLiteral("blocker/new"))), Paths::MigrateResult::Failed);
     QCOMPARE(readAll(oldDir + QStringLiteral("/a.json")), QByteArray("a"));
-    QVERIFY(Paths::migrateDataDir(oldDir, newDir));  // a later start succeeds
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::Migrated);  // a later start succeeds
     QCOMPARE(readAll(newDir + QStringLiteral("/b.json")), QByteArray("b"));
+}
+
+namespace {
+// True when chmod 000 really makes the file unreadable (not so when running as root).
+bool makeUnreadable(const QString &path)
+{
+    QFile::setPermissions(path, QFile::Permissions());
+    QFile f(path);
+    if (f.open(QIODevice::ReadOnly)) {
+        QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner);
+        return false;
+    }
+    return true;
+}
+}  // namespace
+
+void TestLibraryV2::unreadableFileFailsThenRetries()
+{
+    QTemporaryDir root;
+    const QString oldDir = root.filePath(QStringLiteral("old"));
+    const QString newDir = root.filePath(QStringLiteral("new"));
+    writeBytes(oldDir + QStringLiteral("/library.json"), "lib");
+    writeBytes(oldDir + QStringLiteral("/settings.ini"), "[a]\nb=1\n");
+    if (!makeUnreadable(oldDir + QStringLiteral("/settings.ini")))
+        QSKIP("file permissions are not enforced here");
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::Failed);
+    QVERIFY(!QFileInfo::exists(newDir));  // no final directory after a mid-copy failure
+    QVERIFY(!QFileInfo::exists(newDir + QStringLiteral(".migrating")));
+    QFile::setPermissions(oldDir + QStringLiteral("/settings.ini"), QFile::ReadOwner | QFile::WriteOwner);
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::Migrated);
+    QCOMPARE(readAll(newDir + QStringLiteral("/settings.ini")), QByteArray("[a]\nb=1\n"));
+    QCOMPARE(readAll(newDir + QStringLiteral("/library.json")), QByteArray("lib"));
+}
+
+void TestLibraryV2::staleStagingCleaned()
+{
+    QTemporaryDir root;
+    const QString oldDir = root.filePath(QStringLiteral("old"));
+    const QString newDir = root.filePath(QStringLiteral("new"));
+    writeBytes(oldDir + QStringLiteral("/library.json"), "lib");
+    writeBytes(newDir + QStringLiteral(".migrating/junk.txt"), "half");
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::Migrated);
+    QVERIFY(!QFileInfo::exists(newDir + QStringLiteral(".migrating")));
+    QVERIFY(!QFileInfo::exists(newDir + QStringLiteral("/junk.txt")));
+    QCOMPARE(readAll(newDir + QStringLiteral("/library.json")), QByteArray("lib"));
+}
+
+void TestLibraryV2::scratchDirKeepsFinalMissing()
+{
+    // The rule after a failed migration: the session writes to a throwaway directory, so a save
+    // cannot create the final directory and the next start retries.
+    QTemporaryDir root;
+    const QString oldDir = root.filePath(QStringLiteral("old"));
+    const QString newDir = root.filePath(QStringLiteral("new"));
+    writeBytes(oldDir + QStringLiteral("/library.json"), "lib");
+    writeBytes(oldDir + QStringLiteral("/settings.ini"), "x");
+    if (!makeUnreadable(oldDir + QStringLiteral("/settings.ini")))
+        QSKIP("file permissions are not enforced here");
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::Failed);
+    QVERIFY(Paths::useScratchDataDir());
+    QVERIFY(!Paths::overrideDir().isEmpty());
+    {
+        Three a(Paths::libraryPath());
+        QCOMPARE(a.lib.load(), Library::LoadResult::Fresh);
+        a.lib.toggleFavorite(D("P1-11"));
+        QVERIFY(a.lib.flush());
+    }
+    Paths::setOverride(QString());
+    QVERIFY(!QFileInfo::exists(newDir));
+    QFile::setPermissions(oldDir + QStringLiteral("/settings.ini"), QFile::ReadOwner | QFile::WriteOwner);
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::Migrated);
+    QCOMPARE(readAll(newDir + QStringLiteral("/library.json")), QByteArray("lib"));
+}
+
+void TestLibraryV2::hiddenFilesCopied()
+{
+    QTemporaryDir root;
+    const QString oldDir = root.filePath(QStringLiteral("old"));
+    const QString newDir = root.filePath(QStringLiteral("new"));
+    writeBytes(oldDir + QStringLiteral("/.hidden"), "h");
+    writeBytes(oldDir + QStringLiteral("/sub/inner.txt"), "i");
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::Migrated);
+    QCOMPARE(readAll(newDir + QStringLiteral("/.hidden")), QByteArray("h"));
+    QVERIFY(!QFileInfo::exists(newDir + QStringLiteral("/sub")));  // top-level regular files only
+}
+
+void TestLibraryV2::readOnlySourceGivesWritableCopies()
+{
+    QTemporaryDir root;
+    const QString oldDir = root.filePath(QStringLiteral("old"));
+    const QString newDir = root.filePath(QStringLiteral("new"));
+    writeBytes(oldDir + QStringLiteral("/settings.ini"), "s");
+    writeBytes(oldDir + QStringLiteral("/library.json"), "l");
+    QFile::setPermissions(oldDir + QStringLiteral("/settings.ini"), QFile::ReadOwner);
+    QFile::setPermissions(oldDir + QStringLiteral("/library.json"), QFile::ReadOwner);
+    QCOMPARE(Paths::migrateDataDir(oldDir, newDir), Paths::MigrateResult::Migrated);
+    for (const char *n : {"/settings.ini", "/library.json"}) {
+        const QFile::Permissions p = QFile::permissions(newDir + QString::fromLatin1(n));
+        QVERIFY(p.testFlag(QFile::ReadOwner));
+        QVERIFY(p.testFlag(QFile::WriteOwner));
+    }
+    QFile::setPermissions(oldDir + QStringLiteral("/settings.ini"), QFile::ReadOwner | QFile::WriteOwner);
+    QFile::setPermissions(oldDir + QStringLiteral("/library.json"), QFile::ReadOwner | QFile::WriteOwner);
+}
+
+void TestLibraryV2::strayTempIsNotTheKeptCopy()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("library.json"));
+    const QByteArray original = "{\"version\":1,\"favorites\":[\"P1-11\"]}";
+    writeBytes(path, original);
+    writeBytes(path + QStringLiteral(".v1.tmp"), "{\"vers");  // a truncated leftover
+    Three a(path);
+    QCOMPARE(a.lib.load(), Library::LoadResult::Loaded);
+    QCOMPARE(readAll(path + QStringLiteral(".v1")), original);  // a complete copy was made
+}
+
+void TestLibraryV2::failedLegacyCopyThenWrite()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("library.json"));
+    const QByteArray original = "{\"version\":1,\"favorites\":[\"P1-11\"]}";
+    writeBytes(path, original);
+    // A dangling symlink: no copy exists, and writing one fails.
+    if (!QFile::link(dir.filePath(QStringLiteral("nodir/target")), path + QStringLiteral(".v1")))
+        QSKIP("cannot create symlinks here");
+    Three a(path);
+    QCOMPARE(a.lib.load(), Library::LoadResult::Loaded);
+    a.lib.toggleFavorite(D("P1-12"));
+    QVERIFY(!a.lib.flush());                // the write refuses while the v1 copy cannot be kept
+    QCOMPARE(readAll(path), original);      // the v1 file is untouched
+    QFile::remove(path + QStringLiteral(".v1"));
+    QVERIFY(a.lib.flush());                 // retried: the copy is made, then the write goes through
+    QCOMPARE(readAll(path + QStringLiteral(".v1")), original);
+    QCOMPARE(readJson(path).value(QStringLiteral("version")).toInt(), 2);
+}
+
+void TestLibraryV2::userNameEqualToFactoryName()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("library.json"));
+    const QString factory = PatchCatalog(Model::JP08).factoryName(J("1-1"));
+    QVERIFY(!factory.isEmpty());
+    {
+        Three a(path);
+        QCOMPARE(a.lib.load(), Library::LoadResult::Fresh);
+        QSignalSpy spy(&a.lib, &Library::userNamesChanged);
+        QVERIFY(a.lib.setUserName(J("1-1"), factory));
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(a.lib.flush());
+    }
+    {
+        Three b(path);
+        QCOMPARE(b.lib.load(), Library::LoadResult::Loaded);
+        QVERIFY(b.jp.hasUserName(J("1-1")));
+        QVERIFY(b.lib.setUserName(J("1-1"), QString()));  // clearing is a change too
+        QVERIFY(b.lib.flush());
+    }
+    Three c(path);
+    QCOMPARE(c.lib.load(), Library::LoadResult::Loaded);
+    QVERIFY(!c.jp.hasUserName(J("1-1")));
 }
 
 QTEST_GUILESS_MAIN(TestLibraryV2)

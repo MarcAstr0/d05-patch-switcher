@@ -131,7 +131,11 @@ int main(int argc, char *argv[])
         if (opts.listPorts)
             return d05::Cli::runListPorts(*backend, out, err);
         // --send falls back to the saved port and channel when --port / --channel are absent.
-        d05::Paths::migrateLegacyDataDir();
+        if (d05::Paths::migrateLegacyDataDir() == d05::Paths::MigrateResult::Failed) {
+            err << "warning: could not copy the version 1 settings to the new data directory; "
+                   "using none this run, will retry next start\n";
+            d05::Paths::useScratchDataDir();
+        }
         const d05::AppSettings saved;
         return d05::Cli::runSend(opts, *backend, out, err, &saved);
     }
@@ -163,7 +167,12 @@ int main(int argc, char *argv[])
         backend = std::move(fake);
     } else
         backend = std::make_unique<d05::RtMidiBackend>();
-    d05::Paths::migrateLegacyDataDir();  // first start after the rename: copy, never move
+    // First start after the rename: copy, never move. On failure this session uses a throwaway
+    // directory so nothing blocks the retry on the next start.
+    const bool migrationFailed =
+        d05::Paths::migrateLegacyDataDir() == d05::Paths::MigrateResult::Failed;
+    if (migrationFailed)
+        d05::Paths::useScratchDataDir();
     d05::PatchCatalog catalog;
     d05::Library library(catalog, d05::Paths::libraryPath());
     const d05::Library::LoadResult loaded = library.load();
@@ -185,6 +194,8 @@ int main(int argc, char *argv[])
         window.showMessage(QStringLiteral("Library file was damaged; started a fresh one"));
     else if (loaded == d05::Library::LoadResult::Unreadable || loaded == d05::Library::LoadResult::SidelineFailed)
         window.showMessage(QStringLiteral("Library file could not be read; changes will not be saved"));
+    if (migrationFailed)
+        window.showMessage(QStringLiteral("Could not copy your earlier library and settings; changes are not kept this run"));
     FirstPaintStamp paintStamp;
     if (qEnvironmentVariableIsSet("D05_FIRST_PAINT_STAMP"))
         window.installEventFilter(&paintStamp);

@@ -61,7 +61,17 @@ bool Library::copyLegacyFile()
     const QString copy = legacyCopyPath();
     if (QFile::exists(copy))
         return true;  // kept once: never overwritten
-    return QFile::copy(m_path, copy);
+    // Written through a temporary file and renamed, so an existing copy is always complete.
+    QFile src(m_path);
+    if (!src.open(QIODevice::ReadOnly))
+        return false;
+    const QByteArray bytes = src.readAll();
+    if (src.error() != QFileDevice::NoError)
+        return false;
+    QSaveFile out(copy);
+    if (!out.open(QIODevice::WriteOnly) || out.write(bytes) != bytes.size())
+        return false;
+    return out.commit();
 }
 
 Library::LoadResult Library::load()
@@ -290,10 +300,11 @@ bool Library::setUserName(const PatchAddress &a, const QString &name)
     PatchCatalog *cat = catalogFor(a.model());
     if (!cat || (a.model() == Model::D05 && !a.isUser()))
         return false;
-    const QString before = cat->name(a);
+    const bool hadUser = cat->hasUserName(a);
+    const QString before = cat->userName(a);
     if (!cat->setUserName(a, name))
         return false;
-    if (cat->name(a) != before) {
+    if (cat->hasUserName(a) != hadUser || cat->userName(a) != before) {
         markDirty();
         emit userNamesChanged(a.model());
     }

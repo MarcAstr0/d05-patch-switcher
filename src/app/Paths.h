@@ -16,12 +16,20 @@ QString overrideDir();
 
 // The version 1 data directory (marcastr0/d05-patch-switcher), only ever read.
 QString legacyDataDir();
-// Copies the regular files of oldDir into newDir when newDir does not exist and oldDir does
-// (SPEC-2 3.5). oldDir is never modified. Returns true when it copied. A failed copy removes
-// what it made, so the next start retries.
-bool migrateDataDir(const QString &oldDir, const QString &newDir);
+// NotNeeded: the new directory exists or there is no old one. Migrated: copied. Failed: the
+// copy did not complete; nothing was created under the final name.
+enum class MigrateResult { NotNeeded, Migrated, Failed };
+// Copies every top-level regular file of oldDir (hidden ones too) into newDir when newDir does
+// not exist and oldDir does (SPEC-2 3.5). The copy goes to "<newDir>.migrating" and is renamed to
+// newDir only once complete, so newDir existing means done; a stale staging directory is removed
+// first. oldDir is never modified.
+MigrateResult migrateDataDir(const QString &oldDir, const QString &newDir);
 // migrateDataDir(legacyDataDir(), dataDir()), except that it does nothing under --config-dir.
-bool migrateLegacyDataDir();
+MigrateResult migrateLegacyDataDir();
+// Rule after a Failed migration: the session runs against a throwaway directory (this sets the
+// override to it), so no save can create the final directory and block the retry on the next
+// start. The caller tells the user that changes are not kept. False if no such directory exists.
+bool useScratchDataDir();
 
 // The directory holding library.json and settings.ini. Not created here.
 QString dataDir();
