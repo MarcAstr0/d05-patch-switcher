@@ -111,12 +111,65 @@ SearchQuery::SearchQuery(const QString &text)
     }
 }
 
+SearchQuery::SearchQuery(const QString &text, Model model)
+{
+    if (model == Model::D05) {
+        *this = SearchQuery(text);
+        return;
+    }
+    m_model = model;
+    parseSmall(text.simplified().split(QLatin1Char(' '), Qt::SkipEmptyParts), model == Model::JU06A);
+}
+
+void SearchQuery::parseSmall(const QStringList &parts, bool ju06a)
+{
+    for (const QString &raw : parts) {
+        Token t;
+        t.kind = Kind::Text;
+        QString rest = raw;
+        int engine = 0;
+        if (ju06a) {
+            if (raw == QLatin1String("60") || raw == QLatin1String("106")) {
+                t.kind = Kind::Engine;
+                t.engine = raw.toInt();
+            } else if (raw.startsWith(QLatin1String("60:")) || raw.startsWith(QLatin1String("106:"))) {
+                const int colon = raw.indexOf(QLatin1Char(':'));
+                engine = raw.left(colon).toInt();
+                rest = raw.mid(colon + 1);
+            }
+        }
+        if (t.kind == Kind::Text) {
+            // bank: d; address: dd or d-d. Digits 1..8 only.
+            auto d = [&](int i) { return i < rest.size() ? digit(rest.at(i)) : -1; };
+            auto ok = [](int v) { return v >= 1 && v <= 8; };
+            if (rest.size() == 1 && ok(d(0))) {
+                t.kind = Kind::Bank64;
+                t.bank = d(0);
+                t.engine = engine;
+            } else if ((rest.size() == 2 && ok(d(0)) && ok(d(1)))
+                       || (rest.size() == 3 && rest.at(1) == QLatin1Char('-') && ok(d(0)) && ok(d(2)))) {
+                t.kind = Kind::Exact64;
+                t.bank = d(0);
+                t.number = d(rest.size() - 1);
+                t.engine = engine;
+            }
+        }
+        if (t.kind == Kind::Text) {
+            t.folded = foldString(raw);
+            if (t.folded.isEmpty())
+                continue;
+        }
+        m_tokens.append(t);
+    }
+}
+
 bool SearchQuery::matches(const PatchAddress &a, const QString &name) const
 {
     return matches(a, name, nullptr);
 }
 
-bool SearchQuery::matches(const PatchAddress &a, const QString &name, QVector<Range> *ranges) const
+bool SearchQuery::matches(const PatchAddress &a, const QString &name, QVector<Range> *ranges,
+                          const QString &altName) const
 {
     if (ranges)
         ranges->clear();
@@ -134,6 +187,17 @@ bool SearchQuery::matches(const PatchAddress &a, const QString &name, QVector<Ra
         case Kind::Exact:
             if (a.group() != t.group || a.bank() != t.bank || a.number() != t.number) return false;
             break;
+        case Kind::Engine:
+            if (a.model() != m_model || a.engine() != t.engine) return false;
+            break;
+        case Kind::Bank64:
+            if (a.model() != m_model || a.bank() != t.bank || (t.engine && a.engine() != t.engine)) return false;
+            break;
+        case Kind::Exact64:
+            if (a.model() != m_model || a.bank() != t.bank || a.number() != t.number
+                || (t.engine && a.engine() != t.engine))
+                return false;
+            break;
         case Kind::Text:
             needText = true;
             break;
@@ -142,41 +206,46 @@ bool SearchQuery::matches(const PatchAddress &a, const QString &name, QVector<Ra
     if (!needText)
         return true;
 
-    const bool ascii = isAscii(name);
-    QString foldedName;
-    QVector<int> map;  // folded index -> original index (non-ASCII names only)
-    if (!ascii) {
-        foldedName.reserve(name.size());
-        map.reserve(name.size());
-        for (int i = 0; i < name.size(); ++i) {
-            const QChar f = foldChar(name.at(i));
+    // Finds `t` in `s`; fills start/length in `s` indices.
+    auto find = [](const QString &s, const Token &t, int *start, int *length) {
+        if (isAscii(s)) {
+            *start = s.indexOf(t.folded, 0, Qt::CaseInsensitive);
+            *length = t.folded.size();
+            return *start >= 0;
+        }
+        QString folded;
+        QVector<int> map;  // folded index -> original index
+        folded.reserve(s.size());
+        map.reserve(s.size());
+        for (int i = 0; i < s.size(); ++i) {
+            const QChar f = foldChar(s.at(i));
             if (!f.isNull()) {
-                foldedName.append(f);
+                folded.append(f);
                 map.append(i);
             }
         }
-    }
+        const int fi = folded.indexOf(t.folded);
+        if (fi < 0)
+            return false;
+        *start = map.at(fi);
+        int end = map.at(fi + t.folded.size() - 1) + 1;
+        while (end < s.size() && foldChar(s.at(end)).isNull())
+            ++end;  // keep trailing combining marks inside the range
+        *length = end - *start;
+        return true;
+    };
 
     QVector<Range> found;
     for (const Token &t : m_tokens) {
         if (t.kind != Kind::Text)
             continue;
-        int start, length;
-        if (ascii) {
-            start = name.indexOf(t.folded, 0, Qt::CaseInsensitive);
-            if (start < 0) return false;
-            length = t.folded.size();
-        } else {
-            const int fi = foldedName.indexOf(t.folded);
-            if (fi < 0) return false;
-            start = map.at(fi);
-            int end = map.at(fi + t.folded.size() - 1) + 1;
-            while (end < name.size() && foldChar(name.at(end)).isNull())
-                ++end;  // keep trailing combining marks inside the range
-            length = end - start;
+        int start = 0, length = 0;
+        if (find(name, t, &start, &length)) {
+            if (ranges)
+                found.append({start, length});
+        } else if (altName.isEmpty() || !find(altName, t, &start, &length)) {
+            return false;
         }
-        if (ranges)
-            found.append({start, length});
     }
 
     if (ranges && !found.isEmpty()) {

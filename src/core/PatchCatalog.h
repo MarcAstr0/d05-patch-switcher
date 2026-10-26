@@ -8,6 +8,7 @@
 #include <array>
 
 class TestPatchCatalog;
+class TestSharedVectors;
 
 namespace d05 {
 
@@ -71,6 +72,7 @@ public:
 private:
     friend class Library;
     friend class ::TestPatchCatalog;
+    friend class ::TestSharedVectors;  // seeds JP-08 / JU-06A user names until Library is per model
 
     // Names are printable ASCII only (0x20..0x7E). Tab, CR, LF and
     // other whitespace controls become a space; every other character outside that

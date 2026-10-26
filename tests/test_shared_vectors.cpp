@@ -25,11 +25,16 @@ QStringList toStrings(const QJsonArray &a)
 
 QStringList runSearch(const PatchCatalog &cat, const QString &query)
 {
-    const SearchQuery q(query);
+    const Model model = cat.model();
+    const SearchQuery q(query, model);
+    const int size = model == Model::D05 ? PatchAddress::CatalogueSize : (model == Model::JP08 ? 64 : 128);
     QStringList out;
-    for (int i = 0; i < PatchAddress::CatalogueSize; ++i) {
-        const PatchAddress a = *PatchAddress::fromCatalogueIndex(i);
-        if (q.matches(a, cat.name(a)))
+    for (int i = 0; i < size; ++i) {
+        const PatchAddress a = model == Model::D05 ? *PatchAddress::fromCatalogueIndex(i)
+                                                   : *PatchAddress::fromCatalogueIndex(model, i);
+        const QString name = cat.name(a);
+        const QString factory = cat.factoryName(a);
+        if (q.matches(a, name, nullptr, factory != name ? factory : QString()))
             out << a.toString();
     }
     return out;
@@ -132,6 +137,39 @@ private slots:
         QVERIFY(arr.size() >= 25);
         for (const QJsonValue &v : arr) {
             const QString msg = checkSearch(cat, v.toObject());
+            QVERIFY2(msg.isEmpty(), qPrintable(msg));
+        }
+    }
+
+    // models.<id>.search: per-model grammar (SPEC-2 FR-3). Optional "userNames" per case
+    // ({canonical address: name}) is applied to a fresh catalogue (Library only writes D-05 names so far).
+    void modelSearch_data()
+    {
+        QTest::addColumn<QString>("id");
+        QTest::addColumn<int>("minCases");
+        QTest::newRow("jp08") << QStringLiteral("jp08") << 20;
+        QTest::newRow("ju06a") << QStringLiteral("ju06a") << 20;
+    }
+
+    void modelSearch()
+    {
+        QFETCH(QString, id);
+        QFETCH(int, minCases);
+        const Model model = id == QLatin1String("jp08") ? Model::JP08 : Model::JU06A;
+        const QJsonArray arr = m_doc.value(QStringLiteral("models")).toObject()
+                                   .value(id).toObject().value(QStringLiteral("search")).toArray();
+        QVERIFY(arr.size() >= minCases);
+        for (const QJsonValue &v : arr) {
+            const QJsonObject c = v.toObject();
+            PatchCatalog cat(model);
+            QVERIFY(cat.isValid());
+            const QJsonObject users = c.value(QStringLiteral("userNames")).toObject();
+            for (auto it = users.begin(); it != users.end(); ++it) {
+                const auto a = PatchAddress::parse(it.key(), model);
+                QVERIFY2(a, qPrintable(it.key()));
+                QVERIFY(cat.setUserName(*a, it.value().toString()));
+            }
+            const QString msg = checkSearch(cat, c);
             QVERIFY2(msg.isEmpty(), qPrintable(msg));
         }
     }

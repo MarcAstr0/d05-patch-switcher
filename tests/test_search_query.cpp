@@ -254,6 +254,34 @@ private slots:
         QVERIFY(count(QStringLiteral("brass")) > 3);
         QVERIFY(count(QStringLiteral("p1 brass")) < count(QStringLiteral("brass")));
     }
+
+    void smallModels()
+    {
+        using d05::Model;
+        auto P = [](const char *t, Model m) { return *PatchAddress::parse(QString::fromLatin1(t), m); };
+        const SearchQuery jp(QStringLiteral("4 lead"), Model::JP08);
+        QVERIFY(jp.matches(P("4-1", Model::JP08), QStringLiteral("Big Saw Lead")));
+        QVERIFY(!jp.matches(P("5-1", Model::JP08), QStringLiteral("Big Saw Lead")));
+        // address tokens never match another model's addresses
+        QVERIFY(!SearchQuery(QStringLiteral("4"), Model::JP08).matches(P("106:4-1", Model::JU06A), QString()));
+        QVERIFY(!SearchQuery(QStringLiteral("4"), Model::JU06A).matches(P("4-1", Model::JP08), QString()));
+        // 60 / 106 are text on the JP-08
+        QVERIFY(!SearchQuery(QStringLiteral("106"), Model::JP08).matches(P("1-1", Model::JP08), QStringLiteral("x")));
+        QVERIFY(SearchQuery(QStringLiteral("106"), Model::JP08).matches(P("1-1", Model::JP08), QStringLiteral("Mk 106")));
+        // engine filter and prefix on the JU-06A
+        const SearchQuery e(QStringLiteral("106:45"), Model::JU06A);
+        QVERIFY(e.matches(P("106:4-5", Model::JU06A), QString()));
+        QVERIFY(!e.matches(P("60:4-5", Model::JU06A), QString()));
+        QVERIFY(SearchQuery(QStringLiteral("45"), Model::JU06A).matches(P("60:4-5", Model::JU06A), QString()));
+        // alternate (factory) name is searched; ranges only for the primary name
+        const SearchQuery t(QStringLiteral("takeoff zebra"), Model::JU06A);
+        QVector<Range> r;
+        QVERIFY(t.matches(P("106:8-8", Model::JU06A), QStringLiteral("Zebra Lead"), &r, QStringLiteral("Takeoff")));
+        QCOMPARE(r, (QVector<Range>{{0, 5}}));
+        QVERIFY(!t.matches(P("106:8-8", Model::JU06A), QStringLiteral("Zebra Lead"), &r));
+        // D-05 constructor unchanged
+        QVERIFY(SearchQuery(QStringLiteral("p345"), Model::D05).matches(A("P3-45"), QStringLiteral("Foo")));
+    }
 };
 
 QTEST_APPLESS_MAIN(TestSearchQuery)

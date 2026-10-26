@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/Model.h"
 #include "core/PatchAddress.h"
 
 #include <QString>
@@ -25,6 +26,12 @@ public:
 
     SearchQuery() = default;
     explicit SearchQuery(const QString &text);
+    // Per-model grammar (SPEC-2 FR-3). D05 is the grammar above. JP-08: one digit 1-8 is a bank
+    // filter, two digits 1-8 (with or without a dash) an exact address. JU-06A: the same, plus
+    // `60` / `106` as an engine filter and `60:` / `106:` prefixes on the bank and address
+    // forms; bare forms match both engines. Anything else, including digits with 0 or 9 and
+    // three or more digits, is text. Address tokens never match addresses of another model.
+    SearchQuery(const QString &text, Model model);
 
     // True for an empty or all-whitespace query (everything matches).
     bool isEmpty() const { return m_tokens.isEmpty(); }
@@ -38,17 +45,23 @@ public:
     // As above; on a match, `ranges` is cleared and filled with the highlight ranges
     // of the text tokens: the first occurrence of each, sorted, overlaps and
     // touching ranges merged. Address tokens produce no ranges.
-    bool matches(const PatchAddress &address, const QString &name, QVector<Range> *ranges) const;
+    bool matches(const PatchAddress &address, const QString &name, QVector<Range> *ranges,
+                 const QString &altName = QString()) const;
+    // altName (JP-08 / JU-06A: the factory name of a slot that has a user name in `name`) is
+    // searched too; a text token found only there matches but produces no range.
 
 private:
-    enum class Kind { Group, GroupBank, Exact, Text };
+    enum class Kind { Group, GroupBank, Exact, Text, Engine, Bank64, Exact64 };
     struct Token {
         Kind kind = Kind::Text;
         int group = 0;
         int bank = 0;
         int number = 0;
+        int engine = 0;  // 64-patch kinds: 60 / 106, 0 = both
         QString folded;  // Text only: lowercased, accents stripped
     };
+    void parseSmall(const QStringList &parts, bool ju06a);
+    Model m_model = Model::D05;
     QVector<Token> m_tokens;
 };
 

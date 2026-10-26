@@ -675,5 +675,590 @@
     }
    }
   }
+ },
+ "models": {
+  "jp08": {
+   "search": [
+    {
+     "query": "85",
+     "expect": [
+      "8-5"
+     ]
+    },
+    {
+     "query": "45",
+     "expect": [
+      "4-5"
+     ]
+    },
+    {
+     "query": "4-5",
+     "expect": [
+      "4-5"
+     ]
+    },
+    {
+     "query": "4",
+     "expect": [
+      "4-1",
+      "4-2",
+      "4-3",
+      "4-4",
+      "4-5",
+      "4-6",
+      "4-7",
+      "4-8"
+     ]
+    },
+    {
+     "query": "8",
+     "expect": [
+      "8-1",
+      "8-2",
+      "8-3",
+      "8-4",
+      "8-5",
+      "8-6",
+      "8-7",
+      "8-8"
+     ]
+    },
+    {
+     "query": "0",
+     "expect": []
+    },
+    {
+     "query": "9",
+     "expect": []
+    },
+    {
+     "query": "09",
+     "expect": []
+    },
+    {
+     "query": "1982",
+     "expect": []
+    },
+    {
+     "query": "106",
+     "expect": []
+    },
+    {
+     "query": "60:4",
+     "expect": []
+    },
+    {
+     "query": "60",
+     "expect": []
+    },
+    {
+     "query": "brass",
+     "expect": [
+      "3-5",
+      "3-6",
+      "3-7",
+      "3-8"
+     ]
+    },
+    {
+     "query": "lead",
+     "expect": [
+      "1-6",
+      "1-7",
+      "1-8",
+      "4-1"
+     ]
+    },
+    {
+     "query": "sync",
+     "expect": [
+      "1-1",
+      "1-4",
+      "1-5",
+      "1-6",
+      "7-4"
+     ]
+    },
+    {
+     "query": "sync 1",
+     "expect": [
+      "1-1",
+      "1-4",
+      "1-5",
+      "1-6"
+     ]
+    },
+    {
+     "query": "SYNTH",
+     "expect": [
+      "3-8",
+      "6-8"
+     ]
+    },
+    {
+     "query": "pwm",
+     "expect": [
+      "6-1",
+      "6-6"
+     ]
+    },
+    {
+     "query": "s.o.s",
+     "expect": [
+      "8-7"
+     ]
+    },
+    {
+     "query": "emergency!!",
+     "expect": [
+      "8-6"
+     ]
+    },
+    {
+     "query": "  4   lead ",
+     "expect": [
+      "4-1"
+     ]
+    },
+    {
+     "query": "4 lead",
+     "expect": [
+      "4-1"
+     ]
+    },
+    {
+     "query": "3-5",
+     "expect": [
+      "3-5"
+     ]
+    },
+    {
+     "query": "35 brass",
+     "expect": [
+      "3-5"
+     ]
+    },
+    {
+     "query": "7-4",
+     "expect": [
+      "7-4"
+     ]
+    },
+    {
+     "query": "123",
+     "expect": []
+    },
+    {
+     "query": "85s",
+     "expect": []
+    },
+    {
+     "query": "1-9",
+     "expect": []
+    },
+    {
+     "query": "4-",
+     "expect": []
+    },
+    {
+     "query": "trans-pad",
+     "expect": [
+      "5-4"
+     ]
+    },
+    {
+     "query": "zebra",
+     "userNames": {
+      "5-5": "Zebra Pad"
+     },
+     "expect": [
+      "5-5"
+     ]
+    },
+    {
+     "query": "break",
+     "userNames": {
+      "5-5": "Zebra Pad"
+     },
+     "expect": [
+      "5-5"
+     ]
+    },
+    {
+     "query": "zebra 5",
+     "userNames": {
+      "5-5": "Zebra Pad"
+     },
+     "expect": [
+      "5-5"
+     ]
+    },
+    {
+     "query": "break 5-5",
+     "userNames": {
+      "5-5": "Zebra Pad"
+     },
+     "expect": [
+      "5-5"
+     ]
+    },
+    {
+     "query": "sync",
+     "userNames": {
+      "1-1": "My Sync"
+     },
+     "expect": [
+      "1-1",
+      "1-4",
+      "1-5",
+      "1-6",
+      "7-4"
+     ]
+    },
+    {
+     "query": "neg",
+     "userNames": {
+      "1-1": "My Sync"
+     },
+     "expect": [
+      "1-1",
+      "1-2"
+     ]
+    },
+    {
+     "query": "my",
+     "userNames": {
+      "1-1": "My Sync"
+     },
+     "expect": [
+      "1-1"
+     ]
+    },
+    {
+     "query": "my neg",
+     "userNames": {
+      "1-1": "My Sync"
+     },
+     "expect": [
+      "1-1"
+     ]
+    },
+    {
+     "query": "zzz",
+     "userNames": {
+      "1-1": "My Sync"
+     },
+     "expect": []
+    },
+    {
+     "query": "1 my",
+     "userNames": {
+      "1-1": "My Sync"
+     },
+     "expect": [
+      "1-1"
+     ]
+    }
+   ]
+  },
+  "ju06a": {
+   "search": [
+    {
+     "query": "85",
+     "expect": [
+      "60:8-5",
+      "106:8-5"
+     ],
+     "expectNot": [
+      "60:2-3"
+     ]
+    },
+    {
+     "query": "rock",
+     "expect": [
+      "60:2-3"
+     ]
+    },
+    {
+     "query": "1982",
+     "expectCount": 32,
+     "expectFirst": "60:5-1",
+     "expectLast": "60:8-8"
+    },
+    {
+     "query": "45",
+     "expect": [
+      "60:4-5",
+      "106:4-5"
+     ]
+    },
+    {
+     "query": "4-5",
+     "expect": [
+      "60:4-5",
+      "106:4-5"
+     ]
+    },
+    {
+     "query": "106 brass",
+     "expect": [
+      "106:1-1",
+      "106:1-2",
+      "106:1-6",
+      "106:3-4",
+      "106:4-1",
+      "106:7-1",
+      "106:7-2"
+     ]
+    },
+    {
+     "query": "60 brass",
+     "expect": []
+    },
+    {
+     "query": "60:4",
+     "expect": [
+      "60:4-1",
+      "60:4-2",
+      "60:4-3",
+      "60:4-4",
+      "60:4-5",
+      "60:4-6",
+      "60:4-7",
+      "60:4-8"
+     ]
+    },
+    {
+     "query": "106:45",
+     "expect": [
+      "106:4-5"
+     ]
+    },
+    {
+     "query": "60:4-5",
+     "expect": [
+      "60:4-5"
+     ]
+    },
+    {
+     "query": "106:8-8",
+     "expect": [
+      "106:8-8"
+     ]
+    },
+    {
+     "query": "4",
+     "expectCount": 16,
+     "expectFirst": "60:4-1",
+     "expectLast": "106:4-8"
+    },
+    {
+     "query": "0",
+     "expect": [
+      "106:4-1",
+      "106:6-2"
+     ]
+    },
+    {
+     "query": "9",
+     "expectCount": 32,
+     "expectFirst": "60:5-1",
+     "expectLast": "60:8-8"
+    },
+    {
+     "query": "09",
+     "expect": []
+    },
+    {
+     "query": "106",
+     "expectCount": 64,
+     "expectFirst": "106:1-1",
+     "expectLast": "106:8-8"
+    },
+    {
+     "query": "60",
+     "expectCount": 64,
+     "expectFirst": "60:1-1",
+     "expectLast": "60:8-8"
+    },
+    {
+     "query": "60:9",
+     "expect": []
+    },
+    {
+     "query": "60:0",
+     "expect": []
+    },
+    {
+     "query": "106:5-9",
+     "expect": []
+    },
+    {
+     "query": "60:",
+     "expect": []
+    },
+    {
+     "query": "345",
+     "expect": []
+    },
+    {
+     "query": "85s",
+     "expect": []
+    },
+    {
+     "query": "123",
+     "expect": []
+    },
+    {
+     "query": "198",
+     "expectCount": 32,
+     "expectFirst": "60:5-1",
+     "expectLast": "60:8-8"
+    },
+    {
+     "query": "  106   brass ",
+     "expect": [
+      "106:1-1",
+      "106:1-2",
+      "106:1-6",
+      "106:3-4",
+      "106:4-1",
+      "106:7-1",
+      "106:7-2"
+     ]
+    },
+    {
+     "query": "ld",
+     "expect": [
+      "60:1-1",
+      "60:4-4",
+      "60:4-5",
+      "60:4-6",
+      "60:4-7",
+      "106:2-5"
+     ]
+    },
+    {
+     "query": "pad 4",
+     "expect": []
+    },
+    {
+     "query": "60:1",
+     "expect": [
+      "60:1-1",
+      "60:1-2",
+      "60:1-3",
+      "60:1-4",
+      "60:1-5",
+      "60:1-6",
+      "60:1-7",
+      "60:1-8"
+     ]
+    },
+    {
+     "query": "1-1",
+     "expect": [
+      "60:1-1",
+      "106:1-1"
+     ]
+    },
+    {
+     "query": "brass 106:7",
+     "expect": [
+      "106:7-1",
+      "106:7-2"
+     ]
+    },
+    {
+     "query": "p3-45",
+     "expect": []
+    },
+    {
+     "query": "kyoushin",
+     "expect": [
+      "60:3-3"
+     ]
+    },
+    {
+     "query": "zebra",
+     "userNames": {
+      "106:8-8": "Zebra Lead"
+     },
+     "expect": [
+      "106:8-8"
+     ]
+    },
+    {
+     "query": "80s",
+     "userNames": {
+      "106:8-8": "Zebra Lead"
+     },
+     "expect": [
+      "106:4-1",
+      "106:6-2"
+     ]
+    },
+    {
+     "query": "louis",
+     "expect": [
+      "106:8-6"
+     ]
+    },
+    {
+     "query": "strings",
+     "expect": [
+      "60:5-1",
+      "60:5-2",
+      "106:1-5",
+      "106:1-6",
+      "106:3-6",
+      "106:3-8"
+     ]
+    },
+    {
+     "query": "JU",
+     "expect": [
+      "60:3-7",
+      "106:4-1",
+      "106:4-8",
+      "106:5-2",
+      "106:6-2"
+     ]
+    },
+    {
+     "query": "9 pad",
+     "expect": []
+    },
+    {
+     "query": "1982 bass",
+     "expect": [
+      "60:6-2",
+      "60:7-4"
+     ]
+    },
+    {
+     "query": "0 brass",
+     "expect": [
+      "106:4-1"
+     ]
+    },
+    {
+     "query": "takeoff",
+     "userNames": {
+      "106:8-8": "Zebra Lead"
+     },
+     "expect": [
+      "106:8-8"
+     ]
+    },
+    {
+     "query": "pad 1",
+     "expect": [
+      "60:1-4",
+      "60:1-5"
+     ]
+    }
+   ]
+  }
  }
 }
