@@ -6,7 +6,9 @@
 #include <QTest>
 
 #include <cstdio>
+#ifdef Q_OS_LINUX
 #include <unistd.h>
+#endif
 
 using namespace d05;
 using namespace d05::Identify;
@@ -171,6 +173,11 @@ private slots:
         QCOMPARE(r.at(0).confidence, C::Ambiguous);  // rule 1's answer stands
         capture.seek(0);
         QCOMPARE(capture.readAll(), QByteArray());
+    }
+#else
+    void rule2IsSilentWhenTheSequencerCannotBeOpened()
+    {
+        QSKIP("fd 2 redirection and the ALSA sequencer are Linux-only");
     }
 #endif
 

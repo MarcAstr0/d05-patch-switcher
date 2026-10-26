@@ -584,6 +584,9 @@ void TestLibraryV2::failedLegacyCopyThenWrite()
     const QByteArray original = "{\"version\":1,\"favorites\":[\"P1-11\"]}";
     writeBytes(path, original);
     // A dangling symlink: no copy exists, and writing one fails.
+#ifndef Q_OS_UNIX
+    QSKIP("needs POSIX symlinks (QFile::link makes a .lnk shortcut on Windows)");
+#endif
     if (!QFile::link(dir.filePath(QStringLiteral("nodir/target")), path + QStringLiteral(".v1")))
         QSKIP("cannot create symlinks here");
     Three a(path);
