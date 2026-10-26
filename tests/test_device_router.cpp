@@ -539,19 +539,27 @@ private slots:
 
     void distinctFullPortNamesAreNotOneConflict()
     {
+        // WinMM names have no ALSA " id:sub" suffix and carry a " <index>" that portKey strips, so
+        // a saved key such as "Hapax:Hapax MIDI 1" is not a key there. Use each platform's own shapes.
+        const bool winmm = MidiLink::portKey(S("X 1")) != S("X 1");
+        const QString n1 = winmm ? S("Hapax MIDI 1") : S("Hapax:Hapax MIDI 1 24:0");
+        const QString n2 = winmm ? S("Hapax MIDI 2") : S("Hapax:Hapax MIDI 1 28:0");
+        const QString n3 = winmm ? S("Hapax MIDI 3") : S("Hapax:Hapax MIDI 1 30:0");
+        const QString key = winmm ? S("Hapax MIDI") : S("Hapax:Hapax MIDI 1");
+        QVERIFY(MidiLink::portKey(key) == key);
         Rig r;
-        r.outs = {S("Hapax:Hapax MIDI 1 24:0"), S("Hapax:Hapax MIDI 1 28:0")};
+        r.outs = {n1, n2};
         r.ins = r.outs;
-        auto a = Rig::cfg(3, false, "Hapax:Hapax MIDI 1 24:0");
-        auto b = Rig::cfg(3, false, "Hapax:Hapax MIDI 1 28:0");
+        auto a = Rig::cfg(3, false, n1.toLatin1().constData());
+        auto b = Rig::cfg(3, false, n2.toLatin1().constData());
         QVERIFY(r.router.configure(Model::JP08, a));
         QVERIFY(!r.router.conflict(Model::JU06A, b).has_value());
         QVERIFY(r.router.configure(Model::JU06A, b));
         // The same full name, or a saved key that names it, still conflicts.
-        QVERIFY(r.router.conflict(Model::D05, Rig::cfg(3, false, "Hapax:Hapax MIDI 1 24:0")).has_value());
-        QVERIFY(r.router.conflict(Model::D05, Rig::cfg(3, false, "Hapax:Hapax MIDI 1")).has_value());
+        QVERIFY(r.router.conflict(Model::D05, Rig::cfg(3, false, n1.toLatin1().constData())).has_value());
+        QVERIFY(r.router.conflict(Model::D05, Rig::cfg(3, false, key.toLatin1().constData())).has_value());
         a.follow = b.follow = true;
-        QVERIFY(!r.router.conflict(Model::D05, Rig::cfg(3, true, "Hapax:Hapax MIDI 1 30:0")).has_value());
+        QVERIFY(!r.router.conflict(Model::D05, Rig::cfg(3, true, n3.toLatin1().constData())).has_value());
     }
 };
 
