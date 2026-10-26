@@ -68,6 +68,44 @@ private slots:
         QCOMPARE(t.lsb, 10);
         QVERIFY(!(jp == *PatchAddress::fromCatalogueIndex(Model::JU06A, 28)));
     }
+    void d05Channel16()
+    {
+        const auto u = *PatchAddress::parse(QStringLiteral("U3-45"), Model::D05);
+        QCOMPARE(u.midiMessages(16),
+                 (QList<QByteArray>{QByteArray::fromHex("bf0057"), QByteArray::fromHex("bf2002"),
+                                    QByteArray::fromHex("cf1c")}));
+        const auto p = *PatchAddress::parse(QStringLiteral("P3-45"), Model::D05);
+        QCOMPARE(p.midiMessages(16),
+                 (QList<QByteArray>{QByteArray::fromHex("bf0057"), QByteArray::fromHex("bf200a"),
+                                    QByteArray::fromHex("cf1c")}));
+        for (const PatchAddress &a : {u, p}) {
+            const auto t = a.midiTriplet();
+            const QList<QByteArray> m = a.midiMessages(16);
+            QCOMPARE(m[0], (QByteArray{"\xbf\x00", 2} + char(t.msb)));
+            QCOMPARE(m[1], (QByteArray{"\xbf\x20", 2} + char(t.lsb)));
+            QCOMPARE(m[2], (QByteArray{"\xcf", 1} + char(t.program)));
+        }
+    }
+    void deviceEngineAndEdges()
+    {
+        const auto jp = *PatchAddress::parse(QStringLiteral("4-5"), Model::JP08);
+        const QList<QByteArray> want{QByteArray::fromHex("c41c")};
+        QCOMPARE(jp.midiMessages(5, 60), want);
+        QCOMPARE(jp.midiMessages(5, 106), want);
+        QCOMPARE(jp.midiMessages(5, std::nullopt), want);
+        const auto ju = *PatchAddress::parse(QStringLiteral("106:8-8"), Model::JU06A);
+        QCOMPARE(ju.midiMessages(16, 106), (QList<QByteArray>{QByteArray::fromHex("cf3f")}));
+        QVERIFY(!PatchAddress::parse(QStringLiteral("P7-11"), Model::D05));
+        QVERIFY(!PatchAddress::parse(QStringLiteral("U9-11"), Model::D05));
+        for (const char *t : {"45", "4-5"}) {
+            QVERIFY(!PatchAddress::parse(QString::fromLatin1(t), Model::JU06A, std::nullopt));
+            QVERIFY(!PatchAddress::parse(QString::fromLatin1(t), Model::JU06A, 61));
+        }
+        QCOMPARE(jp.groupNumber(), 0);
+        QVERIFY(jp.groupLabel().isEmpty());
+        QCOMPARE(ju.groupNumber(), 0);
+        QVERIFY(ju.groupLabel().isEmpty());
+    }
 };
 
 QTEST_APPLESS_MAIN(TestModel)

@@ -158,7 +158,7 @@ PatchAddress::MidiTriplet PatchAddress::midiTriplet() const
 QString PatchAddress::groupLabel() const
 {
     if (m_model != Model::D05)
-        return m_model == Model::JU06A ? QString::number(m_engine) : QString();
+        return QString();
     return QStringLiteral("%1%2").arg(isUser() ? QLatin1Char('U') : QLatin1Char('P')).arg(groupNumber());
 }
 

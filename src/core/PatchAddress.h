@@ -56,8 +56,11 @@ public:
     int number() const { return m_number; }  // 1..8
     bool isUser() const { return m_model == Model::D05 && m_group < 8; }
     bool isPreset() const { return m_model == Model::D05 && m_group >= 8; }
-    // Group label number as printed: 1..8 for U, 1..6 for P.
-    int groupNumber() const { return isUser() ? m_group + 1 : m_group - 7; }
+    // Group label number as printed: 1..8 for U, 1..6 for P. Always 0 for JP-08 and JU-06A
+    // addresses (they have no groups; use bank(), number() and engine()).
+    int groupNumber() const {
+        return m_model != Model::D05 ? 0 : (isUser() ? m_group + 1 : m_group - 7);
+    }
 
     int catalogueIndex() const {
         return (m_model == Model::D05 ? m_group * 64 : (m_engine == 106 ? 64 : 0)) + program();
@@ -72,7 +75,7 @@ public:
 
     // Canonical text: "P3-45" (D-05), "4-5" (JP-08), "106:4-5" (JU-06A).
     QString toString() const;
-    // Group only, e.g. "P3".
+    // Group only, e.g. "P3". Empty for JP-08 and JU-06A addresses (use engine() for the latter).
     QString groupLabel() const;
 
     bool operator==(const PatchAddress &o) const {

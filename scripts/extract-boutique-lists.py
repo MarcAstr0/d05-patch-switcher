@@ -18,6 +18,11 @@ import sys
 ENTRY = re.compile(r"([1-8])-([1-8])\s+(.+?)(?=\s{2,}[1-8]-[1-8]\s|\s*$)")
 
 
+def fail(message):
+    print(f"extract-boutique-lists: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
 def layout_text(pdf):
     return subprocess.run(["pdftotext", "-layout", pdf, "-"], check=True,
                           capture_output=True, text=True).stdout
@@ -27,9 +32,12 @@ def parse_block(lines, label):
     rows = []
     for line in lines:
         rows.extend((int(m[1]), int(m[2]), m[3].strip()) for m in ENTRY.finditer(line))
-    assert len(rows) == 64, f"{label}: {len(rows)} rows"
-    assert len({(b, n) for b, n, _ in rows}) == 64, f"{label}: duplicate address"
-    assert all(name for _, _, name in rows), f"{label}: empty name"
+    if len(rows) != 64:
+        fail(f"{label}: {len(rows)} rows")
+    if len({(b, n) for b, n, _ in rows}) != 64:
+        fail(f"{label}: duplicate address")
+    if not all(name for _, _, name in rows):
+        fail(f"{label}: empty name")
     return sorted(rows)
 
 
@@ -47,7 +55,8 @@ def main():
     text = layout_text(ju_pdf).split("Chord Memory List")[0]
     # Engine headings are a line holding only "60" or "106".
     parts = re.split(r"^\s*(60|106)\s*$", text, flags=re.M)
-    assert len(parts) == 5 and parts[1] == "60" and parts[3] == "106", "engine blocks"
+    if not (len(parts) == 5 and parts[1] == "60" and parts[3] == "106"):
+        fail("engine blocks")
     ju = []
     for engine, body in ((parts[1], parts[2]), (parts[3], parts[4])):
         ju.extend((engine, b, n, name) for b, n, name in parse_block(body.splitlines(), engine))
@@ -58,4 +67,5 @@ def main():
     print(f"wrote {len(ju)} rows to {ju_out}")
 
 
-main()
+if __name__ == "__main__":
+    main()

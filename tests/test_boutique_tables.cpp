@@ -40,7 +40,7 @@ class TestBoutiqueTables : public QObject
     static void checkShape(const QList<Row> &rows, int expected)
     {
         QCOMPARE(rows.size(), expected);
-        QSet<QString> seen;
+        QSet<QString> seen, names;
         for (const Row &r : rows) {
             QVERIFY(r.bank >= 1 && r.bank <= 8);
             QVERIFY(r.number >= 1 && r.number <= 8);
@@ -50,6 +50,10 @@ class TestBoutiqueTables : public QObject
                                 + QLatin1Char('-') + QString::number(r.number);
             QVERIFY2(!seen.contains(key), qPrintable(QStringLiteral("duplicate ") + key));
             seen.insert(key);
+            const QString nameKey = r.engine + QLatin1Char(':') + r.name;
+            QVERIFY2(!names.contains(nameKey),
+                     qPrintable(QStringLiteral("duplicate name ") + nameKey));
+            names.insert(nameKey);
         }
     }
 
