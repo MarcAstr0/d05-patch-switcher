@@ -62,6 +62,10 @@ void inputCallback(double, std::vector<unsigned char> *message, void *userData)
     if (!message || message->empty())
         return;
     auto *self = static_cast<RtMidiBackend *>(userData);
+    // Drop everything nobody wants (clock, notes, other channels, other CCs) before the first
+    // allocation: this reads the vector RtMidi owns and one atomic, nothing else.
+    if (!MidiBackend::accepts(self->acceptMask(), message->data(), message->size()))
+        return;
     const QByteArray bytes(reinterpret_cast<const char *>(message->data()), qsizetype(message->size()));
     QMetaObject::invokeMethod(self, [self, bytes] { emit self->received(bytes); }, Qt::QueuedConnection);
 }

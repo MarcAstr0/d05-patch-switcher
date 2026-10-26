@@ -47,6 +47,8 @@ qt_add_library(d05core STATIC
     src/midi/MidiBackend.h src/midi/MidiBackend.cpp
     src/midi/RtMidiBackend.h src/midi/RtMidiBackend.cpp
     src/midi/MidiLink.h src/midi/MidiLink.cpp
+    src/midi/PortHub.h src/midi/PortHub.cpp
+    src/midi/DeviceRouter.h src/midi/DeviceRouter.cpp
 )
 # The patch tables ship inside the binary as a Qt resource (:/data/d05-presets.tsv).
 qt_add_resources(d05core "data"

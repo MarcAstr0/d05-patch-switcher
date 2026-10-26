@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/Model.h"
 #include "core/PatchAddress.h"
 
 #include <QObject>
@@ -14,15 +15,32 @@
 namespace d05 {
 
 class MidiBackend;
+class PortHub;
 
-// The one object the UI talks to for MIDI. Does not own the backend.
+// One device's MIDI connection (SPEC-2 3.4). Does not own the backend. Built on a PortHub, which
+// owns the ports; the D-05 link behaves exactly as the single-backend link of version 1, the
+// JP-08 and JU-06A links send and follow a lone Program Change (FR-11).
 class MidiLink : public QObject {
     Q_OBJECT
 public:
     static constexpr int DefaultPollMs = 2000;
     static constexpr int DefaultEchoMs = 300;
 
+    // Version 1 form: a D-05 link on its own private hub around `backend`.
     explicit MidiLink(MidiBackend *backend, QObject *parent = nullptr);
+    // A link for `model` on a shared hub (DeviceRouter). The hub must outlive the link.
+    MidiLink(PortHub *hub, Model model, QObject *parent = nullptr);
+    ~MidiLink() override;
+
+    Model model() const { return m_model; }
+    // JU-06A only: the engine the unit is believed to be on. A send for an address of the other
+    // engine fails and puts nothing on the wire (PatchAddress::midiMessages).
+    void setEngine(int engine) { m_engine = engine == 106 ? 106 : 60; }
+    int engine() const { return m_engine; }
+    // The router runs the one 2 s poll: with this on the link starts no timer of its own and
+    // announces through pollNeededChanged() / needsPoll() when it wants pollNow().
+    void setExternalPolling(bool on);
+    bool needsPoll() const { return m_needPoll; }
 
     // Output. `name` is matched against the port list: exact match first, then
     // case-insensitive substring, first hit. Opens immediately; if the port is
@@ -83,6 +101,8 @@ public slots:
 
 public:
     bool isPolling() const { return m_timer.isActive(); }
+    bool isOutputWanted() const { return outputWanted(); }
+    bool isInputWanted() const { return inputWanted(); }
     int pollIntervalMs() const { return m_timer.interval(); }
 
     // Test hooks. Defaults: 2000 ms, 300 ms, monotonic clock.
@@ -91,6 +111,7 @@ public:
     void setClock(std::function<qint64()> msClock) { m_clock = std::move(msClock); }
 
     // The three messages for `a` on `channel` (1..16), in send order.
+    // D-05 form; see PatchAddress::midiMessages for the other models.
     static QList<QByteArray> patchMessages(const PatchAddress &a, int channel);
 
 signals:
@@ -100,6 +121,13 @@ signals:
     void connectedChanged(bool connected);
     void sent(const d05::PatchAddress &address);
     void currentChanged(const d05::PatchAddress &address);
+    // D-05 and JP-08: every follow event that is not an echo, after current() was updated (also
+    // when it equals the current patch). The device router uses it for FR-20.
+    void followReceived(const d05::PatchAddress &address);
+    // JU-06A: a non-echo Program Change 0..63 on the channel (the tracker decides what it means).
+    void programReceived(int program);
+    void inputConnectedChanged(bool connected);
+    void pollNeededChanged(bool needed);
 
 private slots:
     void onReceived(const QByteArray &message);
@@ -118,7 +146,15 @@ private:
     bool outputWanted() const { return !m_outName.isEmpty(); }
     bool inputWanted() const { return m_follow && !m_inName.isEmpty(); }
 
-    MidiBackend *m_backend;
+    void setConnectedIn(const QString &name);
+    bool inputOpenNow() const;
+    PatchAddress::MidiTriplet echoKey(const PatchAddress &a) const;
+
+    PortHub *m_hub;
+    Model m_model = Model::D05;
+    int m_engine = 60;
+    bool m_externalPoll = false;
+    bool m_needPoll = false;
     QTimer m_timer;
     std::function<qint64()> m_clock;
     QString m_outName;

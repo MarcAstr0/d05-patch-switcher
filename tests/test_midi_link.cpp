@@ -34,6 +34,31 @@ void inject(FakeMidiBackend &f, int ch, int lsb, int pc)
 class TestMidiLink : public QObject {
     Q_OBJECT
 private slots:
+    // The D-05 path through PortHub is byte-identical to version 1: Bank Select MSB, LSB, PC on
+    // the configured channel, in that order, and nothing else (also for the lowest/highest patch).
+    void d05SendIsByteIdenticalThroughThePortHub()
+    {
+        FakeMidiBackend f;
+        MidiLink link(&f);
+        link.setChannel(10);
+        link.setOutputPort(QStringLiteral("Fake D-05 In"));
+        QVERIFY(link.isConnected());
+        QVERIFY(link.sendPatch(addr("P3-45")));
+        QVERIFY(link.sendPatch(addr("U1-11")));
+        QVERIFY(link.sendPatch(addr("P6-88")));
+        const QList<QByteArray> expected{
+            bytes({0xB9, 0x00, 87}), bytes({0xB9, 0x20, 10}), bytes({0xC9, 28}),
+            bytes({0xB9, 0x00, 87}), bytes({0xB9, 0x20, 0}),  bytes({0xC9, 0}),
+            bytes({0xB9, 0x00, 87}), bytes({0xB9, 0x20, 13}), bytes({0xC9, 63}),
+        };
+        QCOMPARE(f.sentMessages(), expected);
+        QCOMPARE(MidiLink::patchMessages(addr("P3-45"), 10), expected.mid(0, 3));
+        // A JP-08 or JU-06A address is not this link's business.
+        f.clearSent();
+        QVERIFY(!link.sendPatch(*PatchAddress::parse(QStringLiteral("4-5"), Model::JP08)));
+        QVERIFY(f.sentMessages().isEmpty());
+    }
+
     void defaults()
     {
         FakeMidiBackend f;

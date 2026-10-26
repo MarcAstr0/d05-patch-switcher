@@ -109,6 +109,10 @@ void FakeMidiBackend::setInputPorts(const QStringList &names, bool notify)
 
 void FakeMidiBackend::injectReceived(const QByteArray &message)
 {
+    // The same filter the real backend applies on RtMidi's thread.
+    if (!accepts(acceptMask(), reinterpret_cast<const unsigned char *>(message.constData()),
+                 size_t(message.size())))
+        return;
     emit received(message);
 }
 

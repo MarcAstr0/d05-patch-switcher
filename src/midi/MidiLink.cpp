@@ -1,6 +1,7 @@
 #include "midi/MidiLink.h"
 
 #include "midi/MidiBackend.h"
+#include "midi/PortHub.h"
 
 #include <QElapsedTimer>
 #include <QRegularExpression>
@@ -69,8 +70,15 @@ QString MidiLink::portSpec(const QString &name, const QStringList &ports)
 }
 
 MidiLink::MidiLink(MidiBackend *backend, QObject *parent)
+    : MidiLink(new PortHub(backend), Model::D05, parent)
+{
+    m_hub->setParent(this);  // the private hub lives and dies with the link
+}
+
+MidiLink::MidiLink(PortHub *hub, Model model, QObject *parent)
     : QObject(parent)
-    , m_backend(backend)
+    , m_hub(hub)
+    , m_model(model)
     , m_timer(this)
     , m_status(QStringLiteral("No port selected"))
 {
@@ -81,15 +89,30 @@ MidiLink::MidiLink(MidiBackend *backend, QObject *parent)
     m_timer.setInterval(DefaultPollMs);
     m_timer.setSingleShot(false);
     connect(&m_timer, &QTimer::timeout, this, &MidiLink::pollNow);
-    connect(m_backend, &MidiBackend::received, this, &MidiLink::onReceived, Qt::QueuedConnection);
-    connect(m_backend, &MidiBackend::outputLost, this, &MidiLink::onOutputLost);
-    connect(m_backend, &MidiBackend::inputLost, this, &MidiLink::onInputLost);
+
+    PortHub::Client c;
+    c.received = [this](const QByteArray &m) { onReceived(m); };
+    c.outputLost = [this] { onOutputLost(); };
+    c.inputLost = [this] { onInputLost(); };
+    m_hub->attach(this, std::move(c));
+}
+
+MidiLink::~MidiLink()
+{
+    if (m_hub)
+        m_hub->detach(this);
+}
+
+void MidiLink::setExternalPolling(bool on)
+{
+    m_externalPoll = on;
+    updatePolling();
 }
 
 QStringList MidiLink::outputPortNames(QString *err) const
 {
     QString e;
-    const QStringList list = m_backend->outputPortNames(&e);
+    const QStringList list = m_hub->outputPortNames(&e);
     if (err)
         *err = e;
     return list;
@@ -98,7 +121,7 @@ QStringList MidiLink::outputPortNames(QString *err) const
 QStringList MidiLink::inputPortNames(QString *err) const
 {
     QString e;
-    const QStringList list = m_backend->inputPortNames(&e);
+    const QStringList list = m_hub->inputPortNames(&e);
     if (err)
         *err = e;
     return list;
@@ -150,6 +173,7 @@ void MidiLink::setChannel(int channel)
 {
     m_channel = qBound(1, channel, 16);
     m_rxMsb = m_rxLsb = -1;
+    m_hub->setInputChannel(this, m_channel);
 }
 
 void MidiLink::setCurrent(const PatchAddress &a)
@@ -160,7 +184,7 @@ void MidiLink::setCurrent(const PatchAddress &a)
 bool MidiLink::connectOutput()
 {
     const bool was = m_connected;
-    m_backend->closeOutput();
+    m_hub->releaseOutput(this);
     m_connected = false;
     m_connectedName.clear();
 
@@ -169,7 +193,7 @@ bool MidiLink::connectOutput()
         setStatus(QStringLiteral("No port selected"));
     } else {
         QString listErr;
-        const QStringList ports = m_backend->outputPortNames(&listErr);
+        const QStringList ports = m_hub->outputPortNames(&listErr);
         const QString port = matchPort(ports, m_outName);
         if (!listErr.isEmpty()) {
             setStatus(QStringLiteral("Error: ") + listErr);
@@ -177,7 +201,7 @@ bool MidiLink::connectOutput()
             setStatus(QStringLiteral("Port not found"));
         } else {
             QString err;
-            if (m_backend->openOutput(port, &err)) {
+            if (m_hub->acquireOutput(this, port, &err)) {
                 m_connected = true;
                 m_connectedName = port;
                 ok = true;
@@ -194,15 +218,15 @@ bool MidiLink::connectOutput()
 
 bool MidiLink::applyInput()
 {
-    m_backend->closeInput();
-    m_connectedInName.clear();
+    m_hub->releaseInput(this);
+    setConnectedIn(QString());
     m_rxMsb = m_rxLsb = -1;
     if (!inputWanted()) {
         setInputStatus(QString());
         return false;
     }
     QString listErr;
-    const QStringList ports = m_backend->inputPortNames(&listErr);
+    const QStringList ports = m_hub->inputPortNames(&listErr);
     if (!listErr.isEmpty()) {
         setInputStatus(QStringLiteral("Error: ") + listErr);
         return false;
@@ -213,21 +237,38 @@ bool MidiLink::applyInput()
         return false;
     }
     QString err;
-    if (!m_backend->openInput(port, &err)) {
+    if (!m_hub->acquireInput(this, port, m_channel, m_model == Model::D05, &err)) {
         setInputStatus(QStringLiteral("Error: ") + err);
         return false;
     }
-    m_connectedInName = port;
+    setConnectedIn(port);
     setInputStatus(QStringLiteral("Connected to ") + portKey(port));
     return true;
 }
 
+void MidiLink::setConnectedIn(const QString &name)
+{
+    const bool was = !m_connectedInName.isEmpty();
+    m_connectedInName = name;
+    if (was != !name.isEmpty())
+        emit inputConnectedChanged(!name.isEmpty());
+}
+
+bool MidiLink::inputOpenNow() const
+{
+    return m_hub->isInputOpen(this);
+}
+
 void MidiLink::updatePolling()
 {
-    const bool need = (outputWanted() && !m_connected) || (inputWanted() && !m_backend->isInputOpen());
-    if (need && !m_timer.isActive())
+    const bool need = (outputWanted() && !m_connected) || (inputWanted() && !inputOpenNow());
+    if (need != m_needPoll) {
+        m_needPoll = need;
+        emit pollNeededChanged(need);
+    }
+    if (need && !m_externalPoll && !m_timer.isActive())
         m_timer.start();
-    else if (!need && m_timer.isActive())
+    else if ((!need || m_externalPoll) && m_timer.isActive())
         m_timer.stop();
 }
 
@@ -235,14 +276,14 @@ void MidiLink::pollNow()
 {
     if (outputWanted() && !m_connected)
         connectOutput();
-    if (inputWanted() && !m_backend->isInputOpen())
+    if (inputWanted() && !inputOpenNow())
         applyInput();
     updatePolling();
 }
 
 void MidiLink::dropOutput(const QString &status)
 {
-    m_backend->closeOutput();
+    m_hub->releaseOutput(this);
     const bool was = m_connected;
     m_connected = false;
     m_connectedName.clear();
@@ -260,8 +301,8 @@ void MidiLink::onOutputLost()
 
 void MidiLink::dropInput(const QString &status)
 {
-    m_backend->closeInput();
-    m_connectedInName.clear();
+    m_hub->releaseInput(this);
+    setConnectedIn(QString());
     m_rxMsb = m_rxLsb = -1;
     setInputStatus(status);
     updatePolling();
@@ -277,7 +318,7 @@ void MidiLink::checkConnection()
 {
     if (m_connected) {
         QString err;
-        const QStringList ports = m_backend->outputPortNames(&err);
+        const QStringList ports = m_hub->outputPortNames(&err);
         if (!err.isEmpty())
             dropOutput(QStringLiteral("Error: ") + err);
         else if (!ports.contains(m_connectedName))
@@ -285,7 +326,7 @@ void MidiLink::checkConnection()
     }
     if (!m_connectedInName.isEmpty()) {
         QString err;
-        const QStringList ports = m_backend->inputPortNames(&err);
+        const QStringList ports = m_hub->inputPortNames(&err);
         if (!err.isEmpty())
             dropInput(QStringLiteral("Error: ") + err);
         else if (!ports.contains(m_connectedInName))
@@ -308,23 +349,39 @@ QList<QByteArray> MidiLink::patchMessages(const PatchAddress &a, int channel)
     return {msg(0xB0 | ch, 0x00, t.msb), msg(0xB0 | ch, 0x20, t.lsb), msg(0xC0 | ch, t.program)};
 }
 
+PatchAddress::MidiTriplet MidiLink::echoKey(const PatchAddress &a) const
+{
+    // The D-05 is recognised by its triplet. The 64-patch models send a lone Program Change, so
+    // only the program counts (both JU-06A engines send the same bytes).
+    if (m_model == Model::D05)
+        return a.midiTriplet();
+    return {-1, -1, a.program()};
+}
+
 bool MidiLink::sendPatch(const PatchAddress &a)
 {
     if (!m_connected)
         return false;
+    if (a.model() != m_model)
+        return false;
     checkConnection();
     if (!m_connected)
         return false;
-    for (const QByteArray &m : patchMessages(a, m_channel)) {
+    const QList<QByteArray> messages = m_model == Model::D05 ? patchMessages(a, m_channel)
+                                       : m_model == Model::JU06A ? a.midiMessages(m_channel, m_engine)
+                                                                 : a.midiMessages(m_channel);
+    if (messages.isEmpty())  // JU-06A address of the other engine: nothing may go out
+        return false;
+    for (const QByteArray &m : messages) {
         QString err;
-        if (!m_backend->send(m, &err)) {
+        if (!m_hub->sendOn(this, m, &err)) {
             dropOutput(QStringLiteral("Error: ") + err);
             return false;
         }
     }
     const qint64 now = m_clock();
     pruneSent(now);
-    m_recentSent.append({a.midiTriplet(), now});
+    m_recentSent.append({echoKey(a), now});
     m_current = a;
     emit sent(a);
     return true;
@@ -347,6 +404,30 @@ void MidiLink::onReceived(const QByteArray &message)
     if ((status & 0x0F) != m_channel - 1)
         return;
     const int d1 = uchar(message[1]);
+
+    if (m_model != Model::D05) {
+        // A lone Program Change; 64..127 mean nothing on a 64-patch unit.
+        if (type != 0xC0 || d1 > 63)
+            return;
+        pruneSent(m_clock());
+        for (const SentEntry &e : std::as_const(m_recentSent)) {
+            if (e.triplet.program == d1)
+                return;  // our own send looped back
+        }
+        if (m_model == Model::JU06A) {
+            emit programReceived(d1);  // the engine tracker owns what this means
+            return;
+        }
+        const auto addr = PatchAddress::fromBankNumber(m_model, d1 / 8 + 1, d1 % 8 + 1);
+        if (!addr)
+            return;
+        const bool changed = !m_current || *m_current != *addr;
+        m_current = addr;
+        if (changed)
+            emit currentChanged(*addr);
+        emit followReceived(*addr);
+        return;
+    }
 
     if (type == 0xB0 && message.size() >= 3) {
         const int v = uchar(message[2]);
@@ -377,10 +458,13 @@ void MidiLink::onReceived(const QByteArray &message)
         if (e.triplet == addr->midiTriplet())
             return;  // our own send looped back
     }
-    if (m_current && *m_current == *addr)
+    if (m_current && *m_current == *addr) {
+        emit followReceived(*addr);
         return;
+    }
     m_current = addr;
     emit currentChanged(*addr);
+    emit followReceived(*addr);
 }
 
 }  // namespace d05

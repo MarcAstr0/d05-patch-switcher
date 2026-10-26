@@ -5,6 +5,9 @@
 #include <QString>
 #include <QStringList>
 
+#include <atomic>
+#include <cstddef>
+
 namespace d05 {
 
 // Abstract MIDI transport. Implementations: RtMidiBackend (real ports) and
@@ -47,6 +50,16 @@ public:
     // Sends one complete MIDI message on the open output.
     virtual bool send(const QByteArray &message, QString *error) = 0;
 
+    // Input filter, applied on the input thread before anything is allocated. Bits 0..15: a
+    // Program Change on channel n+1 is wanted; bits 16..31: Bank Select (CC 0 / CC 32) on channel
+    // n+1 is wanted. Everything else (realtime, notes, other CCs, sysex) is dropped. The default
+    // accepts all of the above; PortHub narrows it to what the open links need.
+    static constexpr quint32 AcceptAll = 0xFFFFFFFFu;
+    void setAcceptMask(quint32 mask) { m_acceptMask.store(mask, std::memory_order_relaxed); }
+    quint32 acceptMask() const { return m_acceptMask.load(std::memory_order_relaxed); }
+    // Pure, allocation-free, safe on any thread.
+    static bool accepts(quint32 mask, const unsigned char *data, std::size_t size);
+
 signals:
     // One complete incoming MIDI message (channel messages only; sysex, clock
     // and active sensing are filtered by the backend).
@@ -55,6 +68,9 @@ signals:
     void outputLost();
     // Same for the open input port.
     void inputLost();
+
+private:
+    std::atomic<quint32> m_acceptMask{AcceptAll};
 };
 
 }  // namespace d05
