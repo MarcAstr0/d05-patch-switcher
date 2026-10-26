@@ -32,7 +32,9 @@ Run send(const QStringList &args, FakeMidiBackend &fake)
         return r;
     }
     QTextStream out(&r.out), err(&r.err);
-    r.code = o.listPorts ? Cli::runListPorts(fake, out, err) : Cli::runSend(o, fake, out, err);
+    r.code = o.listPorts ? Cli::runListPorts(fake, out, err)
+             : o.identify ? Cli::runIdentify(fake, out, err, false)
+                          : Cli::runSend(o, fake, out, err);
     return r;
 }
 }  // namespace
@@ -202,6 +204,125 @@ private slots:
         QCOMPARE(r.code, 0);
         QVERIFY(r.out.contains(QStringLiteral("[0] Fake D-05 In")));
         QVERIFY(r.out.contains(QStringLiteral("[0] Fake D-05 Out")));
+    }
+
+    void deviceAndEngineOptions()
+    {
+        CliOptions o;
+        QString msg;
+        int code = 0;
+        QCOMPARE(Cli::parse(argv({"--device", "ju06a", "--engine", "106", "--channel", "4", "--send", "106:4-5"}),
+                            &o, &msg, &code),
+                 Cli::ParseStatus::Run);
+        QCOMPARE(o.device, Model::JU06A);
+        QCOMPARE(o.engine, 106);
+        QCOMPARE(Cli::parse(argv({"--device", "JP08", "--channel", "5", "--send", "4-5"}), &o, &msg, &code),
+                 Cli::ParseStatus::Run);
+        QCOMPARE(o.device, Model::JP08);
+        QCOMPARE(Cli::parse(argv({"--identify"}), &o, &msg, &code), Cli::ParseStatus::Run);
+        QVERIFY(o.identify && o.headless());
+        QCOMPARE(Cli::parse(argv({"--send", "P1-11"}), &o, &msg, &code), Cli::ParseStatus::Run);
+        QCOMPARE(o.device, Model::D05);
+    }
+
+    void deviceUsageErrors_data()
+    {
+        QTest::addColumn<QStringList>("args");
+        QTest::newRow("unknown device") << argv({"--device", "d50"});
+        QTest::newRow("engine without device") << argv({"--engine", "60"});
+        QTest::newRow("engine with d05") << argv({"--device", "d05", "--engine", "60"});
+        QTest::newRow("engine with jp08") << argv({"--device", "jp08", "--engine", "60"});
+        QTest::newRow("engine 61") << argv({"--device", "ju06a", "--engine", "61"});
+        QTest::newRow("jp08 send needs channel") << argv({"--device", "jp08", "--port", "x", "--send", "4-5"});
+        QTest::newRow("identify with screenshot") << argv({"--identify", "--screenshot", "a.png"});
+    }
+    void deviceUsageErrors()
+    {
+        QFETCH(QStringList, args);
+        CliOptions o;
+        QString msg;
+        int code = 0;
+        QCOMPARE(Cli::parse(args, &o, &msg, &code), Cli::ParseStatus::ExitNow);
+        QCOMPARE(code, Exit::Usage);
+    }
+
+    void jp08Send()
+    {
+        FakeMidiBackend f;
+        const Run r = send(argv({"--device", "jp08", "--fake-midi", "--channel", "5", "--send", "4-5"}), f);
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.out, QStringLiteral("C4 1C\n"));
+        QCOMPARE(f.sentMessages().size(), 1);
+        QCOMPARE(send(argv({"--device", "jp08", "--fake-midi", "--channel", "5", "--send", "P1-11"}), f).code,
+                 Exit::BadAddress);
+        QCOMPARE(send(argv({"--device", "jp08", "--fake-midi", "--channel", "5", "--send", "45", "--port", "none"}), f).code,
+                 Exit::PortNotFound);
+    }
+
+    void ju06aSend()
+    {
+        FakeMidiBackend f;
+        Run r = send(argv({"--device", "ju06a", "--engine", "106", "--fake-midi", "--channel", "4", "--send", "4-5"}), f);
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.out, QStringLiteral("C3 1C\n"));
+        QCOMPARE(f.sentMessages().size(), 1);
+        r = send(argv({"--device", "ju06a", "--engine", "106", "--fake-midi", "--channel", "4", "--send", "106:8-8"}), f);
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.out, QStringLiteral("C3 3F\n"));
+        QCOMPARE(f.sentMessages().size(), 2);
+    }
+
+    void ju06aEngineMismatchSendsNothing()
+    {
+        FakeMidiBackend f;
+        const Run r = send(argv({"--device", "ju06a", "--engine", "60", "--fake-midi", "--channel", "4", "--send",
+                                 "106:4-5"}),
+                           f);
+        QCOMPARE(r.code, Exit::EngineMismatch);
+        QCOMPARE(Exit::EngineMismatch, 5);
+        QVERIFY(r.out.isEmpty());
+        QVERIFY(f.sentMessages().isEmpty());
+        QCOMPARE(r.err.count(QLatin1Char('\n')), 1);
+        QVERIFY(r.err.contains(QStringLiteral("106")) && r.err.contains(QStringLiteral("60")));
+    }
+
+    void ju06aBareAddressNeedsAnEngine()
+    {
+        FakeMidiBackend f;
+        const Run r = send(argv({"--device", "ju06a", "--fake-midi", "--channel", "4", "--send", "4-5"}), f);
+        QCOMPARE(r.code, Exit::BadAddress);
+        QVERIFY(r.err.contains(QStringLiteral("--engine")));
+        QVERIFY(f.sentMessages().isEmpty());
+        QCOMPARE(send(argv({"--device", "ju06a", "--engine", "60", "--fake-midi", "--channel", "4", "--send", "9-9"}), f).code,
+                 Exit::BadAddress);
+    }
+
+    void identifyListsPortsWithModels()
+    {
+        FakeMidiBackend f;
+        f.setOutputPorts({QStringLiteral("Boutique:Boutique MIDI 1 24:0"), QStringLiteral("Boutiq:Boutiq MIDI 1 28:0"),
+                          QStringLiteral("JU-06A:JU-06A MIDI 1 32:0"), QStringLiteral("HAPAX Puerto 1")});
+        f.setInputPorts({QStringLiteral("Fake D-05 Out")});
+        const Run r = send(argv({"--fake-midi", "--identify"}), f);
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.out,
+                 QStringLiteral("MIDI outputs: 4\n"
+                                "  [0] Boutique:Boutique MIDI 1 24:0  ->  D-05 (likely)\n"
+                                "  [1] Boutiq:Boutiq MIDI 1 28:0  ->  JP-08 (ambiguous: first generation, JP-08 assumed)\n"
+                                "  [2] JU-06A:JU-06A MIDI 1 32:0  ->  JU-06A (certain)\n"
+                                "  [3] HAPAX Puerto 1  ->  no Boutique recognised\n"
+                                "MIDI inputs: 1\n"
+                                "  [0] Fake D-05 Out  ->  D-05 (certain)\n"));
+        QVERIFY(f.sentMessages().isEmpty());
+        QVERIFY(!f.isOutputOpen() && !f.isInputOpen());
+        QVERIFY(r.err.isEmpty());
+    }
+
+    void identifyListError()
+    {
+        FakeMidiBackend f;
+        f.setListError(QStringLiteral("boom"));
+        QCOMPARE(send(argv({"--fake-midi", "--identify"}), f).code, Exit::MidiError);
     }
 };
 

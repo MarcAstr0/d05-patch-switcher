@@ -39,6 +39,7 @@ qt_add_library(d05core STATIC
     src/core/SearchQuery.h  src/core/SearchQuery.cpp
     src/core/Library.h      src/core/Library.cpp
     src/core/EngineTracker.h src/core/EngineTracker.cpp
+    src/core/Identify.h     src/core/Identify.cpp
     src/app/Paths.h         src/app/Paths.cpp
     src/app/AppSettings.h   src/app/AppSettings.cpp
     src/app/Cli.h           src/app/Cli.cpp
@@ -56,6 +57,11 @@ qt_add_resources(d05core "data"
     FILES data/d05-presets.tsv data/jp08-patches.tsv data/ju06a-patches.tsv
 )
 target_link_libraries(d05core PUBLIC Qt6::Core d05_options PRIVATE rtmidi)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Identify rule 2 asks the ALSA sequencer for a client's card; RtMidi's ALSA backend already needs it.
+    find_package(ALSA REQUIRED)
+    target_link_libraries(d05core PRIVATE ALSA::ALSA)
+endif()
 
 # --- d05ui: widgets ---
 qt_add_library(d05ui STATIC

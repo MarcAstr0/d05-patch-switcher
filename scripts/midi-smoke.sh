@@ -62,9 +62,39 @@ Program change $c, program $prog"
     fi
 }
 
+# check_pc DEVICE ENGINE-ARGS... : sends with --device, expects exactly one Program Change.
+# check_pc LABEL CHANNEL PROGRAM ARGS...  (ARGS go before --send's address, which is the last one)
+check_pc() {
+    local label="$1" ch="$2" prog="$3" c=$(($2 - 1)) got want
+    shift 3
+    : >"$dump"
+    "$bin" --config-dir "$tmp/cfg" --port "Midi Through" --channel "$ch" "$@" >"$tmp/out.txt" 2>"$tmp/err.txt"
+    local rc=$?
+    [ "$rc" -eq 0 ] || { fail "$label: exit $rc ($(cat "$tmp/err.txt"))"; return; }
+    for _ in $(seq 20); do
+        tr -d "\000" <"$dump" | grep -q "Program change" && break
+        sleep 0.1
+    done
+    sleep 0.2  # a stray second message would arrive by now
+    got="$(tr -d "\000" <"$dump" | grep -E "Control change|Program change" | sed -E 's/^ *[0-9]+:[0-9]+ +//; s/  +/ /g')"
+    want="Program change $c, program $prog"
+    if [ "$got" = "$want" ]; then
+        echo "ok   $label ch$ch"
+    else
+        fail "$label ch$ch: aseqdump saw:"$'\n'"$got"$'\n'"expected:"$'\n'"$want"
+    fi
+}
+
 check_send P1-11 1 8 0
 check_send P3-45 10 10 28
 check_send U8-88 16 7 63
+
+# JP-08 (docs/MIDI-JP08.md) and JU-06A (docs/MIDI-JU06A.md): a lone Program Change.
+check_pc "jp08 4-5" 5 28 --device jp08 --send 4-5
+check_pc "jp08 8-8" 1 63 --device jp08 --send 88
+check_pc "ju06a --engine 106 4-5" 4 28 --device ju06a --engine 106 --send 4-5
+check_pc "ju06a --engine 60 60:1-1" 16 0 --device ju06a --engine 60 --send 60:1-1
+check_pc "ju06a --engine 106 106:8-8" 2 63 --device ju06a --engine 106 --send 106:8-8
 
 # Exit codes: bad address -> 1, port not found -> 2, nothing reaches the port.
 : >"$dump"  # aseqdump keeps its file offset; NULs fill the gap, hence tr -d below
@@ -72,6 +102,16 @@ check_send U8-88 16 7 63
 rc=$?; [ "$rc" -eq 1 ] && echo "ok   P1-19 exits 1" || fail "P1-19 exit $rc, expected 1"
 "$bin" --config-dir "$tmp/cfg" --port "No Such Port" --send P1-11 >/dev/null 2>&1
 rc=$?; [ "$rc" -eq 2 ] && echo "ok   missing port exits 2" || fail "missing port exit $rc, expected 2"
+# JU-06A engine mismatch: exit 5, one line on stderr, nothing on the wire.
+"$bin" --config-dir "$tmp/cfg" --device ju06a --engine 60 --port "Midi Through" --channel 4 --send 106:4-5 >"$tmp/out.txt" 2>"$tmp/err.txt"
+rc=$?
+[ "$rc" -eq 5 ] && echo "ok   ju06a engine mismatch exits 5" || fail "engine mismatch exit $rc, expected 5"
+[ "$(wc -l <"$tmp/err.txt")" -eq 1 ] && [ ! -s "$tmp/out.txt" ] || fail "engine mismatch: expected one stderr line and no stdout"
+# A bare JU-06A address with no engine known exits 1; --engine with another device is a usage error.
+"$bin" --config-dir "$tmp/cfg" --device ju06a --port "Midi Through" --channel 4 --send 4-5 >/dev/null 2>&1
+rc=$?; [ "$rc" -eq 1 ] && echo "ok   bare ju06a address without engine exits 1" || fail "bare ju06a exit $rc, expected 1"
+"$bin" --config-dir "$tmp/cfg" --device jp08 --engine 60 --port "Midi Through" --channel 4 --send 4-5 >/dev/null 2>&1
+rc=$?; [ "$rc" -eq 64 ] && echo "ok   --engine with jp08 exits 64" || fail "--engine with jp08 exit $rc, expected 64"
 sleep 0.3
 [ -z "$(tr -d "\000" <"$dump" | grep -E "Control change|Program change")" ] || fail "bytes were sent for a failing command"
 [ ! -e "$tmp/cfg" ] || fail "--send created the --config-dir directory"

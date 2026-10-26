@@ -119,6 +119,10 @@ private slots:
         QTest::newRow("channel 0") << QStringList{QStringLiteral("--channel"), QStringLiteral("0")} << 64;
         QTest::newRow("bogus") << QStringList{QStringLiteral("--bogus")} << 64;
         QTest::newRow("send=") << QStringList{QStringLiteral("--fake-midi"), QStringLiteral("--send=P1-11")} << 0;
+        QTest::newRow("engine with d05") << QStringList{QStringLiteral("--engine"), QStringLiteral("60")} << 64;
+        QTest::newRow("identify fake") << QStringList{QStringLiteral("--fake-midi"), QStringLiteral("--identify")} << 0;
+        QTest::newRow("jp08 fake") << QStringList{QStringLiteral("--fake-midi"), QStringLiteral("--device"), QStringLiteral("jp08"), QStringLiteral("--send"), QStringLiteral("4-5")} << 0;
+        QTest::newRow("ju06a mismatch") << QStringList{QStringLiteral("--fake-midi"), QStringLiteral("--device"), QStringLiteral("ju06a"), QStringLiteral("--engine"), QStringLiteral("60"), QStringLiteral("--send"), QStringLiteral("106:4-5")} << 5;
         QTest::newRow("bad address") << QStringList{QStringLiteral("--fake-midi"), QStringLiteral("--send"), QStringLiteral("P1-19")} << 1;
     }
     void noDisplayExits()

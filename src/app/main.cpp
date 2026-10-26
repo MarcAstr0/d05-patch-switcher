@@ -1,6 +1,6 @@
 // Entry point. Arguments are parsed before any application object exists, so
 // help, version and usage errors never touch a display. Headless runs
-// (--list-ports, --send) use a QCoreApplication: no window, no library file.
+// (--list-ports, --identify, --send) use a QCoreApplication: no window, no library file.
 
 #include "app/AppSettings.h"
 #include "app/Cli.h"
@@ -130,6 +130,8 @@ int main(int argc, char *argv[])
         }
         if (opts.listPorts)
             return d05::Cli::runListPorts(*backend, out, err);
+        if (opts.identify)  // the fake backend's names are not ALSA clients: rule 1 only
+            return d05::Cli::runIdentify(*backend, out, err, !opts.fakeMidi);
         // --send falls back to the saved port and channel when --port / --channel are absent.
         if (d05::Paths::migrateLegacyDataDir() == d05::Paths::MigrateResult::Failed) {
             err << "warning: could not copy the version 1 settings to the new data directory; "
