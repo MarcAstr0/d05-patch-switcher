@@ -9,7 +9,7 @@ silent, the measurement is the authority, and the measurement date is given.
 ## Patches
 
 64 patches in 8 banks of 8, addressed on the panel with the PATCH NUMBER `[1]`–`[8]`
-buttons as `<bank>-<number>` with both digits 1–8. The unit's display reads e.g. `7-1`.
+buttons as `<bank>-<number>` with both digits 1–8. The unit's two-digit LED display shows `71` for `7-1` (confirmed by the owner 2026-10-26); this document and the app write addresses with the dash.
 There are no groups and no preset/user split: every slot is writable, and every slot
 ships with a factory sound (`data/jp08-patches.tsv`, from the *JP-08 Sound List*,
 `JP-08_Sound_List_e01_W.pdf`, 1-1 *NEG Sync* … 8-8 *Space Boomerang*).
