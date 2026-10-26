@@ -5,13 +5,14 @@
     "skinOrder: the four skin ids, in the order the generator writes them.",
     "colorGroups: section numbers and titles for the comment blocks (2.1 to 2.4 as version 1, 2.5 to 2.7 new).",
     "base.colors: every colour token with its metadata {hex, group, qss, use, source?}; the hex values are the D-05 skin.",
-    "base.type: every type role {weight, size, spacing, case, colour, lineHeight, usedFor[, cells]}; same rules as version 1.",
+    "base.type: every type role {weight, size, spacing, case, colour, lineHeight, usedFor[, cells][, family]}; same rules as version 1. No base role names a family: absent family means font.family (Inter).",
     "base.switches, base.components, base.strings: per-skin settings with the D-05 values.",
     "skins.<id>: {model, engine?, colors, type, switches, components, strings}. Each map holds only overrides.",
-    "colors overrides are name -> \"#RRGGBB\"; type overrides are name -> partial role object, merged field by field.",
+    "colors overrides are name -> \"#RRGGBB\"; type overrides are name -> partial role object, merged field by field (a skin may set family, weight, size, spacing, colour and lineHeight of a role; used today only for type.wordmark, the nameplate).",
     "Resolution: resolved(skin).X[name] = skins[skin].X[name] if present else base.X[name]. Every override name must exist in base.",
     "skins.d05 is empty in every map: the D-05 skin is base, which equals tokens.json version 1 for every version 1 name.",
     "font, webColors, webType, breakpoints, size: unchanged from version 1 and describe the D-05 skin and the web only.",
+    "extraFonts: families other than font.family that a resolved type role may name: {<family>: {files: {<weight>: path}, licence, coverage, source}}. coverage is every character the roles using that family may draw; the files are subset to it. Loaded by Theme at start-up, never used for other text.",
     "geometry: LED readout numbers in units of P; not emitted to CSS."
   ],
   "version": 2,
@@ -851,7 +852,15 @@
         "ruleTitleBack": "#2B2D33",
         "ruleTitleText": "#F2F3F4"
       },
-      "type": {},
+      "type": {
+        "wordmark": {
+          "family": "Archivo",
+          "weight": 600,
+          "size": 16,
+          "spacing": 2,
+          "lineHeight": 17
+        }
+      },
       "switches": {},
       "components": {
         "display": "led",
@@ -946,7 +955,16 @@
         "ruleBand2": "#B9502E",
         "ruleBand2Text": "#F7F1EA"
       },
-      "type": {},
+      "type": {
+        "wordmark": {
+          "family": "Archivo",
+          "weight": 700,
+          "size": 16,
+          "spacing": 1,
+          "colour": "labelPrimary",
+          "lineHeight": 17
+        }
+      },
       "switches": {},
       "components": {
         "display": "led",
@@ -1043,7 +1061,16 @@
         "ruleBand2": "#A3262D",
         "ruleBand2Text": "#F7F2EC"
       },
-      "type": {},
+      "type": {
+        "wordmark": {
+          "family": "Archivo",
+          "weight": 700,
+          "size": 16,
+          "spacing": 1,
+          "colour": "labelPrimary",
+          "lineHeight": 17
+        }
+      },
       "switches": {},
       "components": {
         "display": "led",
@@ -1102,6 +1129,18 @@
     "appFont": {
       "weight": 400,
       "size": 13
+    }
+  },
+  "extraFonts": {
+    "_about": "Nameplate faces per skin (DESIGN-2.md 3.1, REFERENCES.md section 14). OFL 1.1, subset to coverage.",
+    "Archivo": {
+      "files": {
+        "600": "assets/fonts/Archivo-SemiBold-nameplate.ttf",
+        "700": "assets/fonts/Archivo-Bold-nameplate.ttf"
+      },
+      "licence": "assets/fonts/OFL-Archivo.txt",
+      "coverage": "PATCH SWITCHER",
+      "source": "Archivo 2.001 (Omnibus-Type/Archivo at 211127690e8f), fonts/ttf/Archivo-SemiBold.ttf and Archivo-Bold.ttf; subset as assets/fonts/README.md says"
     }
   },
   "webColors": {

@@ -13,12 +13,17 @@ Writes SVG sources into docs/design/mockup/ and renders them with Inkscape at 1x
   docs/design/mockup/led-states.png                    LED display slot in every state (sheet)
   docs/design/mockup/engine-states.png                 engine control states (sheet)
   docs/design/mockup/jp08-grid-up.png                  owner alternative: JP-08 grid moved up 80 px
+  docs/design/mockup/nameplates.png                    the nameplate of each skin, stacked (DESIGN-2 3.1)
 
 Reuses the version 1 helpers in build.py (Svg, text measuring with Pillow + raqm, the LCD
 drawing for the D-05) and does not modify that file, whose T and ROLES tables are checked
 by gen-tokens.py against tokens.json version 1. Colours come from tokens-2.json resolved per
 skin, so the mockups are exactly the token values the builder gets. Needs what build.py
 needs: python3, Pillow with raqm, inkscape 1.x. Does not launch any browser.
+
+Fonts: Inkscape runs with a private FONTCONFIG_FILE whose only font directory is assets/fonts,
+so it sees exactly the committed Inter subset and the Archivo nameplate subsets
+(DESIGN-2 3.1) and nothing from the system; the file lives in a temporary directory.
 """
 
 import json
@@ -38,6 +43,42 @@ DATA = os.path.join(ROOT, "data")
 # New type roles (DESIGN-2 3) registered with the version 1 measuring helpers.
 for name, r in TOK["base"]["type"].items():
     B.ROLES.setdefault(name, (r["weight"], r["size"], float(r["spacing"])))
+
+
+def wordmark_role(skin):
+    """type.wordmark resolved for a skin (DESIGN-2 3.1): base merged with the skin's override."""
+    r = dict(TOK["base"]["type"]["wordmark"])
+    r.update(TOK["skins"][skin]["type"].get("wordmark", {}))
+    r.setdefault("family", TOK["font"]["family"])
+    return r
+
+
+_np_fonts = {}
+
+
+def wordmark_font(skin):
+    r = wordmark_role(skin)
+    if r["family"] == TOK["font"]["family"]:
+        path = B.FONT_FILE[r["weight"]]
+    else:
+        path = os.path.join(ROOT, TOK["extraFonts"][r["family"]]["files"][str(r["weight"])])
+    key = (path, r["size"])
+    if key not in _np_fonts:
+        _np_fonts[key] = B.ImageFont.truetype(path, r["size"], layout_engine=B.ImageFont.Layout.RAQM)
+    return _np_fonts[key]
+
+
+def wordmark_advance(skin, s="PATCH SWITCHER"):
+    """Qt-style horizontalAdvance of the wordmark: kerned advance plus spacing after every char."""
+    return wordmark_font(skin).getlength(s) + float(wordmark_role(skin)["spacing"]) * len(s)
+
+
+def wordmark_text(svg, S, skin, x, baseline, s="PATCH SWITCHER"):
+    r = wordmark_role(skin)
+    ls = float(r["spacing"])
+    lsa = f' letter-spacing="{ls:g}"' if ls else ""
+    svg.add(f'<text x="{x:g}" y="{baseline:g}" font-family="{r["family"]}" font-weight="{r["weight"]}" '
+            f'font-size="{r["size"]}px"{lsa} fill="{S[r["colour"]]}" xml:space="preserve">{B.esc(s)}</text>')
 
 
 def resolve(skin):
@@ -267,11 +308,11 @@ def draw_led_display(svg, S, comp, sw, x0, y0, p, readout, name, context, ctx_st
 
 
 # ---------------------------------------------------------------- nameplate and switcher (DESIGN-2 4.4)
-def nameplate(svg, S, strings, x, y, devices=None):
+def nameplate(svg, S, strings, x, y, devices=None, skin="d05"):
     """devices: None or one entry -> wordmark + sub; several -> wordmark + tabs.
-    Each device: (name, current, connected)."""
-    svg.text(x, y + 20, "PATCH SWITCHER", "wordmark", S["labelAccent"])
-    rx = x + round(advance("PATCH SWITCHER", "wordmark")) + 14
+    Each device: (name, current, connected). The wordmark is the skin's type.wordmark (DESIGN-2 3.1)."""
+    wordmark_text(svg, S, skin, x, y + 20)
+    rx = x + round(wordmark_advance(skin)) + 14
     svg.rect(rx, y + 9, 1, 12, S["ruleSecondary"])
     tx = rx + 15
     if not devices or len(devices) == 1:
@@ -398,7 +439,7 @@ def main_window(skin, cfg, out_svg):
     Bt = 46 + bh + 14
     svg = B.Svg(W, H)
     svg.rect(0, 0, W, H, S["panel"])
-    nameplate(svg, S, strings, 16, 10, cfg.get("devices"))
+    nameplate(svg, S, strings, 16, 10, cfg.get("devices"), skin)
 
     if comp["display"] == "lcd":
         B.draw_display(svg, 16, 46, cfg["lcd1"], cfg["lcd2"], p)
@@ -589,6 +630,27 @@ def engine_states(path):
     return svg.w
 
 
+def nameplates(path):
+    """The four nameplates stacked, each on its own panel as in the window's top row (DESIGN-2 3.1).
+    Rows: the row (16, 10, W - 32, 28) of a window 440 wide, logo absent, one device enabled."""
+    order = ("d05", "jp08", "ju06a-60", "ju06a-106")
+    labels = {"d05": "D-05 (unchanged): Inter Medium 15, spacing 3",
+              "jp08": "JP-08: Archivo SemiBold 16, spacing 2",
+              "ju06a-60": "JU-06A on 60: Archivo Bold 16, spacing 1",
+              "ju06a-106": "JU-06A on 106: Archivo Bold 16, spacing 1"}
+    w, row = 440, 64
+    svg = B.Svg(w, 8 + row * len(order))
+    svg.rect(0, 0, svg.w, svg.h, "#0B0C0D")
+    for i, skin in enumerate(order):
+        S, comp, strings, sw = resolve(skin)
+        y = 8 + row * i
+        svg.text(16, y + 11, labels[skin].upper(), "panelLabel", "#A3A293")
+        svg.rect(0, y + 16, w, 40, S["panel"])
+        nameplate(svg, S, strings, 16, y + 22, None, skin)
+    svg.write(path)
+    return svg.w
+
+
 # ---------------------------------------------------------------- Settings (DESIGN-2 7)
 NOTES = {
     "d05": ("The D-05 changes patch only when SYSTEM > MIDI > Prog.C is ON. If your unit also "
@@ -719,7 +781,13 @@ def measurements():
     m = {}
     for n in ("D-05", "JP-08", "JU-06A"):
         m[f"tab {n}"] = round(advance(n, "switcherTab"), 1)
-    m["wordmark PATCH SWITCHER"] = round(advance("PATCH SWITCHER", "wordmark"), 1)
+    for skin in TOK["skinOrder"]:
+        m[f"wordmark {skin}"] = round(wordmark_advance(skin), 1)
+        m[f"nameplate end {skin} (plate + 14 + 1 + 15 + sub)"] = (
+            16 + round(wordmark_advance(skin)) + 14 + 15
+            + round(advance(resolve(skin)[2]["wordmarkSub"], "wordmarkSub")))
+        m[f"about top line {skin} (plate + 30 + D-05 . JP-08 . JU-06A)"] = (
+            round(wordmark_advance(skin)) + 14 + 15 + round(advance("D-05 \u00b7 JP-08 \u00b7 JU-06A", "wordmarkSub")))
     for s in CAPTION:
         m[f"caption {s!r}"] = round(advance(s, "note"), 1)
     for s in ("FLIP TO 106, THEN CTRL+E", "FOUND JU-06A ON USB: OPEN SETTINGS", "FLIPPED TO 106? CTRL+E"):
@@ -765,6 +833,8 @@ def main():
     info = settings(s)
     print("settings:", info)
     jobs.append((s, os.path.join(design, "mockup-settings-devices"), 760))
+    s = os.path.join(HERE, "nameplates.svg")
+    jobs.append((s, os.path.join(HERE, "nameplates"), nameplates(s)))
     s = os.path.join(HERE, "led-states.svg")
     jobs.append((s, os.path.join(HERE, "led-states"), led_states(s)))
     s = os.path.join(HERE, "engine-states.svg")

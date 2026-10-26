@@ -2,7 +2,8 @@
 
 Sections 1 to 7: the D-50 and D-05 (task T2.1, version 1). Sections 8 to 13: the
 JUPITER-8 and JP-08, the JUNO-60, JUNO-106 and JU-06A (task T7.1, version 2), which
-`docs/design/DESIGN-2.md` turns into skins.
+`docs/design/DESIGN-2.md` turns into skins. Section 14: the nameplate lettering per skin
+(owner amendment of 2026-10-26).
 
 Task T2.1. This file records what was observed in photographs and official pages,
 which source each observation came from, how sure it is, and the design decisions
@@ -360,7 +361,9 @@ Numbering continues from section 6. DESIGN-2.md turns each into pixels and hex v
 22. **All lettering stays Inter** (no new font). The originals' panel lettering is a
     Helvetica-like grotesque (S10, S13, S14) that Inter already stands in for; the bold
     band titles are set in Inter Medium with open tracking. Model names appear only as
-    plain text (`JP-08`, `JU-06A`, `JUNO-60`, `JUNO-106`); no logotype.
+    plain text (`JP-08`, `JU-06A`, `JUNO-60`, `JUNO-106`); no logotype. *Amended
+    2026-10-26:* the `PATCH SWITCHER` nameplate is the one exception (section 14,
+    decisions 23 to 26); everything else stays Inter.
 
 ## 13. Open questions for the owner (version 2)
 
@@ -371,3 +374,99 @@ Numbering continues from section 6. DESIGN-2.md turns each into pixels and hex v
    reads plain red, the token `ledSegOn` changes to the JU-06A's red.
 3. **Your units under the room light.** As in section 7: a straight-on phone photo of
    either display, lit, in `assets/local/`, lets the two segment colours be matched.
+
+## 14. Nameplate lettering per skin (amendment, 2026-10-26)
+
+The owner asked for the `PATCH SWITCHER` nameplate to be set per skin in an OFL face with
+the feel of that panel's era, evoking the period's lettering without imitating any Roland
+logotype (SPEC-2 §9). Research date 2026-10-26, same method as section 8: S10, S13 (the
+800 x 600 patch memory close-up and the 1200 x 440 whole instrument) and S14 downloaded
+again, looked at in crops at 2 to 5 x, lettering measured with Python/PIL. No image is
+committed. Font source: S19.
+
+| ID | Source | Used for |
+|---|---|---|
+| S19 | Archivo, Omnibus-Type, <https://github.com/Omnibus-Type/Archivo>, commit `211127690e8f` (2026-09-02), static `fonts/ttf/Archivo-SemiBold.ttf` and `Archivo-Bold.ttf`, version 2.001, SIL OFL 1.1 with no Reserved Font Name. The project describes it as "a grotesque font reminiscent of late nineteenth century", designed for print and screen | The nameplate face (decisions 24, 25) |
+
+### 14.1 JUPITER-8 (S10)
+
+- **Logotype** `JUPITER-8`, top right: drawn letters, very heavy, normal to slightly narrow
+  proportions, **square counters with small radii** (U, P, R, the 8), flat terminals,
+  tight spacing, metallic mid grey on the black panel. Out of bounds.
+- `Roland` logo top left with `JP-8` in small outline letters under it. Out of bounds.
+- **Panel lettering** (not a logotype): a medium-weight grotesque in light grey capitals.
+  Section titles (`VCO MODULATOR`, `VCO-1`, `VCO-2`, `VCF` ...) are reversed out of black
+  rectangles set into the red-orange bars; `PATCH NUMBER` sits under the display window,
+  `LOWER` / `UPPER` in bracket rules above it. Spacing normal to slightly open.
+- **Width measured.** Width over cap height of the lit-pixel bounding box: `PATCH NUMBER`
+  11.5, `VCO MODULATOR` 13.0. The cap heights are only 8 to 9 photo pixels, so about
+  plus or minus 12 %. The same strings set in Archivo SemiBold give 11.5 and 12.7, in
+  Inter Medium 10.8 and 12.1, in Archivo Expanded SemiBold 15.0 and 16.5. The JUPITER-8's
+  panel lettering is a **normal-width** grotesque, not an extended one.
+
+### 14.2 JUNO-60 (S13) and JUNO-106 (S14)
+
+- **Logotypes** `JUNO-60` and `JUNO-106`: drawn letters, **very wide**, heavy, built on
+  **rounded-square counters** (U, N, O, 0, 6). The JUNO-60's are light grey cut by
+  horizontal stripes; the JUNO-106's are light grey with a lighter outline. Out of bounds.
+- **Descriptor line** under each logotype: `PROGRAMMABLE POLYPHONIC SYNTHESIZER` in white
+  capitals, a **bold grotesque, normal width, tightly spaced**. On the JUNO-60 it sits
+  below the band row (S13 close-up, legible); on the JUNO-106 under a blue rule (S14,
+  legible at 5 x). It is a product description set in type, like the bold white band
+  titles (`MEMORY`, `CHORUS`, `LFO`, `DCO`), not a logotype.
+- The two instruments' descriptor lines look like the same face at these resolutions. I
+  could not verify any difference, so none is designed.
+
+### 14.3 D-50 and D-05
+
+Section 4 holds: the panel lettering is a neo-grotesque that Inter Medium stands in for,
+the logotypes are drawn and out of bounds, and the D-05 wordmark was approved at G2. The
+evidence gives no reason to change it.
+
+### 14.4 What reads as a logotype, and what was tried
+
+All three period logotypes share one construction: heavy drawn letters on square or
+rounded-square counters, decorated (metallic, stripes, outline), the JUNOs very wide. An
+OFL face of that construction reads as the logotypes. This was tested, in a scratch
+directory and never committed, by setting `JUPITER-8` and `JUNO-106` in each candidate
+next to crops of the photographed logotypes: Michroma, Oxanium, Saira (expanded),
+Tomorrow, Hubot Sans and Unbounded come close to one or both logotypes and were
+rejected. So the nameplates evoke each panel's **type**, never its logo: the JUPITER-8's
+reversed-out section titles, the JUNOs' descriptor line.
+
+Also surveyed at 15, 26 and 30 px and not chosen: Archivo Expanded, Encode Sans Expanded,
+Krona One, Lexend Mega, Mona Sans (expanded), Anybody (expanded) (wide faces: the width
+would come from the logotypes' stance, not from the panels, 14.1); Chakra Petch, Bai
+Jamjuree, Space Grotesk, Jost, League Spartan (a later or a different idiom than the
+panels' grotesque); Public Sans, Libre Franklin, Hanken Grotesk, Schibsted Grotesk, Work
+Sans, Instrument Sans, Albert Sans, Zen Kaku Gothic New (grotesques that would also do;
+Archivo was preferred because it is a print-oriented grotesque with both weights as
+hinted static TTFs under one licence with no Reserved Font Name).
+
+**Why the chosen settings do not read as the Roland logotypes.**
+
+- **JP-08 nameplate vs the `JUPITER-8` logotype.** SemiBold, not a black weight; round
+  bowls on P and R and round C and S, where the logotype is square; open spacing, where
+  the logotype is tight; flat red-orange, not metallic grey; and it spells `PATCH
+  SWITCHER`. The shared letters (P, I, T, E, R) are in a different construction. Set as
+  `JUPITER-8` in the scratch test, it reads as typed text, not as the logo.
+- **JUNO nameplates vs the `JUNO-60` / `JUNO-106` logotypes.** Normal width, where the
+  logotypes are very wide; round counters, where theirs are rounded squares; no stripes
+  and no outline; flat white. Set as `JUNO-106` in the scratch test, it reads as typed
+  text. Archivo Expanded set the same way comes closer to the logotypes' width, a second
+  reason it is not used on the JUNO skins.
+- **The sub and the tabs stay Inter.** `FOR ROLAND JU-06A` and the model names are plain
+  text in the UI face, the way a manual prints them; only the app's own name changes face.
+
+### 14.5 Decisions (continuing section 12)
+
+23. **The nameplate is set per skin; nothing else changes face.** `type.wordmark` resolves
+    per skin; the sub, the tabs and every other role stay Inter (decision 22 amended).
+24. **JP-08: Archivo SemiBold 16 px, spacing 2, `labelAccent` (red-orange).** Evokes the
+    JUPITER-8's section titles: a normal-width medium grotesque with open spacing (14.1),
+    in the colour of the bars they sit in.
+25. **JU-06A, both engines: Archivo Bold 16 px, spacing 1, `labelPrimary` (panel white).**
+    Evokes the JUNO descriptor line: bold grotesque, normal width, tight, white (14.2).
+    One face for both sub-skins, because the evidence shows one; the panels tell them
+    apart.
+26. **D-05: unchanged** (Inter Medium 15, spacing 3, `labelAccent`), 14.3.

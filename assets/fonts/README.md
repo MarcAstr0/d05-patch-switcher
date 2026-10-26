@@ -4,9 +4,15 @@
 |---|---|---|
 | `Inter-Regular.ttf` | Inter 4.1 Regular, subsetted | 57,968 bytes |
 | `Inter-Medium.ttf` | Inter 4.1 Medium, subsetted | 58,816 bytes |
-| `OFL.txt` | The release's `LICENSE.txt`, unchanged: SIL Open Font License 1.1 | 4,380 bytes |
+| `OFL.txt` | Inter's licence: the release's `LICENSE.txt`, unchanged, SIL Open Font License 1.1 | 4,380 bytes |
+| `Archivo-SemiBold-nameplate.ttf` | Archivo 2.001 SemiBold, subsetted to `PATCH SWITCHER` (the JP-08 nameplate) | 7,664 bytes |
+| `Archivo-Bold-nameplate.ttf` | Archivo 2.001 Bold, subsetted to `PATCH SWITCHER` (the JU-06A nameplates) | 7,592 bytes |
+| `OFL-Archivo.txt` | Archivo's licence: the project's `OFL.txt`, unchanged, SIL Open Font License 1.1 | 4,388 bytes |
 
-Together the two fonts are 116,784 bytes (114 KB), against 829 KB for the originals.
+Together the two Inter fonts are 116,784 bytes (114 KB), against 829 KB for the
+originals. The two Archivo files add 15,256 bytes (379,344 bytes before subsetting);
+with their licence, 19,644 bytes. The Archivo files are used only for the `PATCH
+SWITCHER` nameplate (`docs/design/DESIGN-2.md` 3.1) and hold no other glyphs.
 
 ## Licence
 
@@ -71,3 +77,67 @@ Checked after subsetting (fontTools and Qt 6.4.2):
 
 Characters outside the subset fall back to a system font through Qt (accepted in
 DESIGN.md 3.1).
+
+# Archivo (nameplate faces, version 2)
+
+## Licence
+
+Archivo is Copyright 2020 The Archivo Project Authors
+(<https://github.com/Omnibus-Type/Archivo>), licensed under the SIL Open Font License 1.1
+(`OFL-Archivo.txt`). The licence names no Reserved Font Name, so the subsetted files keep
+the name `Archivo`. Under the OFL they are Modified Versions; they must stay under the
+OFL and must not be sold on their own.
+
+## Source
+
+- Project: <https://github.com/Omnibus-Type/Archivo>, commit
+  `211127690e8ff106c36c935f7e5e697114cff103` (2026-09-02). The repository has no
+  releases; the files are taken from that commit.
+- Files used, downloaded from
+  `https://raw.githubusercontent.com/Omnibus-Type/Archivo/211127690e8ff106c36c935f7e5e697114cff103/<path>`:
+
+| Path in the repository | sha256 | Size |
+|---|---|---|
+| `fonts/ttf/Archivo-SemiBold.ttf` | `6598b6ed816158767a7633bdfb01d78daf54cab4cd4d9d3cc0cfd995f4723083` | 186,700 |
+| `fonts/ttf/Archivo-Bold.ttf` | `951a0ebab63b1bb0d90a26c27625bda803d570dace3851fa2f1eea65852d8983` | 192,180 |
+| `OFL.txt` (committed as `OFL-Archivo.txt`) | `108b4e57c9c796d3d38d0428ca7ee39de47ad93187302718d9b2d8864b9b716b` | 4,388 |
+
+The font version string inside both files is `Version 2.001; ttfautohint (v1.8.3)`.
+
+## Subsetting (reproducible)
+
+Same `pyftsubset` as for Inter (fontTools 4.67.0 in a virtual environment). From a
+directory holding the two downloaded files:
+
+```sh
+for w in SemiBold Bold; do
+  pyftsubset Archivo-$w.ttf \
+    --text='PATCH SWITCHER' \
+    --layout-features='kern' \
+    --name-IDs='*' \
+    --output-file=assets/fonts/Archivo-$w-nameplate.ttf
+done
+cp OFL.txt assets/fonts/OFL-Archivo.txt
+```
+
+The text is the nameplate string (`extraFonts.Archivo.coverage` in
+`docs/design/tokens-2.json`); `resolve-tokens-2.py --check` fails if a glyph of it is
+missing. Every other option is left at its default; in particular the ttfautohint
+instructions are kept. A second run produced byte-identical files. sha256 of the
+committed results:
+
+| File | sha256 |
+|---|---|
+| `Archivo-SemiBold-nameplate.ttf` | `f31444d61ab3ddcef7c724c95b6042f50351e42cdfb5c6dfb20e9ae35be25b42` |
+| `Archivo-Bold-nameplate.ttf` | `cee1508be30249e1d7ff4b2f1387ac34774235119c88b0069551aa6a201c611d` |
+
+Checked after subsetting (fontTools and Qt 6.4.2):
+
+- cmap holds exactly space, `A C E H I P R S T W`; 12 glyphs with `.notdef`.
+- GPOS keeps `kern`; `fpgm`, `prep`, `cvt ` and `gasp` (hinting) are kept.
+- Registered with `QFontDatabase::addApplicationFont` on a fontconfig with no system
+  fonts (offscreen): `Archivo-SemiBold-nameplate.ttf` reports families `Archivo` and
+  `Archivo SemiBold`; `Archivo-Bold-nameplate.ttf` reports `Archivo`. `QFont("Archivo")`
+  at 16 px with `setWeight(QFont::DemiBold)` resolves to style `SemiBold`, weight 600,
+  and with `QFont::Bold` to `Bold`, 700; cap height 10.97 px in both.
+

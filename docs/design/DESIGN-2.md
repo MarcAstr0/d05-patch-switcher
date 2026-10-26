@@ -5,7 +5,7 @@ invents nothing. It is a **delta over `docs/design/DESIGN.md`**, which stays the
 complete specification of the D-05 skin and of every rule this file does not change:
 units (logical px at 1x, `QFont::setPixelSize`), rect notation `(x, y, w, h)`, the
 drawing and HiDPI rules (DESIGN.md 11), the footprint rules (DESIGN.md 12). Evidence and
-sources: `docs/design/REFERENCES.md` sections 8 to 13 (cited as S10 to S18 and
+sources: `docs/design/REFERENCES.md` sections 8 to 14 (cited as S10 to S18 and
 "decision n"). Behaviour: `docs/SPEC-2.md`; where a visual needs a reading the spec does
 not give, section 13.2 states it.
 
@@ -26,7 +26,8 @@ palettes · 12 Implementation map · 13 Deviations, readings, owner decisions.
 2. **Skins borrow colour, proportion and lettering style, never artwork.** Panels,
    section bands and button colours come from the 1981 JUPITER-8, the 1982 JUNO-60 and
    the 1984 JUNO-106 (decisions 13, 17 to 19). No logo, logotype, drawn lettering or
-   silkscreen. Model names appear as plain text in Inter.
+   silkscreen. Model names appear as plain text in Inter. The `PATCH SWITCHER` nameplate is
+   set per skin in an OFL face chosen from the panel's own non-logo lettering (3.1).
 3. **The display slot mirrors the unit.** On the D-05 it is the D-50 LCD of DESIGN.md 5.
    On the JP-08 and JU-06A it is the Boutique's own seven-segment readout beside the
    name and the context line in panel lettering (decision 13).
@@ -75,11 +76,12 @@ and folds `docs/design/resolve-tokens-2.py --check` (written for this task) into
 | `skinOrder` | `["d05", "jp08", "ju06a-60", "ju06a-106"]`: the order outputs are written in |
 | `colorGroups` | `[{id, title}]`: `2.1` to `2.4` as version 1, plus `2.5` LED readout, `2.6` Panel faces by role, `2.7` Version 2 lettering and section rules |
 | `base.colors` | every colour token: `{hex, group, qss, use, source?}`. The hex values are the D-05 skin. The 45 version 1 entries are byte-identical to version 1 |
-| `base.type` | every type role: `{weight, size, spacing, case, colour, lineHeight, usedFor[, cells]}`. The 13 version 1 roles are identical; 8 roles are new (section 3) |
+| `base.type` | every type role: `{weight, size, spacing, case, colour, lineHeight, usedFor[, cells][, family]}`. The 13 version 1 roles are identical; 8 roles are new (section 3). No base role has `family`: a role without one is drawn in `font.family` (Inter) |
 | `base.switches` | `lcdShowGhost`, `keyModeOnLine2`, `displayEntryEcho` (version 1 values), `ledShowGhost` (`true`) |
 | `base.components` | `display`, `groupSlot`, `rowTag`, `sectionRule`, `buttonLed`, `ledCells`: the D-05 values (2.4) |
 | `base.strings` | `modelName`, `groupTitle`, `bankTitle`, `numberTitle`, `engineTitle`, `wordmarkSub`, `idleContext`, `searchPlaceholder`: the D-05 values (2.4) |
-| `skins.<id>` | `{model, engine?, colors, type, switches, components, strings}`; every map holds **overrides only**. `colors` overrides are `name: "#RRGGBB"`; `type` overrides are `name: {partial role}` merged field by field (none are used today) |
+| `skins.<id>` | `{model, engine?, colors, type, switches, components, strings}`; every map holds **overrides only**. `colors` overrides are `name: "#RRGGBB"`; `type` overrides are `name: {partial role}` merged field by field. Used today only for `type.wordmark` on `jp08`, `ju06a-60`, `ju06a-106` (3.1), which set `family`, `weight`, `size`, `spacing`, `lineHeight` and, on the JUNO skins, `colour` |
+| `extraFonts` | families other than `font.family` that a resolved role may name: `{<family>: {files: {<weight>: path}, licence, coverage, source}}`. Today only `Archivo` (3.1). `coverage` is every character the roles using the family may draw; the files are subset to exactly that |
 | `geometry` | LED readout numbers in units of the dot pitch P (section 4.2). Not emitted to CSS |
 | `font`, `webColors`, `webType`, `breakpoints`, `size` | copied unchanged from version 1; they describe the D-05 and the web |
 
@@ -98,7 +100,11 @@ is `base`. Hex values are upper case `#RRGGBB`.
    The three LED readout tokens are the only new colours the D-05 never draws.
 3. Every colour resolves to `#RRGGBB` in every skin.
 4. `lineHeight` equals `round(ascent) + round(descent)` from the font file's `hhea`, as
-   version 1 checks.
+   version 1 checks, for every role **in every skin**, read from the file of the role's
+   resolved family and weight.
+5. A resolved role's `family` is `font.family` or a key of `extraFonts` with a file for its
+   weight; no `base` role names a family; every `extraFonts` file and licence exists; every
+   character of `coverage` is in each file's `cmap`.
 
 ### 2.3 New colour tokens
 
@@ -187,7 +193,7 @@ between the device and the engine name, as the brief gives them.
 |---|---|---|
 | `assets/theme/<skin>.qss`, one per skin in `skinOrder` | `assets/theme/app.qss.in` | the template with every placeholder replaced (below) |
 | `web/src/ui/theme.css` | `base` and the version 1 blocks only | **byte-identical to today's output**: the web stays the D-05. The CSS function reads `base.colors` filtered to the 45 version 1 names (groups 2.1 to 2.4), `base.type` filtered to the 13 version 1 roles, `webColors`, `webType`, `size`, `breakpoints`, exactly as version 1 |
-| a runtime palette for `Theme` (builder's choice of form; recommended: generated `src/ui/SkinTables.inc` with one row per skin and one `QColor` member per token name, plus the components and strings) | `skins` resolved | every resolved colour, switch, component and string per skin |
+| a runtime palette for `Theme` (builder's choice of form; recommended: generated `src/ui/SkinTables.inc` with one row per skin and one `QColor` member per token name, plus the components and strings) | `skins` resolved | every resolved colour, switch, component and string per skin, and the resolved `type.wordmark` (family, weight, size, spacing, colour token) |
 
 **Template syntax** of `assets/theme/app.qss.in` (committed with this task):
 
@@ -204,7 +210,12 @@ the version 1 block format of `gen-tokens.py` `qss_block()` extended: a first li
 (DESIGN.md section 2, DESIGN-2.md section 2.3)`, one sub-heading per `colorGroups` entry
 and one line per token in that group in `base.colors` order with the **resolved** hex
 (`name<pad to 18>#RRGGBB  qss`), then the `TYPE ROLES` block with all 21 roles in
-`base.type` order, then the `Application font` line. Column widths as version 1.
+`base.type` order, **resolved for the skin**, then the `Application font` line. Column
+widths as version 1. A role whose resolved family is not `font.family` gets two spaces and
+the family after the colour (`type.wordmark      600     16    2.0      caps        labelAccent  Archivo`),
+and the block's second header line reads `Family "Inter" (assets/fonts, OFL 1.1) unless
+the line names another (DESIGN-2.md 3.1), sizes in`. In `d05.qss` every role line is as
+version 1.
 
 **Rules part.** `app.qss.in` holds today's `app.qss` rules with each hex replaced by its
 token (one-to-one; the three button colours used by dialog buttons, key caps and the
@@ -218,7 +229,8 @@ changed; the template was produced and checked that way.
 `theme.css` equals the version 1 function's output; the 2.2 invariants; the runtime
 palette agrees with the resolved tokens; `docs/design/mockup/build.py`'s `T` and `ROLES`
 equal the version 1 subset of `base` (as today; `build2.py` reads `tokens-2.json`
-directly and needs no check); line heights. `assets/theme/app.qss` is deleted in T8.1;
+directly and needs no check); line heights per skin and the `extraFonts` coverage
+(invariants 4 and 5, as `resolve-tokens-2.py --check` does today). `assets/theme/app.qss` is deleted in T8.1;
 resources become `:/theme/d05.qss` and so on.
 
 ### 2.6 Applying a skin (`ui/Theme`)
@@ -230,7 +242,8 @@ resources become `:/theme/d05.qss` and so on.
 2. Set the application `QPalette` from the tokens as DESIGN.md 2 says.
 3. `qApp->setStyleSheet(<contents of :/theme/<id>.qss>)` (Qt re-polishes every widget).
 4. Emit `skinChanged()`. Custom-painted widgets drop their cached pixmaps that hold
-   colours (display frame, LED atlas, nameplate) and rebuild them before the paint;
+   colours or fonts (display frame, LED atlas, nameplate) and rebuild them before the
+   paint; the nameplate rebuilds with the new skin's `type.wordmark` (3.1);
    `MainWindow` shows the display widget and the group-slot widget the skin names (each
    slot is a `QStackedWidget` at the fixed rect, so nothing moves).
 
@@ -241,11 +254,12 @@ built per switch beyond the polish and the cache rebuild. No timer is added.
 
 ## 3. Typography
 
-One family, Inter (DESIGN.md 3.1), the same two committed files. **No new font**: the
-seven-segment digits are painted from geometry (4.2), which is crisper at 2x than a
-segment font and adds no file (decision 15); the originals' panel lettering is a
-Helvetica-like grotesque that Inter already stands in for (decision 22). Assets
-`assets/fonts/` unchanged.
+Inter (DESIGN.md 3.1), the same two committed files, sets everything except the
+nameplate. The seven-segment digits are painted from geometry (4.2), which is crisper at
+2x than a segment font and adds no file (decision 15); the originals' panel lettering is
+a Helvetica-like grotesque that Inter already stands in for (decision 22). **One
+exception** (owner amendment 2026-10-26, decisions 23 to 26): the `PATCH SWITCHER`
+nameplate is set per skin in Archivo, two subset files of 7.6 KB each (3.1).
 
 New roles (`base.type`; same conventions as DESIGN.md 3.2):
 
@@ -265,6 +279,69 @@ Measured widths (Inter 4.1 subset, kerned, with spacing; the mockup script print
 p = 3 / 4 / 5; `FOUND JU-06A ON USB: OPEN SETTINGS`, the longest context, 298 / 396 /
 494 px. Cap heights (`qRound(QFontMetricsF::capHeight())`): names 20 / 27 / 33, contexts
 9 / 12 / 15.
+
+### 3.1 Nameplate face per skin (`type.wordmark`)
+
+`type.wordmark` resolves per skin (tokens `skins.<id>.type.wordmark`, `extraFonts`). Only
+the wordmark `PATCH SWITCHER` changes: its position, the divider, the sub `FOR ROLAND
+<MODEL>` and the device tabs stay exactly as 4.4, and the sub and the tabs stay in Inter
+(`type.wordmarkSub`, `type.switcherTab`), so "Roland" and the model names appear only as
+plain text in the UI face. Evidence and the trademark reasoning: REFERENCES.md section 14,
+decisions 23 to 26.
+
+| Skin | Family, file in `assets/fonts/` | Weight | Size | Spacing | Case | Colour (resolved) | Line height | Cap height | Advance: mockup / Qt |
+|---|---|---|---|---|---|---|---|---|---|
+| `d05` | Inter, `Inter-Medium.ttf` (unchanged) | 500 Medium | 15 | 3.0 | Caps | `labelAccent` `#86A6D4` | 19 | 11 | 174.4 / 177 |
+| `jp08` | Archivo, `Archivo-SemiBold-nameplate.ttf` | 600 SemiBold | 16 | 2.0 | Caps | `labelAccent` `#F07A4A` | 17 | 11 | 169.3 / 172 |
+| `ju06a-60` | Archivo, `Archivo-Bold-nameplate.ttf` | 700 Bold | 16 | 1.0 | Caps | `labelPrimary` `#F0EDE2` | 17 | 11 | 158.4 / 160 |
+| `ju06a-106` | Archivo, `Archivo-Bold-nameplate.ttf` | 700 Bold | 16 | 1.0 | Caps | `labelPrimary` `#F4F3EE` | 17 | 11 | 158.4 / 160 |
+
+Advances include the spacing after every character, as `QFontMetricsF::horizontalAdvance`
+reports it. "Mockup" is the unhinted, kerned value `build2.py` measures (Pillow and
+libraqm); "Qt" is Qt 6.4.2 at 1x, offscreen on Linux with default hinting, measured with
+a throwaway harness. The code never hard-codes either: it measures (step 5 below).
+
+Why these numbers. Archivo at 16 px has the cap height of Inter at 15 px (10.97 and
+10.91 px by `QFontMetricsF::capHeight`), so every skin's nameplate stands equally tall on
+the shared baseline `y + 20` and the row is not re-laid out by a skin switch. Spacing is
+whole pixels so that 1x glyph origins stay on whole pixels, as version 1's wordmark. The
+JP-08 is SemiBold with open tracking (the JUPITER-8's section titles, decision 24); the
+JUNOs are Bold, tightly set, in the panel white (the JUNO descriptor line, decision 25).
+
+**Implementation** (`ui/Theme` and `ui/DeviceSwitcher`; the About box uses the same):
+
+1. Resources `:/fonts/Archivo-SemiBold-nameplate.ttf` and
+   `:/fonts/Archivo-Bold-nameplate.ttf`, registered once at start-up with
+   `QFontDatabase::addApplicationFont`, beside Inter. Checked with Qt 6.4.2 on a
+   fontconfig without system fonts: the SemiBold file reports families `Archivo` and
+   `Archivo SemiBold`, the Bold file `Archivo`.
+2. Font for `jp08`: `QFont f(QStringLiteral("Archivo")); f.setPixelSize(16);
+   f.setWeight(QFont::DemiBold); f.setLetterSpacing(QFont::AbsoluteSpacing, 2.0);` For the
+   JUNO skins: `QFont::Bold` and spacing `1.0`. Kerning stays on (Qt's default; the files
+   keep `kern`), hinting preference stays the default, as for Inter. Checked: `QFontInfo`
+   reports family `Archivo`, style `SemiBold`, weight 600, and `Bold`, weight 700.
+3. Fallbacks, in this order. If `QFontInfo(f)` reports another family, or a weight more
+   than 50 away from the role's, try the family `Archivo SemiBold` (the SemiBold file's
+   legacy name, which a GDI font database lists separately) at `QFont::Normal`. If that
+   also fails, or a file did not load, draw the base role (Inter Medium 15, spacing 3) in
+   the skin's resolved wordmark colour. Never fall back to a system font. Log the
+   failure once (`qWarning`), no status message.
+4. Archivo is used for nothing else: the files hold only `A C E H I P R S T W` and the
+   space (`extraFonts.Archivo.coverage`), and the wordmark is the constant string
+   `PATCH SWITCHER`. A test should assert that both families resolve as in step 2, like
+   the Inter check recorded in `assets/fonts/README.md`.
+5. The plate's right edge is `x + qRound(QFontMetricsF(f).horizontalAdvance(text))`; the
+   divider at `+ 14` and everything after it follow from that (4.4).
+6. Painting and footprint: the wordmark is drawn with `QPainter::drawText` into the
+   nameplate cache that 2.6 names (a pixmap at the device pixel ratio, cached as
+   DESIGN.md 4.5 caches the logo), rebuilt only on a skin change, a DPR change or a
+   device-set change. No layout per
+   paint. The fonts are crisp at 1x (the files keep Archivo's ttfautohint instructions)
+   and at 2x (checked in the Qt harness and in the mockups).
+
+Size cost: 7,664 + 7,592 bytes of fonts and 4,388 bytes of licence text, 19,644 bytes in
+the repository; the binary grows by the two font files (15,256 bytes, before any resource
+compression). SPEC-2 §5's 2.5 MB is unaffected in practice.
 
 ---
 
@@ -476,7 +553,7 @@ baselines at row `y + 20`. Parts from the left:
 
 | Part | x | Content |
 |---|---|---|
-| Plate | 16 | `logo.png` if present, fitted and cached exactly as DESIGN.md 4.5 (max 360 x 28); else the wordmark `PATCH SWITCHER`, `type.wordmark`, `labelAccent` (174 px) |
+| Plate | 16 | `logo.png` if present, fitted and cached exactly as DESIGN.md 4.5 (max 360 x 28); else the wordmark `PATCH SWITCHER` in the current skin's `type.wordmark` and its colour (3.1): 174 px on `d05`, 169 on `jp08`, 158 on the JUNO skins (mockup values; the code measures) |
 | Divider | plate right + 14 | 1 px rule, row `y + 9` to `y + 21`, `ruleSecondary`. Not drawn when a logo is shown and only one device is enabled (version 1 shows the logo alone) |
 | Sub or tabs | divider + 15 | see below |
 
@@ -496,8 +573,9 @@ ones only), starting at `tx` = divider + 15:
 | Next tab | `tx + 16 + nameAdvance + 18` | |
 
 Measured name advances: `D-05` 28, `JP-08` 34, `JU-06A` 44 px, so three tabs end at
-x 409 without a logo and at most x 595 with a full-width logo, inside the 800 px
-minimum. Tabs use the current skin's colours (the switcher is part of the panel). The
+x 409 without a logo on the D-05 skin (5 px earlier on `jp08`, 16 px earlier on the JUNO
+skins, whose wordmarks are narrower) and at most x 595 with a full-width logo, inside the
+800 px minimum. Tabs use the current skin's colours (the switcher is part of the panel). The
 red name is the panel's "not found" red (DESIGN.md 8.1) and is the only connection mark;
 the disconnected current device also shows `NO MIDI OUTPUT` on its display and `NOT
 FOUND` in the status bar. The JU-06A tab never shows the engine (the skin does).
@@ -757,8 +835,10 @@ device (the rows explain themselves).
 
 ### 8.2 About box (DESIGN.md 10.4)
 
-Width 440, title `About`. Top: the wordmark `PATCH SWITCHER`, divider, and the sub
-`D-05 · JP-08 · JU-06A` (`type.wordmarkSub`, 129 px; total 333 px). Paragraphs, 8 px
+Width 440, title `About`. Top: the wordmark `PATCH SWITCHER` in the current skin's
+`type.wordmark` (3.1), divider, and the sub `D-05 · JP-08 · JU-06A` (`type.wordmarkSub`,
+129 px; total 332 px on `d05`, 327 on `jp08`, 316 on the JUNO skins, inside the 400 px
+content width). Paragraphs, 8 px
 apart:
 
 1. `Version <x.y.z>` (`type.body`)
@@ -766,7 +846,7 @@ apart:
 3. Link (`type.note`, `labelAccent` of the current skin): `github.com/MarcAstr0/boutique-patch-switcher` to `https://github.com/MarcAstr0/boutique-patch-switcher` (T9.1 renames the repository; GitHub redirects the old URL meanwhile). The rich-text colour is the resolved `labelAccent`, not a literal.
 4. `MIT licence. Copyright 2026 Mario Castro Squella.` (`type.note`)
 5. `Roland, Boutique, D-05, D-50, JP-08, JUPITER-8, JU-06A, JUNO-60 and JUNO-106 are trademarks of Roland Corporation. This app is not affiliated with or endorsed by Roland.` (`type.note`, three lines)
-6. `Inter typeface, SIL Open Font License 1.1.` (`type.note`)
+6. `Inter and Archivo typefaces, SIL Open Font License 1.1.` (`type.note`; 310 px, one line)
 
 ### 8.3 Menus and titles
 
@@ -799,8 +879,10 @@ Drawn for this project; no Roland mark, logotype or artwork. Source written by
 ## 10. Mockups
 
 Source: `docs/design/mockup/build2.py` (reuses `build.py`'s helpers without changing it,
-reads `tokens-2.json`, renders with Inkscape at 1x and 2x with a fontconfig that sees only
-`assets/fonts`). Run `python3 docs/design/mockup/build2.py`.
+reads `tokens-2.json`, renders with Inkscape at 1x and 2x with a private `FONTCONFIG_FILE`
+in a temporary directory whose only font directory is `assets/fonts`, so Inkscape sees the
+committed Inter and Archivo subsets and no system font). Run
+`python3 docs/design/mockup/build2.py`.
 
 | File (1x; `@2x` twice the size) | Size | State |
 |---|---|---|
@@ -812,6 +894,7 @@ reads `tokens-2.json`, renders with Inkscape at 1x and 2x with a fontconfig that
 | `docs/design/mockup/led-states.png` | 799 x 1372 | every LED display state of 4.2 on the JU-06A and JP-08 skins |
 | `docs/design/mockup/engine-states.png` | 426 x 400 | engine control: 60, 106, armed, keyboard focus |
 | `docs/design/mockup/jp08-grid-up.png` | 960 x 560 | owner alternative for the JP-08 group slot (13.3.1) |
+| `docs/design/mockup/nameplates.png` | 440 x 264 | the four nameplates of 3.1 stacked, each on its skin's panel, logo absent, one device enabled (for the owner, 13.4) |
 
 ---
 
@@ -834,8 +917,8 @@ DESIGN.md sections 2 to 10, unchanged. The new tokens resolve as in 2.3.
 
 Near-black cool panel; red-orange double bars with dark title plates; white grid buttons
 with round red LEDs; the JUPITER-8's function colours on the other buttons (blue views,
-red AUTO SEND, yellow PREV / NEXT / SYSTEM); orange-red readout; red-orange wordmark and
-link; white numerals.
+red AUTO SEND, yellow PREV / NEXT / SYSTEM); orange-red readout; red-orange wordmark in
+Archivo SemiBold (3.1) and red-orange link; white numerals.
 
 | Token | Hex | D-05 value |
 |---|---|---|
@@ -912,7 +995,7 @@ link; white numerals.
 
 Black panel; blue bands over bank and number, a brick band over the engine control;
 cream-white number buttons, tan bank, PREV / NEXT / SYSTEM buttons, peach views, orange
-AUTO SEND; red readout; blue wordmark.
+AUTO SEND; red readout; cream-white wordmark in Archivo Bold (3.1); blue accent lettering.
 
 | Token | Hex | D-05 value |
 |---|---|---|
@@ -991,8 +1074,8 @@ AUTO SEND; red readout; blue wordmark.
 
 Mid-grey panel (the lightest skin); light-blue bands over bank and number, a crimson band
 over the engine control; teal bank and number buttons, cream views and PREV / NEXT /
-SYSTEM, orange AUTO SEND; red readout; pale blue wordmark; a lighter focus ring for the
-grey.
+SYSTEM, orange AUTO SEND; red readout; white wordmark in Archivo Bold (3.1); pale blue
+accent lettering; a lighter focus ring for the grey.
 
 | Token | Hex | D-05 value |
 |---|---|---|
@@ -1078,6 +1161,7 @@ grey.
 | LED display | `ui/LedDisplayWidget` (QPainter, atlas + frame) | 4.2 |
 | Group slot | `QStackedWidget` holding `GroupBar`, an empty `QWidget`, `ui/EngineControl` | 4.3 |
 | Nameplate and switcher | `ui/DeviceSwitcher` (replaces `ui/Nameplate`; keeps its logo code) | 4.4 |
+| Nameplate faces (registering Archivo, resolving `type.wordmark` per skin, fallbacks) | `ui/Theme` | 3.1 |
 | Section rule styles | `ui/SectionRule` | 5.1 |
 | Face sets, lens LEDs, armed lens | `ui/PanelButton` | 5.2 |
 | List rows | `ui/PatchDelegate` | 6 |
@@ -1158,3 +1242,24 @@ references pixel for pixel. Compare against section 10's mockups.
    belief, never the unit.` Shorter alternative: drop the caption and keep the tooltip.
 8. **Ghost segments** in the readout (`ledShowGhost`, default on), as the LCD's ghost
    dots.
+
+### 13.4 For the owner: nameplate lettering (amendment, 2026-10-26)
+
+Look at `docs/design/mockup/nameplates@2x.png` (the four nameplates) and the three
+re-rendered skin mockups.
+
+1. **Faces.** Recommended as designed (3.1): JP-08 in Archivo SemiBold, open tracking,
+   red-orange; both JUNO skins in Archivo Bold, tight, panel white. The D-05 stays Inter
+   Medium (decision 26).
+2. **The two JUNO skins share one face.** The JUNO-60 and the JUNO-106 print their
+   descriptor line in the same bold grotesque (REFERENCES 14.2), so the evidence gives no
+   second face; the sub-skins already differ in panel and band colours. If you want the
+   nameplates themselves to differ, the cheapest honest option is colour (for example
+   the 60 keeps blue `labelAccent`), not another family.
+3. **JUNO nameplate colour.** Designed panel white, as the descriptor line. Alternative:
+   keep the approved blue (60) and pale blue (106) of G7 (one field per skin:
+   `colour: labelAccent`).
+4. **A wider JP-08 nameplate?** Archivo Expanded SemiBold (same licence, one file swap)
+   gives a broader, more emphatic stance, but the JUPITER-8's own panel lettering is
+   normal width (REFERENCES 14.1), so the width would come from nowhere on the panel. Not
+   recommended; say if you want to see it rendered.
