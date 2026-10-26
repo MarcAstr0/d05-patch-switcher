@@ -5,6 +5,7 @@
 #include <QTest>
 
 using d05::PatchAddress;
+using d05::Model;
 using d05::PatchCatalog;
 
 static PatchAddress A(const char *s)
@@ -193,6 +194,92 @@ private slots:
         QCOMPARE(PatchCatalog::next(A("P6-88")), A("P6-88"));
         QCOMPARE(PatchCatalog::prev(A("U1-11")), A("U1-11"));
         QCOMPARE(PatchCatalog::next(A("U1-18")), A("U1-21"));
+    }
+
+    void jp08Table()
+    {
+        PatchCatalog c(Model::JP08);
+        QVERIFY(c.isValid());
+        QCOMPARE(c.presetCount(), 64);
+        QCOMPARE(c.model(), Model::JP08);
+        const auto a = *PatchAddress::fromBankNumber(Model::JP08, 1, 1);
+        QCOMPARE(c.name(a), QStringLiteral("NEG Sync"));
+        QCOMPARE(c.displayName(a), QStringLiteral("NEG Sync"));
+        QVERIFY(c.mode(a).isNull());
+        QVERIFY(c.tooltipName(a).isEmpty());
+        for (int i = 0; i < 64; ++i)
+            QVERIFY(!c.name(*PatchAddress::fromCatalogueIndex(Model::JP08, i)).isEmpty());
+        // A D-05 address is foreign here.
+        QVERIFY(c.name(A("P1-11")).isEmpty());
+    }
+
+    void jp08UserName()
+    {
+        PatchCatalog c(Model::JP08);
+        const auto a = *PatchAddress::fromBankNumber(Model::JP08, 1, 1);
+        QVERIFY(c.setUserName(a, QStringLiteral("  My Sync ")));
+        QVERIFY(c.hasUserName(a));
+        QCOMPARE(c.name(a), QStringLiteral("My Sync"));
+        QCOMPARE(c.displayName(a), QStringLiteral("My Sync"));
+        QCOMPARE(c.userName(a), QStringLiteral("My Sync"));
+        QCOMPARE(c.factoryName(a), QStringLiteral("NEG Sync"));
+        QCOMPARE(c.tooltipName(a), QStringLiteral("NEG Sync"));
+        QVERIFY(c.hasFactoryName(a));
+        QVERIFY(c.mode(a).isNull());
+        QVERIFY(!c.setUserName(A("U1-11"), QStringLiteral("x")));
+        QVERIFY(c.setUserName(a, QStringLiteral("0123456789012345678901")));
+        QCOMPARE(c.userName(a).size(), 18);
+        QVERIFY(c.setUserName(a, QString()));
+        QVERIFY(!c.hasUserName(a));
+        QCOMPARE(c.name(a), QStringLiteral("NEG Sync"));
+        QVERIFY(c.tooltipName(a).isEmpty());
+    }
+
+    void ju06aTable()
+    {
+        PatchCatalog c(Model::JU06A);
+        QVERIFY(c.isValid());
+        QCOMPARE(c.presetCount(), 128);
+        const auto a60 = *PatchAddress::fromBankNumber(Model::JU06A, 1, 1, 60);
+        const auto a106 = *PatchAddress::fromBankNumber(Model::JU06A, 1, 1, 106);
+        QCOMPARE(c.name(a60), QStringLiteral("LD Echolocator"));
+        QCOMPARE(c.name(a106), QStringLiteral("Brass"));
+        QVERIFY(c.mode(a60).isNull());
+        QVERIFY(c.setUserName(a106, QStringLiteral("Mine")));
+        QCOMPARE(c.displayName(a106), QStringLiteral("Mine"));
+        QCOMPARE(c.tooltipName(a106), QStringLiteral("Brass"));
+        QCOMPARE(c.name(a60), QStringLiteral("LD Echolocator"));  // other engine untouched
+        QVERIFY(c.tooltipName(a60).isEmpty());
+    }
+
+    void modelPrevNext()
+    {
+        const auto jp = [](int b, int n) { return *PatchAddress::fromBankNumber(Model::JP08, b, n); };
+        QCOMPARE(PatchCatalog::next(jp(1, 8)), jp(2, 1));
+        QCOMPARE(PatchCatalog::prev(jp(2, 1)), jp(1, 8));
+        QCOMPARE(PatchCatalog::next(jp(8, 8)), jp(8, 8));
+        QCOMPARE(PatchCatalog::prev(jp(1, 1)), jp(1, 1));
+        const auto ju = [](int e, int b, int n) { return *PatchAddress::fromBankNumber(Model::JU06A, b, n, e); };
+        QCOMPARE(PatchCatalog::next(ju(60, 1, 8)), ju(60, 2, 1));
+        QCOMPARE(PatchCatalog::next(ju(60, 8, 8)), ju(60, 8, 8));
+        QCOMPARE(PatchCatalog::prev(ju(106, 1, 1)), ju(106, 1, 1));
+        QCOMPARE(PatchCatalog::next(ju(106, 8, 8)), ju(106, 8, 8));
+        QCOMPARE(PatchCatalog::prev(ju(106, 2, 1)), ju(106, 1, 8));
+        QCOMPARE(PatchCatalog::prev(ju(60, 1, 1)), ju(60, 1, 1));
+    }
+
+    void d05AccessorsUnchanged()
+    {
+        PatchCatalog c;
+        QCOMPARE(c.model(), Model::D05);
+        QCOMPARE(c.factoryName(A("P1-11")), QStringLiteral("Fantasia"));
+        QVERIFY(c.tooltipName(A("P1-11")).isEmpty());
+        QVERIFY(c.setUserName(A("U1-11"), QStringLiteral("Lead")));
+        QVERIFY(c.factoryName(A("U1-11")).isEmpty());
+        QVERIFY(c.tooltipName(A("U1-11")).isEmpty());
+        QVERIFY(!c.setUserName(A("P1-11"), QStringLiteral("x")));
+        PatchCatalog d(Model::D05);
+        QVERIFY(d.isValid());
     }
 };
 

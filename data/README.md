@@ -88,5 +88,5 @@ python3 scripts/extract-boutique-lists.py JP-08_Sound_List_e01_W.pdf \
     JU-06A_Sound_List_e01_W.pdf data/jp08-patches.tsv data/ju06a-patches.tsv
 ```
 
-The PDFs are Roland's and are not committed. These tables are not yet compiled into the
-application (see `docs/PLAN.md`, T6.3).
+The PDFs are Roland's and are not committed. Both tables are embedded as Qt resources
+(`:/data/jp08-patches.tsv`, `:/data/ju06a-patches.tsv`) and loaded by `PatchCatalog`.

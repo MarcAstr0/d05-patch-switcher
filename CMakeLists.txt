@@ -47,10 +47,10 @@ qt_add_library(d05core STATIC
     src/midi/RtMidiBackend.h src/midi/RtMidiBackend.cpp
     src/midi/MidiLink.h src/midi/MidiLink.cpp
 )
-# The preset table ships inside the binary as a Qt resource (:/data/d05-presets.tsv).
+# The patch tables ship inside the binary as a Qt resource (:/data/d05-presets.tsv).
 qt_add_resources(d05core "data"
     PREFIX "/"
-    FILES data/d05-presets.tsv
+    FILES data/d05-presets.tsv data/jp08-patches.tsv data/ju06a-patches.tsv
 )
 target_link_libraries(d05core PUBLIC Qt6::Core d05_options PRIVATE rtmidi)
 
