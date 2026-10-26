@@ -268,6 +268,114 @@ private slots:
         QCOMPARE(PatchCatalog::prev(ju(60, 1, 1)), ju(60, 1, 1));
     }
 
+    void ju06aSpecialCharacterNames()
+    {
+        PatchCatalog c(Model::JU06A);
+        const auto a = *PatchAddress::parse(QStringLiteral("106:8-6"), Model::JU06A);
+        QCOMPARE(c.name(a), QString::fromUtf8("Louis\xE2\x80\x99 Weapon"));
+        QCOMPARE(c.name(a).at(5).unicode(), char16_t(0x2019));
+        const auto b = *PatchAddress::parse(QStringLiteral("106:1-6"), Model::JU06A);
+        QCOMPARE(c.name(b), QStringLiteral("Brass & Strings"));
+    }
+
+    void jp08BadRows()
+    {
+        QTemporaryDir d;
+        const QString p = writeTsv(d, QByteArray("bank\tnumber\tname\n"
+                                                 "1\t1\tNEG Sync\n"
+                                                 "0\t1\tZero\n"
+                                                 "9\t1\tNine\n"
+                                                 "1\t0\tZeroNum\n"
+                                                 "1\t9\tNineNum\n"
+                                                 "1\n"
+                                                 "1\t2\n"
+                                                 "1\t3\t\n"
+                                                 "1\t1\tDuplicate\n"));
+        for (const char *re : {"out of range", "out of range", "out of range", "out of range",
+                               "too few columns", "too few columns", "empty name", "duplicate address"})
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QString::fromLatin1(re)));
+        PatchCatalog c(Model::JP08, p);
+        QCOMPARE(c.presetCount(), 1);
+        QVERIFY(!c.isValid());
+        QCOMPARE(c.name(*PatchAddress::fromBankNumber(Model::JP08, 1, 1)), QStringLiteral("NEG Sync"));
+        QVERIFY(c.name(*PatchAddress::fromBankNumber(Model::JP08, 1, 2)).isEmpty());
+    }
+
+    void ju06aBadRows()
+    {
+        QTemporaryDir d;
+        const QString p = writeTsv(d, QByteArray("engine\tbank\tnumber\tname\n"
+                                                 "60\t1\t1\tLD Echolocator\n"
+                                                 "70\t1\t2\tWrongEngine\n"
+                                                 "106\t0\t1\tBank0\n"
+                                                 "106\t9\t1\tBank9\n"
+                                                 "106\t1\n"
+                                                 "106\t1\t2\n"
+                                                 "60\t1\t1\tDuplicate\n"
+                                                 "106\t1\t1\tBrass\n"));
+        for (const char *re : {"engine is not", "out of range", "out of range", "too few columns",
+                               "too few columns", "duplicate address"})
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QString::fromLatin1(re)));
+        PatchCatalog c(Model::JU06A, p);
+        QCOMPARE(c.presetCount(), 2);  // 60:1-1 and 106:1-1; the same bank/number in another engine is not a duplicate
+        QVERIFY(!c.isValid());
+        QCOMPARE(c.name(*PatchAddress::parse(QStringLiteral("60:1-1"), Model::JU06A)), QStringLiteral("LD Echolocator"));
+        QCOMPARE(c.name(*PatchAddress::parse(QStringLiteral("106:1-1"), Model::JU06A)), QStringLiteral("Brass"));
+    }
+
+    void smallModelBadHeader()
+    {
+        QTemporaryDir d;
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("unexpected header")));
+        // A D-05 header with JU-06A rows: the rows are read by the JU-06A layout regardless.
+        PatchCatalog j(Model::JP08, writeTsv(d, QByteArray("b\tn\tname\n1\t1\tNEG Sync\n")));
+        QCOMPARE(j.presetCount(), 1);
+        QVERIFY(!j.isValid());
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("unexpected header")));
+        PatchCatalog u(Model::JU06A, writeTsv(d, QByteArray("bank\tnumber\tname\n60\t1\t1\tX\n")));
+        QVERIFY(!u.isValid());
+    }
+
+    void foreignAddresses()
+    {
+        const auto jp = *PatchAddress::parse(QStringLiteral("1-1"), Model::JP08);
+        const auto ju60 = *PatchAddress::parse(QStringLiteral("60:1-1"), Model::JU06A);
+        const auto d05 = A("U1-11");
+        QCOMPARE(jp.catalogueIndex(), ju60.catalogueIndex());
+        QCOMPARE(jp.catalogueIndex(), d05.catalogueIndex());
+        QVERIFY(jp != ju60);
+
+        PatchCatalog j(Model::JP08);
+        PatchCatalog u(Model::JU06A);
+        PatchCatalog d;
+        QVERIFY(j.name(ju60).isEmpty());
+        QVERIFY(j.factoryName(ju60).isEmpty());
+        QVERIFY(u.name(jp).isEmpty());
+        QVERIFY(u.factoryName(jp).isEmpty());
+        QVERIFY(u.displayName(jp) == jp.toString());
+        QVERIFY(d.name(jp).isEmpty());
+        QVERIFY(j.name(d05).isEmpty());
+
+        QVERIFY(!u.setUserName(jp, QStringLiteral("Foreign")));
+        QVERIFY(!u.hasUserName(jp));
+        QVERIFY(!u.hasUserName(ju60));
+        QCOMPARE(u.name(ju60), QStringLiteral("LD Echolocator"));
+        QVERIFY(!j.setUserName(ju60, QStringLiteral("Foreign")));
+        QVERIFY(!j.hasUserName(ju60));
+        QVERIFY(!j.hasUserName(jp));
+        QCOMPARE(j.name(jp), QStringLiteral("NEG Sync"));
+        QVERIFY(!d.setUserName(jp, QStringLiteral("Foreign")));
+        QVERIFY(!d.setUserName(ju60, QStringLiteral("Foreign")));
+        QVERIFY(!d.hasUserName(d05));
+        QVERIFY(d.name(d05).isEmpty());
+        // And a stored user name is not visible through a foreign address.
+        QVERIFY(j.setUserName(jp, QStringLiteral("Mine")));
+        QVERIFY(j.name(ju60).isEmpty());
+        QVERIFY(j.userName(ju60).isEmpty());
+        QVERIFY(j.tooltipName(ju60).isEmpty());
+        QVERIFY(j.mode(d05).isNull());
+    }
+
     void d05AccessorsUnchanged()
     {
         PatchCatalog c;
