@@ -103,3 +103,48 @@ for s in 16 32 128 256 512; do
 done
 iconutil -c icns -o d05-patch-switcher.icns $T/d05.iconset
 ```
+
+## Boutique Patch Switcher icon (version 2)
+
+Drawn for version 2 from `docs/design/DESIGN-2.md` section 9: the same charcoal tile and
+band as the D-05 icon, a seven-segment window reading `1-1` in the JU-06A skins' LED
+red (segment geometry from DESIGN-2.md 4.2), and three panel buttons in the face colours
+of the three skins: D-05 grey with a slit LED, JUPITER-8 white and JUNO-106 teal with
+round LEDs, the middle one lit. No Roland logo, logotype or panel artwork. The
+`d05-patch-switcher*` files above stay until the rename task (plan T9.1) switches the
+packaging to these names.
+
+| File | What it is |
+|---|---|
+| `boutique-patch-switcher.svg` | Source, 256 x 256 viewBox, written by `make-bps-icons.py` |
+| `boutique-patch-switcher.png` | 256 x 256 RGBA |
+| `boutique-patch-switcher-{16,24,32}.png` | Hand placed on whole pixels by `make-bps-icons.py` |
+| `boutique-patch-switcher-{48,64,128}.png` | The SVG rendered at each size |
+| `boutique-patch-switcher.ico` | Windows: 16, 24, 32, 48, 64, 128, 256 px, PNG entries |
+| `boutique-patch-switcher.icns` | macOS: the same ten entries as the D-05 icon, written by `make-icns.py` |
+| `make-bps-icons.py` | Writes the SVG and the 16, 24 and 32 px PNGs (Pillow) |
+
+Regenerating (from this directory, `$T` an empty temporary directory):
+
+```sh
+python3 -I make-bps-icons.py
+inkscape boutique-patch-switcher.svg --export-type=png --export-width=256 \
+  --export-filename=boutique-patch-switcher.png
+for s in 48 64 128; do
+  inkscape boutique-patch-switcher.svg --export-type=png --export-width=$s \
+    --export-filename=boutique-patch-switcher-$s.png
+done
+for s in 16 24 32 48 64 128; do cp boutique-patch-switcher-$s.png $T/icon-$s.png; done
+cp boutique-patch-switcher.png $T/icon-256.png
+for s in 512 1024; do
+  inkscape boutique-patch-switcher.svg --export-type=png --export-width=$s \
+    --export-filename=$T/icon-$s.png
+done
+icotool -c -o boutique-patch-switcher.ico \
+  -r $T/icon-16.png -r $T/icon-24.png -r $T/icon-32.png -r $T/icon-48.png \
+  -r $T/icon-64.png -r $T/icon-128.png -r $T/icon-256.png
+python3 -I make-icns.py boutique-patch-switcher.icns $T
+```
+
+Checked: `icotool -l` lists 7 images; Pillow opens the `.icns` with sizes 16, 32, 128,
+256 and 512 at scale 1 and 2.

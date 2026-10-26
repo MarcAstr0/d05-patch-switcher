@@ -133,10 +133,10 @@ channel for the JP-08 checklist steps 2–4 and the JU-06A steps 2–4 (both eng
 
 Touches only `docs/design/`, `assets/`. No C++. Brief: `docs/DESIGN-BRIEF-2.md`.
 
-- ☐ **T7.1 References** extended for the Jupiter-8 / JP-08 and JUNO-60 / JUNO-106 / JU-06A panels and displays, with sources and the decisions taken.
-- ☐ **T7.2 `docs/design/DESIGN-2.md`** per the brief's Deliverables 2: the skin system and token schema, the three component choices per skin with every state, list-row variants, Settings device list and pages, Shortcuts and About changes, per-skin palettes.
-- ☐ **T7.3 Tokens and assets.** `tokens.json` version 2 (base + four skin sets; `d05` resolves to today's values exactly), the `app.qss.in` template structure agreed with the builder, fonts if any (OFL, with licences), the new icon set for "Boutique Patch Switcher".
-- ☐ **T7.4 Mockups**: `mockup-jp08.png`, `mockup-ju06a-60.png`, `mockup-ju06a-106.png` (armed, prompt showing), `mockup-devices.png`, `mockup-settings-devices.png`, from sources in `docs/design/mockup/`.
+- ☑ **T7.1 References** extended for the Jupiter-8 / JP-08 and JUNO-60 / JUNO-106 / JU-06A panels and displays, with sources and the decisions taken.
+- ☑ **T7.2 `docs/design/DESIGN-2.md`** per the brief's Deliverables 2: the skin system and token schema, the three component choices per skin with every state, list-row variants, Settings device list and pages, Shortcuts and About changes, per-skin palettes.
+- ☑ **T7.3 Tokens and assets.** `tokens.json` version 2 (base + four skin sets; `d05` resolves to today's values exactly), the `app.qss.in` template structure agreed with the builder, fonts if any (OFL, with licences), the new icon set for "Boutique Patch Switcher".
+- ☑ **T7.4 Mockups**: `mockup-jp08.png`, `mockup-ju06a-60.png`, `mockup-ju06a-106.png` (armed, prompt showing), `mockup-devices.png`, `mockup-settings-devices.png`, from sources in `docs/design/mockup/`.
 
 **Gate G7 (owner).** The foreman shows the mockups (Artifact page when available) and
 asks for approval or changes; one round of changes budgeted. M8 starts after approval

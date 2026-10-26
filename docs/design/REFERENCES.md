@@ -1,4 +1,8 @@
-# References: what the D-50 and D-05 panels look like
+# References: what the panels look like
+
+Sections 1 to 7: the D-50 and D-05 (task T2.1, version 1). Sections 8 to 13: the
+JUPITER-8 and JP-08, the JUNO-60, JUNO-106 and JU-06A (task T7.1, version 2), which
+`docs/design/DESIGN-2.md` turns into skins.
 
 Task T2.1. This file records what was observed in photographs and official pages,
 which source each observation came from, how sure it is, and the design decisions
@@ -225,3 +229,145 @@ values.
 4. **Your D-05.** A phone photo of your D-05's display lit, straight on, would let the
    colour be matched to the unit you actually play next to the laptop. Optional; put it
    in `assets/local/` (git-ignored) if you send one.
+
+---
+
+# Version 2: JUPITER-8 / JP-08 and JUNO-60 / JUNO-106 / JU-06A (T7.1)
+
+Research date: 2026-10-26. Same method as section 1: photos downloaded, looked at at
+full size and in crops, colours sampled with Python/PIL (median of a patch for
+surfaces, mean of the brightest 5 % for lit segments and thin lettering, mean of the
+most saturated 30 % for coloured bars). No image is committed; the sources are linked.
+Every colour below is evidence of hue and relative lightness, not of the paint: the
+Commons photos of the originals are film or phone shots under room light, and the
+Roland gallery images of the Boutiques are studio product shots that are probably
+retouched.
+
+## 8. Sources (version 2)
+
+| ID | Source | What it is | Used for |
+|---|---|---|---|
+| S10 | Wikimedia Commons, "Roland Jupiter-8 (1981).jpg", <https://commons.wikimedia.org/wiki/File:Roland_Jupiter-8_(1981).jpg> (CC BY-SA 2.0, a straightened crop of S11; 2862 x 1236 px) | Whole JUPITER-8, top-down, display unlit | Panel, section bars, button colours and shapes, patch display, rules |
+| S11 | Wikimedia Commons, "Roland Jupiter-8 Synth, 1983 (2039658601).jpg", <https://commons.wikimedia.org/wiki/File:Roland_Jupiter-8_Synth,_1983_(2039658601).jpg> (CC BY-SA 2.0, Ed Uthman; 2599 x 1733 px) | The same unit at an angle | Cross-check of S10 |
+| S12 | Roland, JP-08 product page <https://www.roland.com/global/products/jp-08/>, specifications <https://www.roland.com/global/products/jp-08/specifications/>, gallery images `JP-08_gal.jpg` (1680 x 711), `JP-08_K-25m_gal.jpg` (1525 x 1050), `JP-08_left_gal.jpg` (1680 x 887) under <https://static.roland.com/assets/images/products/gallery/> | Official text and top-down studio images, display lit | JP-08 display, section bars, buttons |
+| S13 | Wikimedia Commons, "Roland JUNO-60.jpg" <https://commons.wikimedia.org/wiki/File:Roland_JUNO-60.jpg> (CC0, 1024 x 306), "JUNO-60 patch memory.jpg" <https://commons.wikimedia.org/wiki/File:JUNO-60_patch_memory.jpg> (CC0, 800 x 600), "JUNO-60 DCO section.jpg" <https://commons.wikimedia.org/wiki/File:JUNO-60_DCO_section.jpg> (CC0, 800 x 600), "Roland Juno-60.jpg" <https://commons.wikimedia.org/wiki/File:Roland_Juno-60.jpg> (CC BY-SA 2.0, 1200 x 440) | Whole JUNO-60 and two close-ups of the memory and DCO sections (one owner, phone camera) | JUNO-60 panel, colour bands, memory section, display |
+| S14 | Wikimedia Commons, "Roland-Juno-106.jpg", <https://commons.wikimedia.org/wiki/File:Roland-Juno-106.jpg> (public domain, user Iainf, 2006; 1252 x 400) | Whole JUNO-106, top-down, display unlit | JUNO-106 panel, bands, patch buttons |
+| S15 | Wikimedia Commons, "Roland HS-60 close up (Juno-106 with built in speakers).jpg", <https://commons.wikimedia.org/wiki/File:Roland_HS-60_close_up_(Juno-106_with_built_in_speakers).jpg> (CC BY 2.0, Josh Semans; 1024 x 768) | The HS-60 (a JUNO-106 with speakers) at an angle, display lit, purple stage light | Lit JUNO-106 display: digits and decimal points |
+| S16 | Roland, JU-06A product page <https://www.roland.com/global/products/ju-06a/>, specifications <https://www.roland.com/global/products/ju-06a/specifications/>, gallery image `ju-06a_front_gal.jpg` (1680 x 708) | Official text and a top-down studio image, display lit | JU-06A display, bands, `60` / `106` marking, buttons, LEDs |
+| S17 | Roland, *JU-06A Owner's Manual*, <https://static.roland.com/assets/media/pdf/JU-06A_eng02_W.pdf> | Official manual | Display behaviour (decimal point on edit) |
+| S18 | This repository: `docs/MIDI-JP08.md`, `docs/MIDI-JU06A.md` (the owner's measurements on his units, 2026-10-26) | Measurements | What the units display after a Program Change, `---` on the JU-06A |
+
+The *JP-08 Owner's Manual* (`JP-08_e02_W.pdf` on static.roland.com) returned HTTP 403 to
+the download, so nothing below comes from it.
+
+## 9. Displays
+
+| | What it is | Verified from | Colour (sampled) |
+|---|---|---|---|
+| JUPITER-8 | **Four seven-segment digits in two pairs**, `LOWER` and `UPPER` (bracketed labels above), `PATCH NUMBER` below, behind a red filter in a window with a light grey frame. Unlit, the segments `88 88` show faintly through the red filter. Segments slanted forwards | S10 (crop at 4 x), S11 | Unlit only; the filter reads dark red `#130703` |
+| JP-08 | **Two seven-segment digits**, `PATCH NUMBER` in white above the window; slanted segments; black window with rounded corners and a thin lighter frame. Product images show `11`, with a wide gap between the digits. A sliver of a lit segment at the right edge of the window in S12 could be a third position or a decimal point; it is too small to tell | S12 (spec: "7 segments, 2 characters (LED)"; three gallery images, crops at 4 and 5 x) | Lit `#FC7505` (hue 27, orange-red); the JP-08 lights its sliders and buttons the same orange |
+| JUNO-60 | **Two seven-segment digits**, labels `BANK` and `PATCH NUMBER` above them, set straight into the black panel (no visible frame) | S13 patch memory close-up (unlit, `88` faintly visible) | Unlit only; ghost segments read dark red-grey `#352C2D` |
+| JUNO-106 | **Two seven-segment digits with decimal points**, labels `BANK` and `PATCH NUMBER` above, in a black window | S14 (unlit), S15 (lit, reads `37.`) | Lit segments overexposed to near white with a red fringe in S15; red. Hue not measurable under the stage light |
+| JU-06A | **Three seven-segment digits**: `1-1` with a dash in the middle cell; labels `BANK` and `PATCH` above in cream; slanted segments; black window with rounded corners. Shows `---` when the engine has no patch selected since power-on (S18), `bLo` on low batteries (S17), and a decimal point at the right of the patch number while a patch is edited (S17: "During patch editing, a decimal point "." is shown at the right of the patch number"; the manual prints it as `1-1.`) | S16 (spec: "7 segments, 3 characters (LED)"), S17, S18 | Lit `#E03B2E` (hue 4, red) |
+
+Conflict: `docs/MIDI-JP08.md` writes the JP-08 display as `7-1` after PC 48. The
+specification and every product image say two characters (`11`), which matches the
+JUPITER-8's own two-digit patch numbers `11` to `88` (its section title is `PATCH NUMBER
+11-88`, S10, S12). A two-character display cannot show a dash between two digits, so the
+`7-1` in the measurement notes is read as the bank-number notation, not as what the LEDs
+show. **Unverified on the owner's unit**; owner question 13.1 in section 13.
+
+Segment slant: forward (top to the right) on all three Boutiques and on the JUPITER-8
+(S10, S12, S16). Measured on the JU-06A digits in S16: about 6 degrees (top offset about
+one tenth of the digit height). No source shows a glow beyond the segment edges that is
+not camera bloom.
+
+## 10. Panels, colour bands and lettering
+
+| | Panel | Section titles | Other lettering |
+|---|---|---|---|
+| JUPITER-8 (S10, S11) | Black, sampled near `#080302` (underexposed film) | **Red-orange bars** over each synth section (`LFO`, `VCO MODULATOR`, `VCO-1`, ... `ENV-2`), with a thin dark line running through the bar at mid height and the title in light grey capitals on a **black rectangle** centred in the bar. Bar sampled `#9D1F06` (most saturated), reading about `#C0391A`; hue 10 | White to light grey capitals, small; bracket rules with end ticks over grouped buttons (`PATCH NUMBER 11-88`, `PATCH PRESET`); grey hairlines dividing the lower button row into sections |
+| JP-08 (S12) | Black, `#121317` to `#1C2027` (cool) | **Two parallel orange bars** with a dark gap between them, and the title in white bold capitals on a **dark rounded plate** centred over both bars (the JUPITER-8 bar, redrawn). Bars sampled `#E99038` (hue 30, orange); plate `#2D303A` | White bold capitals (`#DBDFE4` to `#F4F7F9`); bracket rule with ticks over `PATCH NUMBER 11-88`; long white hairlines dividing the bottom section |
+| JUNO-60 (S13) | Black, `#1C1C1C` (phone, room light) | **Solid colour bands** across the top of each section with the title in white capitals: brick red-orange over the synth sections (`LFO`, `DCO`, `HPF`, `VCF`, `VCA`, `ENV`, `CHORUS`; sampled `#C27D66` to `#D97F5B`, hue 15 to 17, overexposed), **blue** over `ARPEGGIO` and `MEMORY` (`#516182`, washed out). A thin rule in the band colour closes each section at the bottom; thin white vertical dividers between sections | White capitals; bracket rules with ticks over `BANK` and `PATCH NUMBER`; the model name is drawn lettering (out of bounds) |
+| JUNO-106 (S14) | **Mid grey**, `#434346` to `#5B5A54` depending on the area and light: clearly lighter than the JUNO-60 | **Crimson bands** over the synth sections (`#A2302D`, hue 1) with white titles, and a crimson rule under the whole section row; **light blue bars** over `BANK` and `PATCH NUMBER` (`#678EB3`, hue 209) with the titles in them | White to light grey capitals (`#C4C1BA`) |
+| JU-06A (S16) | Dark slate, `#202528` | **Solid bands with large white bold capitals**: `KEYBOARD` and `SEQUENCER` cream (`#F0F2E7`) with black lettering, `ARPEGGIO` and `MEMORY` blue (`#035EAC`, `#004B9F`), `LFO` ... `ENV` red (`#B53029`), `CHORUS` and `DELAY` darker red plates (`#8A1D22`), `MANUAL` a cream plate with black lettering | Cream capitals (`#F6FAEB`); bracket rules over `BANK` and `PATCH` |
+
+**How `60` and `106` are marked on the JU-06A** (S16, crop at 3 x): two small cream
+plates (`#E8E4CC`-ish) side by side, each with the number in black, wide, heavy
+lettering, joined by a cream bracket line that runs down to the slide switch between
+them. The heavy wide numerals are drawn lettering in the JUNO style, out of bounds; the
+plates, the bracket idea and the colours are not.
+
+Rules on all five: hairlines in the label colour, with the title set into the rule
+(bracket form with end ticks on the JUPITER-8, JP-08, JUNO-60 and JU-06A).
+
+## 11. Buttons and LEDs
+
+| | Patch buttons | LEDs | Other buttons |
+|---|---|---|---|
+| JUPITER-8 (S10) | **White caps** (`#FBF4EE`, overexposed), portrait (about 3 : 5), square corners, each with a **round LED hole near the top** that shows dark red when unlit | Red, round, inside the cap | Coloured caps by function: red (`TUNE`, `WRITE`), orange (`ARPEGGIO RANGE`, presets E to H, `#C04B15`), yellow (`ARPEGGIO MODE`, presets A to D, `#C79425`), white (`ASSIGN MODE`, `PATCH NUMBER`), green (`HOLD`, `MANUAL`, `#4D8924`), blue (`KEY MODE`, `TAPE MEMORY`, `#2A7BC3`), darker blue (`PANEL MODE`) |
+| JP-08 (S12) | Translucent caps with rounded corners, slightly portrait. In all three Roland images the eight `PATCH NUMBER` buttons show the **same pattern**: 1, 3, 5, 6, 8 glowing orange (`#FC9336` edge, `#FEB780` centre), 2, 4, 7 pale blue-grey (`#8CA3C0`). The `PATCH PRESET` row shows the same kind of pattern. Whether this is two cap colours or a lit / unlit state is **not verifiable from the photos** | The caps themselves light (no separate LED visible) | `UPPER/LOWER`, `DUAL` pale, `MANUAL` orange |
+| JUNO-60 (S13) | `PATCH NUMBER` 1 to 8 **cream-white** (`#FFFFF5`, overexposed), `BANK` 1 to 5 **tan** (`#CBAE93`), near-square caps with slightly rounded corners | Small **round red LEDs above** the buttons (chorus, tape); the memory buttons have none | Peach and orange caps (`#E2B494`; chorus and DCO range buttons in cream, peach and orange) |
+| JUNO-106 (S14) | `BANK` 1 to 8 and `PATCH NUMBER` 1 to 8 **teal** (`#7AA19F` to `#84A69C`, hue 162 to 177), landscape caps | Small round red LEDs above some buttons (`GROUP A/B`, tape) | Orange (`KEY TRANSPOSE`, `WRITE`, `CHORUS`, tape; `#FEB53E`), cream (`MANUAL`, `#D6CFAA`) |
+| JU-06A (S16) | Square caps with rounded corners: `BANK` 1 to 4 **grey-beige** (`#9B998A`), `PATCH` 1 to 8 **cream** (`#E0D1BC`) | **Round LEDs above every button**, in a dark ring: lit **red** (`#F24B48`), unlit **dark blue-grey** (`#2A4F71`) | Chorus I yellow (`#F1CD70`), chorus II orange (`#ED913A`), `DELAY` grey, `MANUAL` cream; a cream strip under the step buttons with the step numbers |
+
+## 12. Decisions taken from the references (version 2)
+
+Numbering continues from section 6. DESIGN-2.md turns each into pixels and hex values.
+
+13. **The skins model the originals; the readout models the Boutique.** The owner asked
+    for "the colours and look of the classic Jupiter-8" and "the look and feel of the
+    classic Junos", so panels, bands, rules and button colours come from S10, S13 and
+    S14. The display slot shows what the unit beside the laptop shows: the JP-08's and
+    the JU-06A's seven-segment readout (S12, S16), not the originals' displays, because
+    its job is to mirror the unit.
+14. **Readout cells: JP-08 two, JU-06A three.** S12 (spec and images) and S16 (spec and
+    image). The JP-08 shows bank and number as two digits (`71` for `7-1`), the JU-06A
+    `7-1` with the dash. JU-06A no-patch state `---` (S18). Decimal point geometry is
+    specified for the JU-06A (S17) but the app never lights it: it cannot know whether
+    the unit's patch is edited. Owner question 13.1 on the JP-08.
+15. **Segments painted from geometry, slanted about 6 degrees, with a faint ghost of the
+    unlit segments** (S10 shows the unlit segments through the filter, S12 and S16 show
+    no frame glow). No font: crisper at 2x and no new file. No halo.
+16. **Lit colours:** JP-08 orange-red (S12 `#FC7505`, set at `#FF6B1A`), JU-06A red
+    (S16 `#E03B2E`, set at `#FF3A2A`). The JP-08 colour comes only from Roland studio
+    images; the JUPITER-8's own display is red behind a red filter. **Unverified against
+    the owner's unit**; owner question 13.2.
+17. **JUPITER-8 skin (`jp08`):** near-black cool panel; the patch section's rules become
+    the **double bar with a dark title plate** (the JP-08's redrawing of the JUPITER-8
+    bar, S12, in the JUPITER-8's red-orange, S10); grid buttons **white with a round red
+    LED near the middle** (JUPITER-8 white caps with their LED hole, S10); the other
+    buttons take the JUPITER-8's function colours: view buttons blue (`KEY MODE`), AUTO
+    SEND red (`WRITE`), PREV / NEXT / SYSTEM yellow (`ARPEGGIO MODE`). The JP-08's
+    two-tone lit caps are not copied (decision 13, and their meaning is unverified).
+18. **JUNO-60 skin (`ju06a-60`):** black panel; the patch section's rules become **solid
+    blue bands with white titles** (the `MEMORY` band, S13); the engine control's rule
+    a **brick band** (the synth-section colour, S13); number buttons cream-white, bank
+    buttons tan, view buttons peach, AUTO SEND orange (S13).
+19. **JUNO-106 skin (`ju06a-106`):** **mid-grey panel** (S14), lighter than every other
+    skin so the engine is visible from across the room; light-blue bands over bank and
+    number (S14), a crimson band over the engine control (S14); teal bank and number
+    buttons, cream view buttons, orange AUTO SEND (S14).
+20. **LEDs on the 64-patch skins are round lenses in a dark ring** (JUPITER-8 LED hole,
+    S10; JU-06A LEDs in rings, S16), drawn inside the face because the grid has no room
+    above the buttons. Lit red; unlit a dark red-brown (the originals' unlit LEDs, S10,
+    S13). The JU-06A's blue-grey unlit LEDs are the Boutique's, not the originals', and
+    are not used.
+21. **The engine control borrows the `60` / `106` plates' idea** (two adjacent marked
+    positions joined to one switch, S16) but draws two ordinary panel buttons with
+    legends in the UI typeface. No copy of the heavy wide numerals, no slide switch: the
+    control must read as the app's belief, not as the switch.
+22. **All lettering stays Inter** (no new font). The originals' panel lettering is a
+    Helvetica-like grotesque (S10, S13, S14) that Inter already stands in for; the bold
+    band titles are set in Inter Medium with open tracking. Model names appear only as
+    plain text (`JP-08`, `JU-06A`, `JUNO-60`, `JUNO-106`); no logotype.
+
+## 13. Open questions for the owner (version 2)
+
+1. **JP-08 readout.** Look at your JP-08 after selecting `7-1`: does it show `71`
+   (two digits, as Roland's specification and photos say, and as designed), or `7-1`?
+   If it shows a dash, the skin switches to three cells (one token).
+2. **JP-08 LED colour.** Roland's photos show the JP-08's digits orange-red. If your unit
+   reads plain red, the token `ledSegOn` changes to the JU-06A's red.
+3. **Your units under the room light.** As in section 7: a straight-on phone photo of
+   either display, lit, in `assets/local/`, lets the two segment colours be matched.
