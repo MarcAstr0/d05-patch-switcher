@@ -242,11 +242,13 @@ void TestLibrary::roundTrip()
     QFile f(path);
     QVERIFY(f.open(QIODevice::ReadOnly));
     const QJsonObject o = QJsonDocument::fromJson(f.readAll()).object();
-    QCOMPARE(o.value(QStringLiteral("version")).toInt(), 1);
-    QCOMPARE(o.value(QStringLiteral("favorites")).toArray().at(0).toString(), QStringLiteral("P1-11"));
-    QCOMPARE(o.value(QStringLiteral("recents")).toArray().at(0).toObject().value(QStringLiteral("last")).toString(),
+    // File version 2 (SPEC-2 3.5): the v1 shape lives in devices.d05.
+    QCOMPARE(o.value(QStringLiteral("version")).toInt(), 2);
+    const QJsonObject d05 = o.value(QStringLiteral("devices")).toObject().value(QStringLiteral("d05")).toObject();
+    QCOMPARE(d05.value(QStringLiteral("favorites")).toArray().at(0).toString(), QStringLiteral("P1-11"));
+    QCOMPARE(d05.value(QStringLiteral("recents")).toArray().at(0).toObject().value(QStringLiteral("last")).toString(),
              QStringLiteral("2026-10-24T18:02:11Z"));
-    QCOMPARE(o.value(QStringLiteral("userNames")).toObject().value(QStringLiteral("U1-11")).toString(),
+    QCOMPARE(d05.value(QStringLiteral("userNames")).toObject().value(QStringLiteral("U1-11")).toString(),
              QStringLiteral("Warm Pad Mk2"));
 
     PatchCatalog cat2;
@@ -342,7 +344,7 @@ void TestLibrary::brokenFileSidelined_data()
     QTest::newRow("garbage") << QByteArray("{not json");
     QTest::newRow("array") << QByteArray("[1,2]");
     QTest::newRow("no version") << QByteArray("{\"favorites\":[]}");
-    QTest::newRow("future version") << QByteArray("{\"version\":2}");
+    QTest::newRow("future version") << QByteArray("{\"version\":3}");
     QTest::newRow("wrong types") << QByteArray("{\"version\":1,\"favorites\":5}");
     QTest::newRow("empty") << QByteArray();
 }
@@ -417,9 +419,8 @@ void TestLibrary::paths()
     QCOMPARE(Paths::settingsPath(), QDir::cleanPath(dir.path()) + QStringLiteral("/settings.ini"));
     Paths::setOverride(QString());
     QVERIFY(Paths::overrideDir().isEmpty());
-    QCOMPARE(Paths::dataDir(),
-             QDir::cleanPath(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)));
-    QVERIFY(Paths::dataDir().endsWith(QStringLiteral("marcastr0/d05-patch-switcher")));
+    QVERIFY(Paths::dataDir().endsWith(QStringLiteral("marcastr0/boutique-patch-switcher")));
+    QVERIFY(Paths::legacyDataDir().endsWith(QStringLiteral("marcastr0/d05-patch-switcher")));
 }
 
 QTEST_MAIN(TestLibrary)

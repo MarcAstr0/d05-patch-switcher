@@ -1259,6 +1259,178 @@
      ]
     }
    ]
+  },
+  "library": {
+   "$comment": "v1: a version 1 file is read as devices.d05; after the next save the file equals 'written' and 'file' is kept as library.json.v1. v2: a version 2 file loads per device (favorites in catalogue order, recents, userNames) and, after a save, is written back equal to itself (unknown device 'xyz' and top-level 'note' preserved; empty blocks for models without data are written).",
+   "v1": {
+    "file": {
+     "version": 1,
+     "favorites": [
+      "P1-11",
+      "U2-22",
+      "P1-11"
+     ],
+     "recents": [
+      {
+       "address": "P1-11",
+       "count": 3,
+       "last": "2026-10-24T18:02:11Z"
+      },
+      {
+       "address": "U2-22",
+       "count": 1,
+       "last": "2026-10-24T09:00:00Z"
+      }
+     ],
+     "userNames": {
+      "U1-11": "Warm Pad Mk2",
+      "U2-22": "  Tab\there  "
+     }
+    },
+    "written": {
+     "version": 2,
+     "devices": {
+      "d05": {
+       "favorites": [
+        "U2-22",
+        "P1-11"
+       ],
+       "recents": [
+        {
+         "address": "P1-11",
+         "count": 3,
+         "last": "2026-10-24T18:02:11Z"
+        },
+        {
+         "address": "U2-22",
+         "count": 1,
+         "last": "2026-10-24T09:00:00Z"
+        }
+       ],
+       "userNames": {
+        "U1-11": "Warm Pad Mk2",
+        "U2-22": "Tab here"
+       }
+      },
+      "jp08": {
+       "favorites": [],
+       "recents": [],
+       "userNames": {}
+      },
+      "ju06a": {
+       "favorites": [],
+       "recents": [],
+       "userNames": {}
+      }
+     }
+    },
+    "expect": {
+     "d05": {
+      "favorites": [
+       "U2-22",
+       "P1-11"
+      ],
+      "recents": [
+       "P1-11",
+       "U2-22"
+      ],
+      "userNames": {
+       "U1-11": "Warm Pad Mk2",
+       "U2-22": "Tab here"
+      }
+     }
+    }
+   },
+   "v2": {
+    "file": {
+     "version": 2,
+     "note": "kept",
+     "devices": {
+      "d05": {
+       "favorites": [
+        "U2-22",
+        "P1-11"
+       ],
+       "recents": [
+        {
+         "address": "P1-11",
+         "count": 3,
+         "last": "2026-10-24T18:02:11Z"
+        }
+       ],
+       "userNames": {
+        "U1-11": "Warm Pad Mk2"
+       }
+      },
+      "jp08": {
+       "favorites": [
+        "4-5"
+       ],
+       "recents": [
+        {
+         "address": "1-1",
+         "count": 1,
+         "last": "2026-10-24T18:05:00Z"
+        }
+       ],
+       "userNames": {
+        "1-1": "CN Intro Lead"
+       }
+      },
+      "ju06a": {
+       "favorites": [
+        "60:2-3",
+        "106:1-1"
+       ],
+       "recents": [],
+       "userNames": {
+        "106:1-2": "CN Brass"
+       }
+      },
+      "xyz": {
+       "favorites": [
+        "a"
+       ],
+       "anything": 1
+      }
+     }
+    },
+    "expect": {
+     "d05": {
+      "favorites": [
+       "U2-22",
+       "P1-11"
+      ],
+      "recents": [
+       "P1-11"
+      ],
+      "userNames": {
+       "U1-11": "Warm Pad Mk2"
+      }
+     },
+     "jp08": {
+      "favorites": [
+       "4-5"
+      ],
+      "recents": [
+       "1-1"
+      ],
+      "userNames": {
+       "1-1": "CN Intro Lead"
+      }
+     },
+     "ju06a": {
+      "favorites": [
+       "60:2-3",
+       "106:1-1"
+      ],
+      "recents": [],
+      "userNames": {
+       "106:1-2": "CN Brass"
+      }
+     }
+    }
+   }
   }
  }
 }

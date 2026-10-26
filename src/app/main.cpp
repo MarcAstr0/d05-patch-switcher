@@ -131,6 +131,7 @@ int main(int argc, char *argv[])
         if (opts.listPorts)
             return d05::Cli::runListPorts(*backend, out, err);
         // --send falls back to the saved port and channel when --port / --channel are absent.
+        d05::Paths::migrateLegacyDataDir();
         const d05::AppSettings saved;
         return d05::Cli::runSend(opts, *backend, out, err, &saved);
     }
@@ -162,6 +163,7 @@ int main(int argc, char *argv[])
         backend = std::move(fake);
     } else
         backend = std::make_unique<d05::RtMidiBackend>();
+    d05::Paths::migrateLegacyDataDir();  // first start after the rename: copy, never move
     d05::PatchCatalog catalog;
     d05::Library library(catalog, d05::Paths::libraryPath());
     const d05::Library::LoadResult loaded = library.load();

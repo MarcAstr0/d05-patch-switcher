@@ -142,7 +142,7 @@ private slots:
     }
 
     // models.<id>.search: per-model grammar (SPEC-2 FR-3). Optional "userNames" per case
-    // ({canonical address: name}) is applied to a fresh catalogue (Library only writes D-05 names so far).
+    // ({canonical address: name}) is applied to a fresh catalogue through Library::setUserName.
     void modelSearch_data()
     {
         QTest::addColumn<QString>("id");
@@ -159,18 +159,86 @@ private slots:
         const QJsonArray arr = m_doc.value(QStringLiteral("models")).toObject()
                                    .value(id).toObject().value(QStringLiteral("search")).toArray();
         QVERIFY(arr.size() >= minCases);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
         for (const QJsonValue &v : arr) {
             const QJsonObject c = v.toObject();
             PatchCatalog cat(model);
             QVERIFY(cat.isValid());
+            Library seed(cat, dir.filePath(QStringLiteral("seed.json")));
             const QJsonObject users = c.value(QStringLiteral("userNames")).toObject();
             for (auto it = users.begin(); it != users.end(); ++it) {
                 const auto a = PatchAddress::parse(it.key(), model);
                 QVERIFY2(a, qPrintable(it.key()));
-                QVERIFY(cat.setUserName(*a, it.value().toString()));
+                QVERIFY(seed.setUserName(*a, it.value().toString()));
             }
             const QString msg = checkSearch(cat, c);
             QVERIFY2(msg.isEmpty(), qPrintable(msg));
+        }
+    }
+
+    // models.library: one v1 and one v2 file (SPEC-2 3.5).
+    void modelsLibrary()
+    {
+        const QJsonObject lib = m_doc.value(QStringLiteral("models")).toObject()
+                                    .value(QStringLiteral("library")).toObject();
+        QVERIFY(!lib.isEmpty());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+
+        for (const QString &which : {QStringLiteral("v1"), QStringLiteral("v2")}) {
+            const QJsonObject c = lib.value(which).toObject();
+            const QJsonObject file = c.value(QStringLiteral("file")).toObject();
+            const QString path = dir.filePath(which + QStringLiteral(".json"));
+            {
+                QFile f(path);
+                QVERIFY(f.open(QIODevice::WriteOnly));
+                f.write(QJsonDocument(file).toJson());
+            }
+            PatchCatalog d05cat, jpcat(Model::JP08), jucat(Model::JU06A);
+            Library l(d05cat, path);
+            l.attachCatalog(jpcat);
+            l.attachCatalog(jucat);
+            QCOMPARE(l.load(), Library::LoadResult::Loaded);
+
+            const QJsonObject ex = c.value(QStringLiteral("expect")).toObject();
+            for (const Model m : allModels()) {
+                const QString id = modelInfo(m).id;
+                if (!ex.contains(id))
+                    continue;
+                const QJsonObject e = ex.value(id).toObject();
+                const PatchCatalog &cat = m == Model::D05 ? d05cat : (m == Model::JP08 ? jpcat : jucat);
+                QStringList favs, rec;
+                for (const auto &a : l.favorites(m))
+                    favs << a.toString();
+                for (const auto &r : l.recents(m))
+                    rec << r.address.toString();
+                QCOMPARE(favs, toStrings(e.value(QStringLiteral("favorites")).toArray()));
+                QCOMPARE(rec, toStrings(e.value(QStringLiteral("recents")).toArray()));
+                QJsonObject names;
+                for (int i = 0; i < modelInfo(m).catalogueSize; ++i) {
+                    const PatchAddress a = m == Model::D05 ? *PatchAddress::fromCatalogueIndex(i)
+                                                           : *PatchAddress::fromCatalogueIndex(m, i);
+                    if (cat.hasUserName(a))
+                        names.insert(a.toString(), cat.userName(a));
+                }
+                QCOMPARE(names, e.value(QStringLiteral("userNames")).toObject());
+            }
+
+            // A save with no net change writes the version 2 form.
+            l.setFavorite(*PatchAddress::parse(QStringLiteral("P6-88")), true);
+            l.setFavorite(*PatchAddress::parse(QStringLiteral("P6-88")), false);
+            QVERIFY(l.flush());
+            QFile f(path);
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            const QJsonObject written = QJsonDocument::fromJson(f.readAll()).object();
+            QCOMPARE(written, which == QLatin1String("v1") ? c.value(QStringLiteral("written")).toObject() : file);
+            QCOMPARE(QFile::exists(l.legacyCopyPath()), which == QLatin1String("v1"));
+            if (which == QLatin1String("v1")) {
+                QFile copy(l.legacyCopyPath());
+                QVERIFY(copy.open(QIODevice::ReadOnly));
+                QCOMPARE(QJsonDocument::fromJson(copy.readAll()).object(), file);
+            }
         }
     }
 
