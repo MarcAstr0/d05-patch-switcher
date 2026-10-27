@@ -166,11 +166,13 @@ int main(int argc, char *argv[])
     // library flushes pending changes in its destructor. The hub makes one backend per OS port, as
     // many as the enabled devices need (SPEC-2 section 7).
     const bool fake = opts.fakeMidi;
-    d05::PortHub hub([fake]() -> d05::MidiBackend * {
+    const bool fakeClock = opts.fakeClock;
+    d05::PortHub hub([fake, fakeClock]() -> d05::MidiBackend * {
         try {
             if (fake) {
                 auto *f = new d05::FakeMidiBackend;
                 f->setPrintSent(true);  // FR-15: bytes to stderr
+                f->setFakeClock(fakeClock);
                 return f;
             }
             return new d05::RtMidiBackend;

@@ -18,6 +18,7 @@ class MidiBackend;
 struct CliOptions {
     bool listPorts = false;
     bool fakeMidi = false;
+    bool fakeClock = false;    // --fake-clock (needs --fake-midi): three fake ports, clock at 120 BPM
     bool hasSend = false;
     bool identify = false;     // --identify
     Model device = Model::D05;  // --device; when absent (hasDevice false) the saved current device, else d05

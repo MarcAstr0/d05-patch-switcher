@@ -47,6 +47,9 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
                                   QStringLiteral("addr"));
     const QCommandLineOption fake(QStringLiteral("fake-midi"),
                                   QStringLiteral("Use the fake backend (ports \"Fake D-05 In/Out\"); bytes go to stderr."));
+    const QCommandLineOption fakeClock(QStringLiteral("fake-clock"),
+                                       QStringLiteral("With --fake-midi: three fake devices' ports (D-05, JP-08, JU-06A), "
+                                                      "each input emitting MIDI clock at 120 BPM (footprint testing)."));
     const QCommandLineOption configDir(QStringLiteral("config-dir"),
                                        QStringLiteral("Directory for library.json and settings."),
                                        QStringLiteral("dir"));
@@ -72,7 +75,7 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
                                     QStringLiteral("60|106"));
     const QCommandLineOption identify(QStringLiteral("identify"),
                                       QStringLiteral("Print MIDI ports with the detected Boutique model, exit 0."));
-    p.addOptions({listPorts, port, inPort, channel, send, fake, configDir, shot, shotState, shotSize, device,
+    p.addOptions({listPorts, port, inPort, channel, send, fake, fakeClock, configDir, shot, shotState, shotSize, device,
                   engine, identify});
 
     auto fail = [&](const QString &text) {
@@ -125,6 +128,9 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
         o.engine = v.toInt();
     }
     o.fakeMidi = p.isSet(fake);
+    o.fakeClock = p.isSet(fakeClock);
+    if (o.fakeClock && !o.fakeMidi)
+        return fail(QStringLiteral("--fake-clock needs --fake-midi"));
     o.port = p.value(port);
     o.inPort = p.value(inPort);
     o.configDir = p.value(configDir);
