@@ -370,6 +370,85 @@ private slots:
         QVERIFY(!r.w->engineControl()->armedLens(106));
     }
 
+    // T8.4 reviewer: switching to the device that is already current is no switch.
+    void switchingToTheCurrentDeviceLeavesAnArmIntact()
+    {
+        Rig r;
+        r.router->setJu06aState(60, 28, 48);
+        QVERIFY(r.show());
+        r.w->switchDevice(Model::JU06A);
+        r.choose(ju("106:1-1"));
+        QCOMPARE(r.tracker()->armed().value(), ju("106:1-1"));
+        r.router->setCurrentDevice(Model::JU06A);
+        QCOMPARE(r.tracker()->armed().value(), ju("106:1-1"));
+        r.w->switchDevice(Model::JU06A);
+        QCOMPARE(r.tracker()->armed().value(), ju("106:1-1"));
+        QCOMPARE(r.context(), S("FLIP SWITCH TO 106"));
+        r.w->switchDevice(Model::D05);  // a real switch ends it
+        QVERIFY(!r.tracker()->armed());
+    }
+
+    // T8.4 reviewer: a user switch between two other devices keeps the hint (only an arm ends).
+    void aUserSwitchBetweenTwoOtherDevicesKeepsTheHint()
+    {
+        Rig r;
+        r.router->setJu06aState(60, 28, 48);
+        r.w->applyGlobal(false, false);
+        QVERIFY(r.show());
+        r.inject({0xC3, 48});
+        QCOMPARE(r.tracker()->hint(), 106);
+        r.w->switchDevice(Model::JP08);
+        QCOMPARE(r.tracker()->hint(), 106);
+        r.w->switchDevice(Model::D05);
+        QCOMPARE(r.tracker()->hint(), 106);
+        r.w->switchDevice(Model::JU06A);
+        QCOMPARE(r.tracker()->hint(), 106);
+        QVERIFY(r.context().startsWith(S("FLIPPED")));
+    }
+
+    // An event of a device that is not shown applies its state and nothing else to the shown one.
+    void aNonCurrentDevicesEventLeavesTheShownDevicesEditorAndDisplayAlone()
+    {
+        for (bool followSwitches : {false, true}) {
+            Theme::setSkin(QStringLiteral("d05"));
+            Rig r;
+            r.router->setJu06aState(60, -1, -1);
+            r.w->applyGlobal(false, followSwitches);
+            QVERIFY(r.show());
+            QCOMPARE(r.w->currentDevice(), Model::D05);
+            QVERIFY(!r.w->display()->activityActive());
+            const auto editor = [&r]() -> QLineEdit * {
+                for (QLineEdit *e : r.w->list()->viewport()->findChildren<QLineEdit *>(QStringLiteral("nameEditor")))
+                    if (!e->isHidden())
+                        return e;
+                return nullptr;
+            };
+            r.w->list()->setCurrentIndex(r.w->model()->indexOf(dd("U2-34")));
+            r.w->list()->setFocus();
+            QTest::keyClick(r.w.get(), Qt::Key_F2);
+            QVERIFY(editor());
+            editor()->setText(S("Pending"));
+            r.inject({0xC4, 10});  // JP-08 2-3
+            QCOMPARE(r.router->link(Model::JP08)->current().value(), jp("2-3"));
+            if (!followSwitches) {
+                QCOMPARE(r.w->currentDevice(), Model::D05);
+                QVERIFY(editor());
+                QCOMPARE(editor()->text(), S("Pending"));
+                QVERIFY(!r.w->display()->activityActive());
+                QVERIFY(r.catalog.userName(dd("U2-34")).isEmpty());
+                // The JU-06A's program is the same.
+                r.inject({0xC3, 28});
+                QVERIFY(editor());
+                QVERIFY(!r.w->display()->activityActive());
+            } else {
+                QCOMPARE(r.w->currentDevice(), Model::JP08);
+                QVERIFY(!editor());
+                QCOMPARE(r.catalog.userName(dd("U2-34")), S("Pending"));  // finishing the edit is right here
+                QVERIFY(r.w->display()->activityActive());
+            }
+        }
+    }
+
     void echoSuppressionIsPerLinkOnASharedPort()
     {
         Rig r;

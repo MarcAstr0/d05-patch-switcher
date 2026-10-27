@@ -476,7 +476,10 @@ void MainWindow::buildWidgets()
         connect(m_router->link(m), &MidiLink::sent, this, &MainWindow::onSent);
     connect(&m_link, &MidiLink::currentChanged, this, &MainWindow::onFollowed);
     connect(m_router->link(Model::JP08), &MidiLink::currentChanged, this, &MainWindow::onFollowed);
+    // (The router's own slot ran first: with FR-20 on the JU-06A is already the current device here.)
     connect(m_router->link(Model::JU06A), &MidiLink::programReceived, this, [this](int) {
+        if (currentDevice() != Model::JU06A)
+            return;  // another device is shown: nothing of the JU-06A's event touches its UI
         m_sendFlash = false;
         m_display->flashActivity();
         updateLedDisplay();
@@ -949,6 +952,13 @@ void MainWindow::onSent(const PatchAddress &address)
 // view of that device follows, the activity LED blinks, and nothing is sent, so auto-send cannot fire.
 void MainWindow::onFollowed(const PatchAddress &address)
 {
+    // The link announces the patch before the router decides on a FR-20 switch, so a device that
+    // is not shown yet only has its state applied here; if it becomes current, onDeviceChanged()
+    // finishes the editing and does the SENT and activity part.
+    if (address.model() != currentDevice()) {
+        applyCurrent(address);
+        return;
+    }
     finishEditing();
     m_sendFlash = false;  // a followed patch is not a send: it ends a SENT flash
     applyCurrent(address);
@@ -1498,10 +1508,14 @@ void MainWindow::cycleDevice(int direction)
 // follow event, FR-20). It all happens in this one turn of the event loop, so the window paints
 // once: first the content of the new device goes in (list, grid, markers), then the skin changes,
 // then the switcher and the status bar say what is current.
-void MainWindow::onDeviceChanged(Model model, bool)
+void MainWindow::onDeviceChanged(Model model, bool byFollow)
 {
     Theme::markChildFirst();  // before any content changes: the window must not be the first dirty widget
     finishEditing();
+    if (byFollow) {
+        m_sendFlash = false;  // the event that switched the window is not a send
+        m_display->flashActivity();
+    }
     if (m_grid->stage() != BankGrid::Stage::Idle)
         m_grid->cancelEntry();
     // Focus in a part that is about to go hidden is dropped (Qt would hand it to AUTO SEND).
@@ -1991,10 +2005,10 @@ void MainWindow::saveStateNow()
     for (Model m : {Model::JP08, Model::JU06A}) {
         // The JU-06A's patch is the tracker's (none after a flip into an engine that shows ---).
         const std::optional<PatchAddress> cur = m == Model::JU06A ? currentOf(m) : m_router->link(m)->current();
-        if (savedOn(m) && m_router->isEnabled(m) && cur)
+        if (savedOn(m) && cur)
             m_settings->setLastPatch(m, *cur);
     }
-    if (savedOn(Model::JU06A) && m_router->isEnabled(Model::JU06A)) {
+    if (savedOn(Model::JU06A)) {
         const EngineTracker *t = m_router->ju06aTracker();
         if (m_engineChanged)
             m_settings->setEngine(t->engine());

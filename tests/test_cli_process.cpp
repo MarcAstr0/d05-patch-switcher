@@ -1,4 +1,6 @@
 // Runs the built binary with no display and no Qt platform plugin configured.
+#include "app/AppSettings.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QFile>
@@ -26,12 +28,14 @@ struct Result {
     }
 };
 
-Result run(const QStringList &args)
+Result run(const QStringList &args, bool offscreen = false)
 {
     QProcess p;
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     for (const char *k : {"QT_QPA_PLATFORM", "DISPLAY", "WAYLAND_DISPLAY"})
         env.remove(QString::fromLatin1(k));
+    if (offscreen)
+        env.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("offscreen"));
     p.setProcessEnvironment(env);
     p.start(QStringLiteral(D05_BINARY), args);
     Result r;
@@ -131,6 +135,28 @@ private slots:
         QFETCH(int, code);
         const Result r = run(args);
         QVERIFY2(!r.crashed && r.code == code, qPrintable(r.describe()));
+    }
+
+    // A GUI run whose --port substring resolves to the port another device already uses on that
+    // channel is a usage error (64) before any window shows; it used to open the window (and hang here).
+    void guiRunWithAConflictingPortSubstringExits64()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        {
+            d05::AppSettings saved(tmp.filePath(QStringLiteral("settings.ini")));
+            d05::AppSettings::DeviceValues d;
+            d.enabled = true;
+            d.outputPort = QStringLiteral("Fake D-05 In");
+            d.channel = 3;
+            saved.setDevice(d05::Model::D05, d);
+        }
+        const Result r = run({QStringLiteral("--fake-midi"), QStringLiteral("--device"), QStringLiteral("jp08"),
+                              QStringLiteral("--port"), QStringLiteral("Fake"), QStringLiteral("--channel"),
+                              QStringLiteral("3"), QStringLiteral("--config-dir"), tmp.path()},
+                             true);
+        QVERIFY2(!r.crashed && r.code == 64, qPrintable(r.describe()));
+        QVERIFY2(r.err.contains(QStringLiteral("D-05")), qPrintable(r.describe()));
     }
 
     void listPortsBeatsSend()

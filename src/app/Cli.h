@@ -88,6 +88,16 @@ struct Startup {
 };
 Startup startup(const AppSettings &saved, const CliOptions &opts);
 
+// --port and --in-port are substring matches (FR-15). Replaces each with the listed port it matches
+// (the full name, as the GUI stores a choice) so the router's conflict rule compares like with like.
+// An override that matches nothing is left as typed (the connection then reports "Port not found").
+void resolvePorts(CliOptions *opts, const QStringList &outputs, const QStringList &inputs);
+
+// A GUI run's overrides (after resolvePorts) that would put the target device on the same output
+// port and channel (or follow input and channel) as another enabled device: the message naming the
+// other device, else empty. The caller exits with Exit::Usage (64) and opens nothing.
+QString startupConflict(const Startup &st, const CliOptions &opts);
+
 // The settings this run starts with (FR-15), the D-05 only (version 1 form of startup()): the saved values, with --port, --in-port and
 // --channel overriding them for this run only. With --fake-midi and no --port the output
 // is the fake backend's "Fake D-05 In" (a saved real port cannot exist there). Nothing is

@@ -1,6 +1,8 @@
+#include "app/AppSettings.h"
 #include "app/Cli.h"
 #include "midi/FakeMidiBackend.h"
 
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTextStream>
 
@@ -313,6 +315,78 @@ private slots:
         QVERIFY(f.sentMessages().isEmpty());
         QCOMPARE(send(argv({"--device", "ju06a", "--engine", "60", "--fake-midi", "--channel", "4", "--send", "9-9"}), f).code,
                  Exit::BadAddress);
+    }
+
+    // --port is a substring match, but the conflict rule compares ports: the override is resolved to the
+    // listed name first, so "Hapax" collides with a saved "Hapax Port" on the same channel.
+    void portSubstringsAreResolvedBeforeTheConflictCheck()
+    {
+        QTemporaryDir dir;
+        AppSettings saved(dir.filePath(QStringLiteral("settings.ini")));
+        AppSettings::DeviceValues d05;
+        d05.enabled = true;
+        d05.outputPort = QStringLiteral("Hapax Port");
+        d05.channel = 3;
+        saved.setDevice(Model::D05, d05);
+        const QStringList outs{QStringLiteral("Other 1:0"), QStringLiteral("Hapax Port 20:0")};
+
+        CliOptions o;
+        QString msg;
+        int code = 0;
+        QCOMPARE(Cli::parse(argv({"--device", "jp08", "--port", "Hapax", "--channel", "3"}), &o, &msg, &code),
+                 Cli::ParseStatus::Run);
+        Cli::resolvePorts(&o, outs, {});
+        QCOMPARE(o.port, QStringLiteral("Hapax Port 20:0"));
+        const Cli::Startup st = Cli::startup(saved, o);
+        const QString clash = Cli::startupConflict(st, o);
+        QVERIFY(clash.contains(QStringLiteral("D-05")));
+        QVERIFY(clash.contains(QStringLiteral("JP-08")));
+
+        // Another channel is fine; so is a port that matches nothing (reported later as not found).
+        QCOMPARE(Cli::parse(argv({"--device", "jp08", "--port", "Hapax", "--channel", "4"}), &o, &msg, &code),
+                 Cli::ParseStatus::Run);
+        Cli::resolvePorts(&o, outs, {});
+        QVERIFY(Cli::startupConflict(Cli::startup(saved, o), o).isEmpty());
+        QCOMPARE(Cli::parse(argv({"--device", "jp08", "--port", "nonesuch", "--channel", "3"}), &o, &msg, &code),
+                 Cli::ParseStatus::Run);
+        Cli::resolvePorts(&o, outs, {});
+        QCOMPARE(o.port, QStringLiteral("nonesuch"));
+        QVERIFY(Cli::startupConflict(Cli::startup(saved, o), o).isEmpty());
+        // No override: nothing to refuse.
+        QCOMPARE(Cli::parse(argv({}), &o, &msg, &code), Cli::ParseStatus::Run);
+        QVERIFY(Cli::startupConflict(Cli::startup(saved, o), o).isEmpty());
+    }
+
+    void sendRefusesAConflictWithASavedDevice()
+    {
+        QTemporaryDir dir;
+        AppSettings saved(dir.filePath(QStringLiteral("settings.ini")));
+        AppSettings::DeviceValues d05;
+        d05.enabled = true;
+        d05.outputPort = QStringLiteral("Fake D-05 In");
+        d05.channel = 3;
+        saved.setDevice(Model::D05, d05);
+        FakeMidiBackend f;
+        CliOptions o;
+        QString msg;
+        int code = 0;
+        QCOMPARE(Cli::parse(argv({"--device", "jp08", "--port", "Fake", "--channel", "3", "--send", "4-5"}), &o, &msg,
+                            &code),
+                 Cli::ParseStatus::Run);
+        Run r;
+        QTextStream out(&r.out), err(&r.err);
+        r.code = Cli::runSend(o, f, out, err, &saved);
+        QCOMPARE(r.code, Exit::Usage);
+        QCOMPARE(Exit::Usage, 64);
+        QVERIFY(r.err.contains(QStringLiteral("D-05")));
+        QVERIFY(r.out.isEmpty());
+        QVERIFY(f.sentMessages().isEmpty());
+        // Another channel goes through.
+        QCOMPARE(Cli::parse(argv({"--device", "jp08", "--port", "Fake", "--channel", "4", "--send", "4-5"}), &o, &msg,
+                            &code),
+                 Cli::ParseStatus::Run);
+        QTextStream out2(&r.out), err2(&r.err);
+        QCOMPARE(Cli::runSend(o, f, out2, err2, &saved), 0);
     }
 
     void identifyListsPortsWithModels()

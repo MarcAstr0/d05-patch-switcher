@@ -706,6 +706,24 @@ private slots:
         QVERIFY(!after.currentDevice() || *after.currentDevice() != Model::JU06A);
     }
 
+    // State a device got this run is saved although it was switched off in Settings before quitting.
+    void quittingSavesTheStateOfADeviceDisabledDuringTheRun()
+    {
+        Rig r(true, true, true);
+        r.router->setJu06aState(60, 28, 48);
+        r.router->ju06aTracker()->toggleEngine();  // the user flips to 106
+        r.router->link(Model::JP08)->setCurrent(*PatchAddress::parse(QStringLiteral("2-3"), Model::JP08));
+        r.w->applyDevice(Model::JP08, dev(3, "Hapax", false, false));
+        r.w->applyDevice(Model::JU06A, dev(5, "Hapax", false, false));
+        QVERIFY(!r.router->isEnabled(Model::JU06A));
+        r.w->close();
+        const AppSettings saved(r.iniPath);
+        QCOMPARE(saved.engine(), 106);
+        QCOMPARE(saved.remembered(60).value(), 28);
+        QCOMPARE(saved.remembered(106).value(), 48);
+        QCOMPARE(saved.lastPatch(Model::JP08).value(), *PatchAddress::parse(QStringLiteral("2-3"), Model::JP08));
+    }
+
     void quittingKeepsTheSavedEngineUnlessItChanged()
     {
         Rig r(true, false, true);

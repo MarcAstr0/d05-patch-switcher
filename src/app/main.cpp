@@ -205,7 +205,17 @@ int main(int argc, char *argv[])
     for (const d05::Model m : {d05::Model::JP08, d05::Model::JU06A})
         if (const auto last = settings.lastPatch(m))
             window.setCurrent(*last);  // the JU-06A's own current patch comes with its engine state below
+    {
+        QString e;
+        const QStringList outs = hub.outputPortNames(&e);
+        const QStringList ins = hub.inputPortNames(&e);
+        d05::Cli::resolvePorts(&opts, outs, ins);
+    }
     const d05::Cli::Startup start = d05::Cli::startup(settings, opts);
+    if (const QString clash = d05::Cli::startupConflict(start, opts); !clash.isEmpty()) {
+        QTextStream(stderr) << clash << '\n';
+        return d05::Exit::Usage;
+    }
     router.setJu06aState(start.engine, start.remembered60, start.remembered106);
     window.applyGlobal(start.autoSend, start.followSwitches);
     for (const d05::Model m : d05::allModels()) {

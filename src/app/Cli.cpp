@@ -2,6 +2,7 @@
 
 #include "core/Identify.h"
 #include "core/PatchAddress.h"
+#include "midi/DeviceRouter.h"
 #include "midi/MidiBackend.h"
 #include "midi/MidiLink.h"
 #include "midi/PortHub.h"
@@ -21,6 +22,31 @@ namespace {
 QString hex(const QByteArray &b)
 {
     return QString::fromLatin1(b.toHex(' ').toUpper());
+}
+
+// The router's conflict rule over a set of device values; the text names the other device.
+QString conflictText(const std::array<AppSettings::DeviceValues, 3> &devs, Model target)
+{
+    DeviceRouter::Configs cfgs;
+    for (Model m : allModels()) {
+        const AppSettings::DeviceValues &v = devs[int(m)];
+        DeviceRouter::DeviceConfig c;
+        c.enabled = v.enabled;
+        c.outputPort = v.outputPort;
+        c.inputPort = v.inputPort;
+        c.channel = qBound(1, v.channel, 16);
+        c.follow = v.follow;
+        c.resendOnConnect = v.resendOnConnect;
+        cfgs[size_t(int(m))] = c;
+    }
+    const auto c = DeviceRouter::findConflict(cfgs, target);
+    if (!c)
+        return {};
+    return QStringLiteral("The %1 and the %2 would share %3 on channel %4; nothing sent or opened. "
+                          "Use another --channel or --port.")
+        .arg(modelInfo(target).name, modelInfo(c->other).name,
+             c->input ? QStringLiteral("an input port") : QStringLiteral("an output port"))
+        .arg(cfgs[size_t(int(target))].channel);
 }
 
 }  // namespace
@@ -239,6 +265,29 @@ int runIdentify(MidiBackend &backend, QTextStream &out, QTextStream &err, bool s
     return Exit::Ok;
 }
 
+void resolvePorts(CliOptions *opts, const QStringList &outputs, const QStringList &inputs)
+{
+    if (!opts->port.isEmpty()) {
+        const QString m = MidiLink::matchPort(outputs, opts->port);
+        if (!m.isEmpty())
+            opts->port = m;
+    }
+    if (!opts->inPort.isEmpty()) {
+        const QString m = MidiLink::matchPort(inputs, opts->inPort);
+        if (!m.isEmpty())
+            opts->inPort = m;
+    }
+}
+
+QString startupConflict(const Startup &st, const CliOptions &opts)
+{
+    const Model target = opts.hasDevice ? opts.device : st.current;
+    const bool overridden = opts.hasDevice || opts.channel > 0 || !opts.port.isEmpty() || !opts.inPort.isEmpty();
+    if (!overridden)
+        return {};
+    return conflictText(st.devices, target);
+}
+
 Startup startup(const AppSettings &saved, const CliOptions &opts)
 {
     Startup st;
@@ -372,6 +421,21 @@ int runSend(const CliOptions &opts, MidiBackend &backend, QTextStream &out, QTex
     if (match.isEmpty()) {
         err << "Output port not found: " << wanted << Qt::endl;
         return Exit::PortNotFound;
+    }
+
+    if (saved) {
+        std::array<AppSettings::DeviceValues, 3> devs;
+        for (Model m : allModels())
+            devs[int(m)] = saved->device(m);
+        AppSettings::DeviceValues &t = devs[int(model)];
+        t.enabled = true;
+        t.outputPort = match;
+        t.channel = channel;
+        const QString clash = conflictText(devs, model);
+        if (!clash.isEmpty()) {
+            err << clash << Qt::endl;
+            return Exit::Usage;
+        }
     }
 
     // The D-05 keeps its original single-backend link; the others get a model-aware link on a hub.
