@@ -149,7 +149,7 @@ and after G6 is answered.
 - ☑ **T8.3 Per-model main window.** Group bar only on the D-05; engine control on the JU-06A; engine tag in the rows; prompt, hint and no-patch display states; `Ctrl+E`, `Ctrl+Tab`, `Esc` while armed; the first-run hint with detection; `F2` on any slot of the 64-patch models.
 - ☑ **T8.4 Follow across devices.** FR-20 wired through `DeviceRouter`; the JU-06A tracker works while another device is current; a device switch clears a pending armed selection.
 - ☑ **T8.5 Footprint** against SPEC-2 §5 with three fake devices (`--fake-midi` gains a `--fake-clock` option that emits clock at 120 BPM on each fake input) and, when the owner has the units connected, with the real three.
-- ☐ **D8 Design review** (designer): every state on every skin at 1× and 2×; numbered deviations; two rounds at most.
+- ☑ **D8 Design review** (designer): every state on every skin at 1× and 2×; numbered deviations; two rounds at most.
 - ☐ **R8 Review** (reviewer + Codex): emphasis on the engine state machine's UI paths, threading with three input threads, repaint discipline on skin switch, and the D-05 regression set.
 - ☐ **Push and CI** green.
 
