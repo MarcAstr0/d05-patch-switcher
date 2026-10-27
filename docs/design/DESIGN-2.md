@@ -766,11 +766,13 @@ Coordinates relative to the page's top-left (content x 160). Form labels as DESI
 | 178 | Checkbox `Follow the panel` (x 112) |
 | 206 | Checkbox `Resend the current patch on connect` (x 112; per device now) |
 | 242 | JU-06A only: secondary rule `ENGINE`, rows below; other models: the `ON THE <model>` rule here and the note at 262 |
-| 262 | JU-06A: `BELIEVED` · value `60` or `106` at x 112 (`QLabel[role="engineValue"]`, Medium 13) · note at x 160, `type.note` `labelDim`: `Ctrl+E or the 60 / 106 buttons change it` (native key text) |
-| 288 | JU-06A: `ON 60` · `4-5` at x 112 and the patch name at x 160 (`type.body`), or `unknown` at x 112 (`QLabel[role="engineUnknown"]`) |
+| 262 | JU-06A: `BELIEVED` · value `60` or `106` in `(112, y, 44, 26)` (`QLabel[role="engineValue"]`, Medium 13) · note at x 160, `type.note` `labelDim`: `Ctrl+E or the 60 / 106 buttons change it` (native key text) |
+| 288 | JU-06A: `ON 60` · address `4-5` in `(112, y, 44, 26)` (`QLabel[role="engineValue"]`, Medium 13, as the list's address column) and the patch name in `(160, y, 400, 26)` (`type.body`, `labelPrimary`); when unknown, the address label takes `(112, y, 448, 26)` with `unknown` (`QLabel[role="engineUnknown"]`, Regular 13, `labelDim`) and the name label is hidden |
 | 314 | JU-06A: `ON 106` · same |
 | 350 | JU-06A: secondary rule `ON THE JU-06A` |
 | 370 | JU-06A: the note, `type.note`, `labelSecondary`, wrapped at 560 (3 lines, line height 15) |
+
+Every engine row (262, 288, 314) is 26 px high and its label, value and text are vertically centred in it, like the form rows above (the mockup draws these three rows 2 to 3 px higher and the values in Regular; the build and this table are the reference).
 
 Notes (wrapped at 560 px; D-05 and JP-08 two lines, JU-06A three):
 
