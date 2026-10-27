@@ -41,6 +41,14 @@
 
 using namespace d05;
 
+// The device keys are Control+Tab on macOS, which Qt calls Meta (DESIGN-2.md 13.2.1); QTest's
+// ControlModifier is Command there.
+#ifdef Q_OS_MACOS
+static constexpr Qt::KeyboardModifier kDeviceMod = Qt::MetaModifier;
+#else
+static constexpr Qt::KeyboardModifier kDeviceMod = Qt::ControlModifier;
+#endif
+
 namespace {
 
 QString S(const char *t) { return QString::fromLatin1(t); }
@@ -410,15 +418,15 @@ private slots:
     {
         Rig r(true, true, true);
         QVERIFY(r.show());
-        QTest::keyClick(r.w.get(), Qt::Key_Tab, Qt::ControlModifier);
+        QTest::keyClick(r.w.get(), Qt::Key_Tab, kDeviceMod);
         QCOMPARE(r.w->currentDevice(), Model::JP08);
-        QTest::keyClick(r.w.get(), Qt::Key_Tab, Qt::ControlModifier);
+        QTest::keyClick(r.w.get(), Qt::Key_Tab, kDeviceMod);
         QCOMPARE(r.w->currentDevice(), Model::JU06A);
-        QTest::keyClick(r.w.get(), Qt::Key_Tab, Qt::ControlModifier);
+        QTest::keyClick(r.w.get(), Qt::Key_Tab, kDeviceMod);
         QCOMPARE(r.w->currentDevice(), Model::D05);
-        QTest::keyClick(r.w.get(), Qt::Key_Tab, Qt::ControlModifier | Qt::ShiftModifier);
+        QTest::keyClick(r.w.get(), Qt::Key_Tab, kDeviceMod | Qt::ShiftModifier);
         QCOMPARE(r.w->currentDevice(), Model::JU06A);
-        QTest::keyClick(r.w.get(), Qt::Key_Backtab, Qt::ControlModifier | Qt::ShiftModifier);
+        QTest::keyClick(r.w.get(), Qt::Key_Backtab, kDeviceMod | Qt::ShiftModifier);
         QCOMPARE(r.w->currentDevice(), Model::JP08);
     }
 
@@ -1007,7 +1015,7 @@ private slots:
         const int i = out->findText(S("JU-06A:JU-06A MIDI 1") + dot);
         QVERIFY(i >= 0);
         QCOMPARE(out->itemData(i).toString(), S("JU-06A:JU-06A MIDI 1 32:0"));
-        QCOMPARE(out->findText(S("HAPAX Puerto 1")) >= 0, true);  // unmarked
+        QCOMPARE(out->findText(MidiLink::portKey(S("HAPAX Puerto 1"))) >= 0, true);  // unmarked; item text is the port key (WinMM drops the index)
         // USE is on when exactly one port is detected and the combo does not hold it.
         QVERIFY(d->page(Model::D05)->useOutputButton()->isEnabled() == (d->page(Model::D05)->outputCombo()->currentData().toString()
                                                                        != S("Boutique:Boutique MIDI 1 24:0")));

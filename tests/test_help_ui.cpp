@@ -118,8 +118,17 @@ private slots:
         QStringList expected;
         for (const char *c : literal)
             expected << QString::fromLatin1(c);
-        for (const char *c : keys)
+        for (const char *c : keys) {
+#ifdef Q_OS_MACOS
+            // The sheet writes the Control+Tab caps literally (DESIGN-2.md 8.1: the font has no glyphs for
+            // them); the bound key there is Meta+Tab, whose native text would not match.
+            if (QByteArray(c).endsWith("Tab")) {
+                expected << QString::fromLatin1(c);
+                continue;
+            }
+#endif
             expected << Shortcuts::capText(QKeySequence(QString::fromLatin1(c), QKeySequence::PortableText));
+        }
         QStringList caps = d.capTexts();
         std::sort(caps.begin(), caps.end());
         std::sort(expected.begin(), expected.end());
@@ -132,8 +141,13 @@ private slots:
         QCOMPARE(d.rowTexts().size(), rows.size());
         const QStringList shown = d.rowTexts();
         QCOMPARE(QSet<QString>(shown.begin(), shown.end()), QSet<QString>(rows.begin(), rows.end()));
-        for (const Shortcuts::Binding &b : Shortcuts::bindings())
+        for (const Shortcuts::Binding &b : Shortcuts::bindings()) {
+#ifdef Q_OS_MACOS
+            if (b.action == QStringLiteral("actionNextDevice") || b.action == QStringLiteral("actionPreviousDevice"))
+                continue;  // literal caps on macOS, checked above
+#endif
             QVERIFY2(caps.contains(Shortcuts::capText(b.key)), qPrintable(b.action));
+        }
         QCOMPARE(d.windowTitle(), QStringLiteral("Keyboard Shortcuts"));
         QCOMPARE(d.size(), QSize(680, 438));  // DESIGN-2.md 8.1: 680 x 438 with the DEVICE section
     }

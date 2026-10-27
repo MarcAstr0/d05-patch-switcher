@@ -67,6 +67,8 @@ signals:
 private:
     struct RowLayout {
         QString elided;     // empty when the name fits
+        QStaticText nameStatic;     // what is drawn for the name (prepared here, never while painting)
+        QStaticText factoryStatic;  // what is drawn for the factory name
         int visibleW = 0;   // px of name text actually visible (without the ellipsis)
         QVector<QPair<int, int>> highlights;  // x relative to the name start, width; clipped
         // The factory name beside a user name (JP-08 / JU-06A), after a 12 px gap.
@@ -86,6 +88,7 @@ private:
     QFontMetrics m_addressMetrics;
     QStaticText m_chars[13];  // 0-9, U, P, -
     qreal m_charX[13] = {};   // x offset that centres each character in its 9 px cell
+    qreal m_nameY = 0;        // top of the name static texts for a baseline at y 19
     qreal m_charY = 0;        // top of the static text for a baseline at y 19
     QString m_modeText[3];    // W, D, S
     QPainterPath m_star;

@@ -127,6 +127,7 @@ PatchDelegate::PatchDelegate(QObject *parent)
         m_charX[i] = (kCharCell - m_addressMetrics.horizontalAdvance(QLatin1Char(chars[i]))) / 2.0;
     }
     m_charY = kBaseline - m_addressMetrics.ascent();
+    m_nameY = kBaseline - QFontMetricsF(m_nameFont).ascent();  // top of a static text for the name baseline
     m_modeText[0] = QStringLiteral("W");
     m_modeText[1] = QStringLiteral("D");
     m_modeText[2] = QStringLiteral("S");
@@ -205,6 +206,19 @@ void PatchDelegate::layoutRow(const PatchListModel::Row &row, int width, RowLayo
             }
         }
     }
+    // Text engines allocate on each drawText on some Qt versions (6.8); a prepared static text does not.
+    const QString &nameDrawn = out->elided.isEmpty() ? row.shown : out->elided;
+    if (out->nameStatic.text() != nameDrawn)
+        out->nameStatic.setText(nameDrawn);
+    out->nameStatic.setTextFormat(Qt::PlainText);
+    out->nameStatic.setPerformanceHint(QStaticText::AggressiveCaching);
+    out->nameStatic.prepare(QTransform(), m_nameFont);
+    if (out->factoryStatic.text() != out->factoryText)
+        out->factoryStatic.setText(out->factoryText);
+    out->factoryStatic.setTextFormat(Qt::PlainText);
+    out->factoryStatic.setPerformanceHint(QStaticText::AggressiveCaching);
+    if (!out->factoryText.isEmpty())
+        out->factoryStatic.prepare(QTransform(), m_nameFont);
     for (const SearchQuery::Range &rg : row.ranges) {
         const bool alt = rg.which == SearchQuery::NameIndex::Alternate;
         if (alt && out->factoryText.isEmpty())
@@ -310,13 +324,13 @@ void PatchDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const
         p->fillRect(QRect(kNameX + h.first, 4, h.second, 20), m_match);
     p->setFont(m_nameFont);
     p->setPen(row.name.isEmpty() ? m_nameDim : m_namePrimary);
-    p->drawText(QPoint(kNameX, kBaseline), rl->elided.isEmpty() ? row.shown : rl->elided);
+    p->drawStaticText(QPointF(kNameX, m_nameY), rl->nameStatic);
     if (!rl->factoryText.isEmpty() && !editingRow) {  // while editing, the factory name is not drawn
         const int fx = kNameX + rl->factoryX;
         for (const QPair<int, int> &h : rl->factoryHighlights)
             p->fillRect(QRect(fx + h.first, 4, h.second, 20), m_match);
         p->setPen(m_nameDim);
-        p->drawText(QPoint(fx, kBaseline), rl->factoryText);
+        p->drawStaticText(QPointF(fx, m_nameY), rl->factoryStatic);
     }
 
     if (editingRow) {

@@ -45,6 +45,14 @@
 
 using namespace d05;
 
+// The device keys are Control+Tab on macOS, which Qt calls Meta (DESIGN-2.md 13.2.1); QTest's
+// ControlModifier is Command there.
+#ifdef Q_OS_MACOS
+static constexpr Qt::KeyboardModifier kDeviceMod = Qt::MetaModifier;
+#else
+static constexpr Qt::KeyboardModifier kDeviceMod = Qt::ControlModifier;
+#endif
+
 namespace {
 
 QString S(const char *t) { return QString::fromLatin1(t); }
@@ -1235,9 +1243,9 @@ private slots:
         }
         QCOMPARE(r.w->action(S("actionToggleEngine"))->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_E));
         QVERIFY(r.show());
-        QTest::keyClick(r.w.get(), Qt::Key_Tab, Qt::ControlModifier);
+        QTest::keyClick(r.w.get(), Qt::Key_Tab, kDeviceMod);
         QCOMPARE(r.w->currentDevice(), Model::JP08);
-        QTest::keyClick(r.w.get(), Qt::Key_Tab, Qt::ControlModifier | Qt::ShiftModifier);
+        QTest::keyClick(r.w.get(), Qt::Key_Tab, kDeviceMod | Qt::ShiftModifier);
         QCOMPARE(r.w->currentDevice(), Model::D05);
     }
 
