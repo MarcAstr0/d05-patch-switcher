@@ -276,7 +276,7 @@ not the JU-06A is the current device.
 
 | | Budget (replaces SPEC.md §5 where named) | Notes |
 |---|---|---|
-| Idle CPU | ≤ 0.2 % averaged over 30 s with three units connected and sending clock; 0.0 % with one | clock from three units is about 150 callbacks/s at 120 BPM; the callbacks must drop realtime bytes before any allocation |
+| Idle CPU | ≤ 1 % of one core averaged over 30 s with three units connected and sending clock; 0.0 % with one unit not sending clock | clock from three units is about 150 callbacks/s at 120 BPM; the callbacks must drop realtime bytes before any allocation |
 | Memory | ≤ 90 MB RSS at 1×, ≤ 130 MB at 2× | one extra glyph atlas per display widget size at most |
 | Binary | ≤ 2.5 MB without Qt | two TSVs and the new widgets |
 | Threads | main + one RtMidi input thread per open input port, at most three | replaces "nothing else" |
