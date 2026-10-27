@@ -86,10 +86,11 @@ void AppSettings::store(const QString &k, const QVariant &value)
     m_settings.setValue(k, value);
 }
 
-// A file that has any version 1 key came from the D-05-only app: its device is in use.
+// A file that has any version-1-only key came from the D-05-only app: its device is in use. Keys
+// version 2 also writes under the same name (window/geometry) are not evidence.
 bool AppSettings::isV1Install() const
 {
-    for (const QString &k : {kOutput, kInput, kChannel, kAutoSend, kFollow, kResend, kLastPatch, kGeometry})
+    for (const QString &k : {kOutput, kInput, kChannel, kAutoSend, kFollow, kResend, kLastPatch})
         if (m_settings.contains(k))
             return true;
     return false;

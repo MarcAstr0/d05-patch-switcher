@@ -630,6 +630,108 @@ private slots:
         QCOMPARE(r.router->config(Model::D05).channel, 1);
     }
 
+    void cancelRestoresAllTrialsEvenWhenOneByOneWouldBeRefused()
+    {
+        // A ch1 -> 3 TEST, B ch2 -> 1 TEST: restoring A to ch1 alone conflicts with B's trial.
+        Rig r(true, true, false);
+        r.put(Model::D05, dev(1, "Hapax Out"));
+        r.put(Model::JP08, dev(2, "Hapax Out"));
+        r.w->openSettings();
+        SettingsDialog *d = r.w->settingsDialog();
+        d->setShown(Model::D05);
+        d->channelSpin()->setValue(3);
+        QTest::mouseClick(d->testButton(), Qt::LeftButton);
+        d->setShown(Model::JP08);
+        d->channelSpin()->setValue(1);
+        QTest::mouseClick(d->testButton(), Qt::LeftButton);
+        QCOMPARE(r.router->config(Model::D05).channel, 3);
+        QCOMPARE(r.router->config(Model::JP08).channel, 1);
+        d->reject();
+        QTRY_VERIFY(!r.w->settingsDialog());
+        QCOMPARE(r.router->config(Model::D05).channel, 1);
+        QCOMPARE(r.router->config(Model::JP08).channel, 2);
+    }
+
+    void aRefusedTestIsToldInTheDialog()
+    {
+        Rig r(true, true, false);
+        r.put(Model::D05, dev(1, "Hapax Out"));
+        r.put(Model::JP08, dev(2, "Hapax Out"));
+        r.w->openSettings();
+        SettingsDialog *d = r.w->settingsDialog();
+        // Free the D-05's channel in the dialog only, then move the JP-08 onto the live D-05 channel.
+        d->setShown(Model::D05);
+        d->channelSpin()->setValue(4);
+        d->setShown(Model::JP08);
+        d->channelSpin()->setValue(1);
+        QVERIFY(d->testButton()->isEnabled());  // no conflict among the pending values
+        QTest::mouseClick(d->testButton(), Qt::LeftButton);  // the live D-05 still holds channel 1
+        QCOMPARE(r.router->config(Model::JP08).channel, 2);
+        QVERIFY(d->currentPage()->conflictText().contains(S("used by the D-05")));
+        d->reject();
+    }
+
+    void quittingDoesNotPersistCommandLineOverrides()
+    {
+        // The run starts with JU-06A on engine 106 and current, both from flags; the saved file
+        // has the D-05 only.
+        Rig r(true, false, false);
+        r.w->setServices(nullptr);
+        r.router->setJu06aState(106, -1, -1);
+        r.w->applyDevice(Model::JU06A, dev(5));  // enabled by a flag only: not in the settings
+        r.w->markRunOnly(Model::JU06A);
+        r.w->switchDevice(Model::JU06A);
+        r.w->setServices(r.settings.get());
+        r.w->close();
+        AppSettings after(r.iniPath);
+        QVERIFY(!after.device(Model::JU06A).enabled);
+        QVERIFY(!after.lastPatch(Model::JU06A));
+        QVERIFY(!after.hasEngine());
+        QVERIFY(!after.currentDevice() || *after.currentDevice() != Model::JU06A);
+    }
+
+    void quittingKeepsTheSavedEngineUnlessItChanged()
+    {
+        Rig r(true, false, true);
+        r.settings->setEngine(60);
+        r.w->setServices(nullptr);
+        r.router->setJu06aState(106, -1, -1);  // --engine 106
+        r.w->setServices(r.settings.get());
+        r.w->close();
+        QCOMPARE(AppSettings(r.iniPath).engine(), 60);
+
+        Rig r2(true, false, true);
+        r2.settings->setEngine(60);
+        r2.w->setServices(nullptr);
+        r2.router->setJu06aState(106, -1, -1);
+        r2.w->setServices(r2.settings.get());
+        r2.router->ju06aTracker()->toggleEngine();  // the user flips it during the run
+        r2.w->close();
+        QCOMPARE(AppSettings(r2.iniPath).engine(), 60);  // 106 -> 60
+        r2.router->ju06aTracker()->toggleEngine();
+    }
+
+    void quittingKeepsTheSavedCurrentDeviceUnlessTheUserSwitched()
+    {
+        Rig r(true, true, false);
+        r.settings->setCurrentDevice(Model::D05);
+        r.w->setServices(nullptr);
+        r.w->switchDevice(Model::JP08);  // --device jp08
+        r.w->setServices(r.settings.get());
+        r.w->close();
+        QCOMPARE(AppSettings(r.iniPath).currentDevice().value(), Model::D05);
+
+        Rig r2(true, true, false);
+        r2.settings->setCurrentDevice(Model::D05);
+        r2.w->setServices(nullptr);
+        r2.w->switchDevice(Model::JP08);
+        r2.w->setServices(r2.settings.get());
+        r2.w->switchDevice(Model::D05);
+        r2.w->switchDevice(Model::JP08);  // the user's switch
+        r2.w->close();
+        QCOMPARE(AppSettings(r2.iniPath).currentDevice().value(), Model::JP08);
+    }
+
     void testIsOffForADisabledDeviceAndForAConflict()
     {
         Rig r(true, false, false);

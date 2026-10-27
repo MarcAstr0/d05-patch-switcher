@@ -63,6 +63,10 @@ public:
     bool testPressed() const { return m_testPressed[0] || m_testPressed[1] || m_testPressed[2]; }
     bool testPressed(Model m) const { return m_testPressed[int(m)]; }
 
+    // TEST was refused because the live configuration of `other` holds the port and channel: the
+    // page of `m` names it in place (until the next edit recomputes the conflict text).
+    void showTestRefused(Model m, Model other);
+
     // The device whose page is shown.
     Model shown() const { return m_shown; }
     void setShown(Model m);

@@ -206,8 +206,11 @@ int main(int argc, char *argv[])
     const d05::Cli::Startup start = d05::Cli::startup(settings, opts);
     router.setJu06aState(start.engine, start.remembered60, start.remembered106);
     window.applyGlobal(start.autoSend, start.followSwitches);
-    for (const d05::Model m : d05::allModels())
+    for (const d05::Model m : d05::allModels()) {
         window.applyDevice(m, start.devices[int(m)]);
+        if (start.devices[int(m)].enabled && !settings.device(m).enabled)
+            window.markRunOnly(m);  // turned on by a flag for this run: quitting writes nothing about it
+    }
     window.switchDevice(start.current);
     window.setServices(&settings);
     window.restoreGeometry(settings.windowGeometry());

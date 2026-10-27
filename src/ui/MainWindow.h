@@ -103,6 +103,9 @@ public:
     void setServices(AppSettings *settings);
     // False for a --fake-midi run without --config-dir: the fake ports must never reach the
     // real settings file, so OK keeps the saved output and input port (other values are saved).
+    // A device that a command-line option turned on for this run only: quitting writes nothing
+    // about it (Cli::startup). Settings > OK, which saves it, ends that.
+    void markRunOnly(Model m) { m_runOnly[int(m)] = true; }
     void setPersistPorts(bool persist) { m_persistPorts = persist; }
     // Puts one device's values into effect (enables or disables it in the router): channel, ports,
     // follow, resend-on-connect. Does not save. A refused set (port and channel taken by an
@@ -221,7 +224,7 @@ private:
     void noteConnected(Model model);
     // Applies a configuration to one device through the router and treats a move from one open
     // port to another as a connect (resend-on-connect). False when the router refused it.
-    bool configureDevice(Model m, const DeviceRouter::DeviceConfig &cfg);
+    bool configureDevice(Model m, const DeviceRouter::DeviceConfig &cfg, Model *conflicting = nullptr);
     static DeviceRouter::DeviceConfig configFor(const AppSettings::DeviceValues &v);
     void onSettingsTest(Model model, const AppSettings::DeviceValues &values);
     void onSettingsAccepted(SettingsDialog *dialog);
@@ -277,6 +280,8 @@ private:
     std::array<SessionDevice, 3> m_sess;
     QPointer<SettingsDialog> m_settingsDialog;
     bool m_settingsOpen = false;
+    std::array<bool, 3> m_runOnly{};
+    bool m_engineChanged = false;  // the JU-06A's engine changed after startup (not a --engine override)
     bool m_writeReported = false;  // the settings-not-saved message was shown
 
     QWidget *m_central = nullptr;

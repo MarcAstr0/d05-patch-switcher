@@ -391,6 +391,22 @@ private slots:
         QVERIFY(!QSettings(path, QSettings::IniFormat).contains(QStringLiteral("devices/d05/enabled")));
     }
 
+    void aFreshInstallStaysWithoutDevicesWhateverVersion2Writes()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("settings.ini"));
+        {
+            AppSettings s(path);
+            s.setWindowGeometry(QByteArray("geometry"));
+            s.setAutoSend(true);
+        }
+        AppSettings again(path);
+        QVERIFY(!again.device(Model::D05).enabled);
+        again.setCurrentDevice(Model::JP08);  // a store() after the reload
+        QVERIFY(!AppSettings(path).device(Model::D05).enabled);
+        QVERIFY(!QSettings(path, QSettings::IniFormat).contains(QStringLiteral("devices/d05/enabled")));
+    }
+
     void theFirstWriteMigratesVersion1KeysOnceAndKeepsThem()
     {
         QTemporaryDir dir;

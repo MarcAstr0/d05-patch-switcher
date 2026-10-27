@@ -191,9 +191,9 @@ void DevicePage::buildUi()
         auto value = [&](int y) {
             auto *l = new QLabel(this);
             l->setProperty("role", QStringLiteral("engineValue"));
-            l->setFont(Theme::font(Theme::Role::Body));
+            l->setFont(Theme::font(Theme::Role::ListAddress));  // Medium 13
             l->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-            l->setGeometry(QRect(QPoint(kControlX, y), QSize(140, 26)));  // "unknown" is wider than "106"
+            l->setGeometry(QRect(QPoint(kControlX, y), QSize(44, 26)));
             return l;
         };
         auto wide = [&](int y, const QString &text, const char *role) {
@@ -439,10 +439,14 @@ void DevicePage::setEngineInfo(const EngineInfo &info)
     auto fill = [](QLabel *where, QLabel *name, const QString &on, const QString &patch) {
         const bool known = !on.isEmpty();
         where->setText(known ? on : QStringLiteral("unknown"));
+        // Known: the address in 44 px and the name beside it; unknown: the word takes the row.
+        where->setFont(Theme::font(known ? Theme::Role::ListAddress : Theme::Role::Body));
+        where->setGeometry(QRect(QPoint(kControlX, where->y()), QSize(known ? 44 : Width - kControlX, 26)));
         where->setProperty("role", known ? QStringLiteral("engineValue") : QStringLiteral("engineUnknown"));
         where->style()->unpolish(where);
         where->style()->polish(where);
         name->setText(known ? patch : QString());
+        name->setVisible(known);
     };
     fill(m_on60, m_on60Name, info.on60, info.name60);
     fill(m_on106, m_on106Name, info.on106, info.name106);

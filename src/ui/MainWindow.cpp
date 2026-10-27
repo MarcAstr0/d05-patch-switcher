@@ -469,6 +469,8 @@ void MainWindow::buildWidgets()
     connect(Theme::notifier(), &Theme::Notifier::skinChanged, this, [this] { applySkin(); });
     // The JU-06A skin follows the engine the app believes (FR-17), whichever device is current.
     connect(m_router->ju06aTracker(), &EngineTracker::engineChanged, this, [this](int) {
+        if (m_settings)
+            m_engineChanged = true;  // after startup: the user's action or a confirmed flip
         if (currentDevice() == Model::JU06A)
             Theme::setSkin(skinIdForCurrent());
     });
@@ -1414,13 +1416,15 @@ AppSettings::Values MainWindow::currentSettings() const
 
 // Applies a configuration through the router. Moving from one open port to another is a connect
 // (resend-on-connect) although the link only signals a change of connected state.
-bool MainWindow::configureDevice(Model m, const DeviceRouter::DeviceConfig &cfg)
+bool MainWindow::configureDevice(Model m, const DeviceRouter::DeviceConfig &cfg, Model *conflicting)
 {
     const MidiLink *l = m_router->link(m);
     const bool was = l->isConnected();
     const QString before = l->connectedPortName();
     Model other = Model::D05;
     if (!m_router->configure(m, cfg, &other)) {
+        if (conflicting)
+            *conflicting = other;
         showMessage(QStringLiteral("%1 not changed: channel %2 on that port is used by the %3")
                         .arg(modelInfo(m).name).arg(cfg.channel).arg(modelInfo(other).name));
         return false;
@@ -1528,8 +1532,13 @@ void MainWindow::onSettingsTest(Model model, const AppSettings::DeviceValues &v)
     cfg.channel = v.channel;
     cfg.outputPort = v.outputPort;
     sess.trialApplied = true;
-    if (!configureDevice(model, cfg))
+    Model other = Model::D05;
+    if (!configureDevice(model, cfg, &other)) {
+        // The refusal is told in the dialog too: the status bar is behind the modal window.
+        if (m_settingsDialog)
+            m_settingsDialog->showTestRefused(model, other);
         return;
+    }
     const MidiLink *l = m_router->link(model);
     sess.testedTarget = l->connectedPortName() + QLatin1Char('/') + QString::number(v.channel);
     sess.testedGeneration = m_rt[int(model)].connGeneration;  // any disconnect or reconnect after this voids it
@@ -1585,6 +1594,7 @@ void MainWindow::onSettingsAccepted(SettingsDialog *dialog)
             toSave.inputPort = saved.inputPort;
         }
         m_settings->setDevice(m, toSave);
+        m_runOnly[int(m)] = false;  // saved now
     }
     m_settings->setAutoSend(st.autoSend);
     m_settings->setFollowSwitchesDevice(st.followSwitches);
@@ -1608,12 +1618,34 @@ void MainWindow::onSettingsAccepted(SettingsDialog *dialog)
 
 void MainWindow::onSettingsRejected()
 {
+    // All snapshots at once, as OK does: restoring one by one can be refused by another device's
+    // trial configuration that is still in place. A device without a trial keeps its live one.
+    bool any = false;
+    DeviceRouter::Configs cfgs;
+    std::array<bool, 3> was{};
+    std::array<QString, 3> before;
     for (Model m : allModels()) {
         SessionDevice &sess = m_sess[int(m)];
-        if (sess.trialApplied)
-            configureDevice(m, sess.snapshot);
-        sess.trialApplied = false;
+        any = any || sess.trialApplied;
+        cfgs[int(m)] = sess.trialApplied ? sess.snapshot : m_router->config(m);
+        was[int(m)] = m_router->link(m)->isConnected();
+        before[int(m)] = m_router->link(m)->connectedPortName();
     }
+    if (any) {
+        Model a = Model::D05, b = Model::D05;
+        if (m_router->configureAll(cfgs, &a, &b)) {
+            for (Model m : allModels()) {
+                const MidiLink *l = m_router->link(m);
+                if (was[int(m)] && l->isConnected() && l->connectedPortName() != before[int(m)])
+                    noteConnected(m);
+            }
+        } else {
+            showMessage(QStringLiteral("Settings not restored: the %1 and the %2 share a port and a channel")
+                            .arg(modelInfo(a).name, modelInfo(b).name));
+        }
+    }
+    for (Model m : allModels())
+        m_sess[int(m)].trialApplied = false;
     m_settingsOpen = false;
     refreshConnection();
     // A connect that happened while the dialog was open (or the restore itself) still counts,
@@ -1632,20 +1664,26 @@ void MainWindow::saveStateNow()
 {
     if (!m_settings)
         return;
-    m_settings->setLastPatch(Model::D05, m_current);
+    // Command-line overrides are never persisted (Cli::startup): a device that a flag turned on for
+    // this run only (markRunOnly) writes nothing, the saved engine stays unless
+    // it changed during the run, and the current device is written when the user switches (see
+    // onDeviceChanged), not here.
+    auto savedOn = [this](Model m) { return !m_runOnly[int(m)]; };
+    if (savedOn(Model::D05))
+        m_settings->setLastPatch(Model::D05, m_current);
     for (Model m : {Model::JP08, Model::JU06A}) {
-        if (m_router->isEnabled(m) && m_router->link(m)->current())
+        if (savedOn(m) && m_router->isEnabled(m) && m_router->link(m)->current())
             m_settings->setLastPatch(m, *m_router->link(m)->current());
     }
-    if (m_router->isEnabled(Model::JU06A)) {
+    if (savedOn(Model::JU06A) && m_router->isEnabled(Model::JU06A)) {
         const EngineTracker *t = m_router->ju06aTracker();
-        m_settings->setEngine(t->engine());
+        if (m_engineChanged)
+            m_settings->setEngine(t->engine());
         for (int e : {60, 106}) {
             const int r = t->remembered(e);
             m_settings->setRemembered(e, r >= 0 ? std::optional<int>(r) : std::nullopt);
         }
     }
-    m_settings->setCurrentDevice(currentDevice());
     m_settings->setWindowGeometry(saveGeometry());
     noteSettingsWrite();
 }

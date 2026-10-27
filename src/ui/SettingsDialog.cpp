@@ -117,6 +117,13 @@ void SettingsDialog::buildUi(Model shown, const State &initial)
     });
 }
 
+void SettingsDialog::showTestRefused(Model m, Model other)
+{
+    const AppSettings::DeviceValues v = deviceValues(m);
+    m_pages[int(m)]->setConflictText(QStringLiteral("Channel %1 on %2 is used by the %3.")
+                                         .arg(v.channel).arg(portLabel(v.outputPort), modelInfo(other).name));
+}
+
 void SettingsDialog::setShown(Model m)
 {
     if (m == m_shown && m_pages[int(m)]->isVisibleTo(this))
