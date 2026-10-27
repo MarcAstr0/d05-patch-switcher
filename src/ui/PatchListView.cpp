@@ -72,7 +72,13 @@ void PatchListView::setModel(QAbstractItemModel *m)
 {
     QListView::setModel(m);
     if (m) {
+        // Row layouts are cached by row: any change of the row structure re-measures (a row inserted
+        // at the top of Recents must not inherit the layout of the row it pushed down).
         connect(m, &QAbstractItemModel::modelReset, this, &PatchListView::prepareDelegate);
+        connect(m, &QAbstractItemModel::rowsInserted, this, &PatchListView::prepareDelegate);
+        connect(m, &QAbstractItemModel::rowsRemoved, this, &PatchListView::prepareDelegate);
+        connect(m, &QAbstractItemModel::rowsMoved, this, &PatchListView::prepareDelegate);
+        connect(m, &QAbstractItemModel::layoutChanged, this, &PatchListView::prepareDelegate);
         connect(m, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &a, const QModelIndex &b) {
             auto *delegate = qobject_cast<PatchDelegate *>(itemDelegate());
             auto *list = qobject_cast<PatchListModel *>(model());
@@ -83,6 +89,11 @@ void PatchListView::setModel(QAbstractItemModel *m)
         });
         prepareDelegate();
     }
+}
+
+void PatchListView::dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight, const QList<int> &roles)
+{
+    QAbstractItemView::dataChanged(topLeft, bottomRight, roles);
 }
 
 // Row layouts (elision, highlight offsets) are measured here, never in paint.

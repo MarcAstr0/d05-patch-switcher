@@ -199,6 +199,8 @@ bool MidiLink::connectOutput()
             setStatus(QStringLiteral("Error: ") + listErr);
         } else if (port.isEmpty()) {
             setStatus(QStringLiteral("Port not found"));
+        } else if (const QString veto = m_openGuard ? m_openGuard(port, false) : QString(); !veto.isEmpty()) {
+            setStatus(veto);
         } else {
             QString err;
             if (m_hub->acquireOutput(this, port, &err)) {
@@ -234,6 +236,10 @@ bool MidiLink::applyInput()
     const QString port = matchPort(ports, m_inName);
     if (port.isEmpty()) {
         setInputStatus(QStringLiteral("Port not found"));
+        return false;
+    }
+    if (const QString veto = m_openGuard ? m_openGuard(port, true) : QString(); !veto.isEmpty()) {
+        setInputStatus(veto);
         return false;
     }
     QString err;

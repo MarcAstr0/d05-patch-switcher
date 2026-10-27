@@ -734,15 +734,114 @@ private slots:
         r.w->close();
         QCOMPARE(AppSettings(r.iniPath).engine(), 60);
 
+        // The user flips during the run: the new engine differs from the saved one and is saved.
         Rig r2(true, false, true);
         r2.settings->setEngine(60);
-        r2.w->setServices(nullptr);
-        r2.router->setJu06aState(106, -1, -1);
-        r2.w->setServices(r2.settings.get());
-        r2.router->ju06aTracker()->toggleEngine();  // the user flips it during the run
+        r2.router->ju06aTracker()->toggleEngine();  // 60 -> 106
         r2.w->close();
-        QCOMPARE(AppSettings(r2.iniPath).engine(), 60);  // 106 -> 60
-        r2.router->ju06aTracker()->toggleEngine();
+        QCOMPARE(AppSettings(r2.iniPath).engine(), 106);
+
+        // An override plus two flips: the run ends on 106 (what the user did), which is not the saved 60.
+        Rig r3(true, false, true);
+        r3.settings->setEngine(60);
+        r3.w->setServices(nullptr);
+        r3.router->setJu06aState(106, -1, -1);
+        r3.w->setServices(r3.settings.get());
+        r3.router->ju06aTracker()->toggleEngine();  // -> 60
+        r3.router->ju06aTracker()->toggleEngine();  // -> 106
+        r3.w->close();
+        QCOMPARE(AppSettings(r3.iniPath).engine(), 106);
+    }
+
+    // One session writes the JU-06A's engine, both remembered programs and the current device; a fresh
+    // start (Cli::startup over the saved settings, as main.cpp does) reads them back.
+    void theJu06aStateAndTheCurrentDeviceSurviveARestart()
+    {
+        Rig r(true, false, true);
+        QVERIFY(r.show());
+        r.w->switchDevice(Model::JU06A);  // the user
+        const auto ju = [](const char *t) { return *PatchAddress::parse(S(t), Model::JU06A); };
+        QVERIFY(r.router->select(ju("60:4-5")));
+        QTest::keyClick(r.w.get(), Qt::Key_E, Qt::ControlModifier);  // the user flips to 106
+        QCOMPARE(r.router->ju06aTracker()->engine(), 106);
+        QVERIFY(r.router->select(ju("106:7-1")));
+        r.w->close();
+        r.w.reset();  // quits: the state is written
+
+        // A second session over the same files.
+        Paths::setOverride(r.dir.path());
+        const AppSettings saved(r.iniPath);
+        CliOptions opts;
+        const Cli::Startup start = Cli::startup(saved, opts);
+        QCOMPARE(start.engine, 106);
+        QCOMPARE(start.remembered60, 28);   // 4-5
+        QCOMPARE(start.remembered106, 48);  // 7-1
+        QCOMPARE(start.current, Model::JU06A);
+        QVERIFY(start.devices[int(Model::JU06A)].enabled);
+
+        QList<FakeMidiBackend *> fakes;
+        PortHub hub([&]() -> MidiBackend * {
+            auto *f = new FakeMidiBackend;
+            f->setOutputPorts({S("Hapax Out")}, false);
+            f->setInputPorts({S("Hapax In")}, false);
+            fakes << f;
+            return f;
+        });
+        PatchCatalog catalog;
+        Library library(catalog, r.dir.filePath(QStringLiteral("library.json")));
+        library.load();
+        DeviceRouter router(&hub);
+        MainWindow w(catalog, library, router);
+        w.setSystemLookup(false);
+        router.setJu06aState(start.engine, start.remembered60, start.remembered106);
+        w.applyGlobal(start.autoSend, start.followSwitches);
+        for (Model m : allModels())
+            w.applyDevice(m, start.devices[int(m)]);
+        w.switchDevice(start.current);
+        QCOMPARE(w.currentDevice(), Model::JU06A);
+        QCOMPARE(Theme::skin().id, QStringLiteral("ju06a-106"));
+        QCOMPARE(router.ju06aTracker()->engine(), 106);
+        QCOMPARE(router.ju06aTracker()->remembered(60), 28);
+        QCOMPARE(router.ju06aTracker()->remembered(106), 48);
+        QCOMPARE(w.currentPatch().value(), ju("106:7-1"));
+        QCOMPARE(w.ledDisplay()->readout(), S("7-1"));
+        for (const FakeMidiBackend *f : fakes)
+            QVERIFY(f->sentMessages().isEmpty());  // restoring sends nothing
+        w.hide();
+    }
+
+    void aFollowSwitchDoesNotWriteTheCurrentDeviceUntilTheWindowSaves()
+    {
+        Rig r(true, true, false, true);
+        r.w->switchDevice(Model::JP08);
+        r.w->switchDevice(Model::D05);  // the user: written now
+        QCOMPARE(AppSettings(r.iniPath).currentDevice().value(), Model::D05);
+        r.inject({0xC2, 5});  // the JP-08's panel: FR-20 shows the JP-08
+        QCOMPARE(r.w->currentDevice(), Model::JP08);
+        QCOMPARE(AppSettings(r.iniPath).currentDevice().value(), Model::D05);  // not written for a follow
+        r.inject({0xC2, 6});
+        r.inject({0xC2, 7});
+        QCOMPARE(AppSettings(r.iniPath).currentDevice().value(), Model::D05);
+        r.w->close();  // the window saves its state: the device it was on
+        QCOMPARE(AppSettings(r.iniPath).currentDevice().value(), Model::JP08);
+    }
+
+    void theSettingsEngineInfoFollowsTheTrackerWhileOpen()
+    {
+        Rig r(true, false, true);
+        r.router->setJu06aState(60, 28, 48);
+        r.w->openSettings();
+        SettingsDialog *d = r.w->settingsDialog();
+        DevicePage *page = d->page(Model::JU06A);
+        QCOMPARE(page->believedLabel()->text(), S("60"));
+        QCOMPARE(page->engineWhereLabel(60)->text(), S("4-5"));
+        QCOMPARE(page->engineWhereLabel(106)->text(), S("7-1"));
+        r.router->ju06aTracker()->programChange(10);  // a panel press on the believed engine
+        QCOMPARE(page->engineWhereLabel(60)->text(), S("2-3"));
+        r.router->ju06aTracker()->toggleEngine();  // a flip
+        QCOMPARE(page->believedLabel()->text(), S("106"));
+        QVERIFY(r.router->select(*PatchAddress::parse(S("106:8-8"), Model::JU06A)));
+        QCOMPARE(page->engineWhereLabel(106)->text(), S("8-8"));
     }
 
     void quittingKeepsTheSavedCurrentDeviceUnlessTheUserSwitched()

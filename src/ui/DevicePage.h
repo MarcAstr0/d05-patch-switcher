@@ -66,6 +66,9 @@ public:
                   const QStringList &ins, const QString &inError, const QList<Identify::Result> &inIds);
 
     void setEngineInfo(const EngineInfo &info);
+    // The JU-06A page's read-only value labels (tests): the believed engine, and where each engine is.
+    QLabel *believedLabel() const { return m_believed; }
+    QLabel *engineWhereLabel(int engine) const { return engine == 106 ? m_on106 : m_on60; }
     // The conflict named in place ("Channel 4 on Hapax MIDI 1 is used by the D-05."); empty clears.
     void setConflictText(const QString &text);
     QString conflictText() const { return m_conflictFull; }

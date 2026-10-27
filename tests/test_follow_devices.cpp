@@ -228,18 +228,23 @@ private slots:
     void aFollowSwitchPaintsEachWidgetOnce()
     {
         Rig r;
+        r.router->setJu06aState(60, -1, -1);
         QVERIFY(r.show());
         QTest::qWait(80);
-        for (int i = 0; i < 100; ++i) {
-            const bool toJp = i % 2 == 0;
+        const Model cycle[] = {Model::JP08, Model::JU06A, Model::D05};
+        for (int i = 0; i < 99; ++i) {
+            const Model to = cycle[i % 3];
+            const bool led = to != Model::D05;
             PaintCounter win, plate, leds, lcd, status;
             r.w->installEventFilter(&win);
             r.w->switcher()->installEventFilter(&plate);
             r.w->ledDisplay()->installEventFilter(&leds);
             r.w->display()->installEventFilter(&lcd);
             r.w->statusBar()->installEventFilter(&status);
-            if (toJp)
+            if (to == Model::JP08)
                 r.inject({0xC4, i % 64});
+            else if (to == Model::JU06A)
+                r.inject({0xC3, i % 64});
             else
                 r.inject({D05_TRIPLET});
             QTest::qWait(30);
@@ -248,11 +253,11 @@ private slots:
             r.w->ledDisplay()->removeEventFilter(&leds);
             r.w->display()->removeEventFilter(&lcd);
             r.w->statusBar()->removeEventFilter(&status);
-            QCOMPARE(r.w->currentDevice(), toJp ? Model::JP08 : Model::D05);
+            QCOMPARE(r.w->currentDevice(), to);
             QCOMPARE(win.paints, 1);
             QCOMPARE(plate.paints, 1);
-            QCOMPARE(toJp ? leds.paints : lcd.paints, 1);
-            QCOMPARE(toJp ? lcd.paints : leds.paints, 0);
+            QCOMPARE(led ? leds.paints : lcd.paints, 1);
+            QCOMPARE(led ? lcd.paints : leds.paints, 0);
             QCOMPARE(status.paints, 1);
         }
     }

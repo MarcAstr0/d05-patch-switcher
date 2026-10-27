@@ -79,6 +79,10 @@ public slots:
     // The user selected a JU-06A address (Enter, click, prev/next, auto-send, --send). False only
     // when a send was attempted and the sender reported failure (arming returns true).
     bool select(const d05::PatchAddress &a);
+    // A send that is not a selection (resend on connect, Settings TEST): puts `a` on the wire for the
+    // believed engine and commits it on success, but leaves a pending arm and hint alone. False for
+    // the other engine (the app never sends a patch for it) and when the send failed.
+    bool sendQuiet(const d05::PatchAddress &a);
     // Ctrl+E or engine control click.
     void toggleEngine();
     // Esc. Clears the arm and the hint. Returns true only when it cleared an armed selection

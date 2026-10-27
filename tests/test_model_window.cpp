@@ -32,6 +32,7 @@
 #include <QImage>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPointer>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QStatusBar>
@@ -39,6 +40,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <functional>
 #include <memory>
 
 using namespace d05;
@@ -169,6 +171,34 @@ struct Rig {
     }
     QString context() const { return w->ledDisplay()->context(); }
 };
+
+// Runs `action`, lets the window settle and checks that the window, list, buttons, nameplate, LED display
+// and status bar were each painted exactly once and that the skin is `skin`.
+void countOneRepaint(Rig &r, const char *skin, const std::function<void()> &action)
+{
+    PaintCounter win, list, button, plate, leds, status;
+    r.w->installEventFilter(&win);
+    r.w->list()->viewport()->installEventFilter(&list);
+    r.w->prevButton()->installEventFilter(&button);
+    r.w->nameplate()->installEventFilter(&plate);
+    r.w->ledDisplay()->installEventFilter(&leds);
+    r.w->statusBar()->installEventFilter(&status);
+    action();
+    QTest::qWait(100);
+    r.w->removeEventFilter(&win);
+    r.w->list()->viewport()->removeEventFilter(&list);
+    r.w->prevButton()->removeEventFilter(&button);
+    r.w->nameplate()->removeEventFilter(&plate);
+    r.w->ledDisplay()->removeEventFilter(&leds);
+    r.w->statusBar()->removeEventFilter(&status);
+    const QString what = QStringLiteral("win %1 list %2 button %3 plate %4 leds %5 status %6")
+                             .arg(win.paints).arg(list.paints).arg(button.paints).arg(plate.paints)
+                             .arg(leds.paints).arg(status.paints);
+    QVERIFY2(Theme::skin().id == QString::fromLatin1(skin), qPrintable(Theme::skin().id));
+    QVERIFY2(win.paints == 1 && list.paints == 1 && button.paints == 1 && plate.paints == 1 && leds.paints == 1
+                 && status.paints == 1,
+             qPrintable(what));
+}
 
 }  // namespace
 
@@ -575,6 +605,101 @@ private slots:
         QCOMPARE(Theme::skin().id, QStringLiteral("ju06a-106"));
     }
 
+    void aFlipConfirmationShowsSentForItsFlash()
+    {
+        // FR-12: the confirmation's send is a send. The window's own handler for the same event must
+        // not end the flash it just started.
+        Rig r(true, false, true);
+        r.router->setJu06aState(60, 28, 48);
+        QVERIFY(r.show());
+        r.w->switchDevice(Model::JU06A);
+        r.choose(ju("106:1-1"));
+        QVERIFY(r.tracker()->armed());
+        QVERIFY(r.context() != S("SENT"));
+        r.inject({0xC4, 48});
+        QVERIFY(!r.tracker()->armed());
+        QCOMPARE(r.context(), S("SENT"));
+        QTest::qWait(480);
+        QVERIFY(r.context() != S("SENT"));  // and it ends after its 400 ms
+        // An ordinary panel change still ends a flash at once.
+        r.choose(ju("106:2-2"));
+        QCOMPARE(r.context(), S("SENT"));
+        r.inject({0xC4, 20});
+        QVERIFY(r.context() != S("SENT"));
+    }
+
+    void aFlipConfirmationThatSwitchesTheWindowShowsSentToo()
+    {
+        Rig r(true, false, true);
+        r.router->setJu06aState(60, 28, 48);
+        QVERIFY(r.show());
+        r.w->switchDevice(Model::JU06A);
+        r.choose(ju("106:1-1"));
+        QVERIFY(r.tracker()->armed());
+        // The D-05's panel moves: FR-20 shows the D-05; the arm stays (not a user switch).
+        r.inject({0xB0, 0, 87});
+        r.inject({0xB0, 32, 1});
+        r.inject({0xC0, 5});
+        QCOMPARE(r.w->currentDevice(), Model::D05);
+        QVERIFY(r.tracker()->armed());
+        r.inject({0xC4, 48});  // the unit confirms the flip
+        QVERIFY(!r.tracker()->armed());
+        QCOMPARE(r.w->currentDevice(), Model::JU06A);
+        QCOMPARE(r.context(), S("SENT"));
+    }
+
+    void aRenamedPatchPrependedToRecentsDrawsItsOwnRowLayout()
+    {
+        Rig r(false, true, false);
+        r.w->switchDevice(Model::JP08);
+        QVERIFY(r.show());
+        r.library->recordSend(jp("2-2"));
+        r.w->model()->setView(PatchListModel::View::Recents);
+        QTest::qWait(50);
+        QVERIFY(r.library->setUserName(jp("1-1"), S("Mine")));
+        r.library->recordSend(jp("1-1"));  // a row inserted at the top, shifting the other down
+        QCOMPARE(r.w->model()->rowCount(), 2);
+        QCOMPARE(r.w->model()->row(0).address, jp("1-1"));
+        QVERIFY(!r.w->model()->row(0).factory.isEmpty());
+        QTest::qWait(50);
+        const QImage live = r.w->list()->viewport()->grab().toImage();
+        // Force a full re-measure (a width change and back), then paint the same rows again.
+        const QSize size = r.w->size();
+        r.w->resize(size.width() + 40, size.height());
+        QTest::qWait(50);
+        r.w->resize(size);
+        QTest::qWait(50);
+        const QImage fresh = r.w->list()->viewport()->grab().toImage();
+        QCOMPARE(live.size(), fresh.size());
+        QVERIFY(live == fresh);
+    }
+
+    void quittingWithAPendingEntryOrAnOpenEditorIsQuiet()
+    {
+        // ~QWidget hides the window after ~MainWindow has run: the grid lost focus and finished its
+        // entry, and the slots ran on a half-destroyed window (caught by the sanitizer builds).
+        {
+            Rig r(false, true, false);
+            r.w->switchDevice(Model::JP08);
+            QVERIFY(r.show());
+            r.w->bankGrid()->setFocus(Qt::OtherFocusReason);
+            r.w->bankGrid()->beginEntry(1);
+            QVERIFY(r.w->bankGrid()->stage() != BankGrid::Stage::Idle);
+            QPointer<BankGrid> grid = r.w->bankGrid();
+            r.w.reset();
+            QVERIFY(!grid);
+        }
+        {
+            Rig r(false, true, false);
+            r.w->switchDevice(Model::JP08);
+            QVERIFY(r.show());
+            r.w->list()->setCurrentIndex(r.w->model()->index(2));
+            r.w->renameHighlighted();
+            QVERIFY(!r.w->list()->viewport()->findChildren<QLineEdit *>(S("nameEditor")).isEmpty());
+            r.w.reset();
+        }
+    }
+
     void aFailedSendIsNeverShownAsSent()
     {
         Rig r;
@@ -679,9 +804,36 @@ private slots:
             QCOMPARE(button.paints, 1);
             QCOMPARE(plate.paints, 1);
             QCOMPARE(leds.paints, 1);
+            QCOMPARE(status.paints, 1);
         };
         toggleTo("ju06a-106");
         toggleTo("ju06a-60");
+    }
+
+    // The other routes that change the engine skin: a flip confirmed by the unit's incoming Program
+    // Change, and Ctrl+E undoing a flip hint. Each repaints every widget once.
+    void aFlipConfirmationRepaintsTheWindowOnce()
+    {
+        Rig r;
+        r.router->setJu06aState(60, 28, 48);
+        QVERIFY(r.show());
+        r.choose(ju("106:1-1"));  // armed
+        QVERIFY(r.tracker()->armed());
+        QTest::qWait(80);
+        countOneRepaint(r, "ju06a-106", [&] { r.inject({0xC4, 48}); });  // the unit re-sends 106's patch
+        QVERIFY(!r.tracker()->armed());
+    }
+
+    void aHintUndoRepaintsTheWindowOnce()
+    {
+        Rig r;
+        r.router->setJu06aState(60, 28, 48);
+        QVERIFY(r.show());
+        r.inject({0xC4, 48});  // the panel shows 106's remembered patch: a hint
+        QCOMPARE(r.tracker()->hint(), 106);
+        QTest::qWait(80);
+        countOneRepaint(r, "ju06a-106", [&] { QTest::keyClick(r.w.get(), Qt::Key_E, Qt::ControlModifier); });
+        QCOMPARE(r.tracker()->hint(), 0);
     }
 
     // ------------------------------------------------------------------ switching with content
@@ -924,6 +1076,65 @@ private slots:
             f->setOutputPorts(r.outs, false);
         r.router->pollNow();
         QCOMPARE(r.sent(), (QList<QByteArray>{QByteArray::fromHex("c41c")}));
+    }
+
+    void aResendOnConnectKeepsAPendingArm()
+    {
+        Rig r(false, false, false, true);
+        AppSettings::DeviceValues v = dev(5, "Hapax", true);
+        v.resendOnConnect = true;
+        r.router->setJu06aState(60, 28, 48);
+        r.put(Model::JU06A, v);
+        QVERIFY(r.show());
+        r.choose(ju("106:1-1"));
+        QVERIFY(r.tracker()->armed());
+        for (FakeMidiBackend *f : r.fakes)
+            f->setOutputPorts(QStringList{}, true);  // unplugged
+        QCoreApplication::processEvents();
+        r.router->pollNow();
+        r.clearSent();
+        r.outs = QStringList{S("Hapax Out")};
+        for (FakeMidiBackend *f : r.fakes)
+            f->setOutputPorts(r.outs, false);
+        r.router->pollNow();
+        QCOMPARE(r.sent(), (QList<QByteArray>{QByteArray::fromHex("c41c")}));  // the believed engine's patch
+        QVERIFY(r.tracker()->armed());
+        QCOMPARE(r.tracker()->armed()->engine(), 106);
+        QCOMPARE(r.tracker()->engine(), 60);
+    }
+
+    void settingsTestKeepsAPendingArmAndHint()
+    {
+        const auto press = [](Rig &r) {
+            r.w->openSettings();
+            SettingsDialog *d = r.w->settingsDialog();
+            d->setShown(Model::JU06A);
+            QVERIFY(d->testButton()->isEnabled());
+            r.clearSent();
+            QTest::mouseClick(d->testButton(), Qt::LeftButton);
+            d->reject();
+            QTRY_VERIFY(!r.w->settingsDialog());
+        };
+        {
+            Rig r;
+            r.router->setJu06aState(60, 28, 48);
+            QVERIFY(r.show());
+            r.choose(ju("106:1-1"));
+            QVERIFY(r.tracker()->armed());
+            press(r);
+            QCOMPARE(r.sent(), (QList<QByteArray>{QByteArray::fromHex("c41c")}));
+            QVERIFY(r.tracker()->armed());
+            QCOMPARE(r.tracker()->engine(), 60);
+        }
+        {
+            Rig r;
+            r.router->setJu06aState(60, 28, 48);
+            QVERIFY(r.show());
+            r.inject({0xC4, 48});  // the panel shows 106's remembered patch: the engine may have been flipped
+            QCOMPARE(r.tracker()->hint(), 106);
+            press(r);
+            QCOMPARE(r.tracker()->hint(), 106);
+        }
     }
 
     void settingsTestOnTheJu06aUsesTheTrackersPatch()

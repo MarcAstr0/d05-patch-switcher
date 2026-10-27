@@ -119,6 +119,45 @@ private slots:
         QVERIFY(calls >= 4);
     }
 
+    void aQuietSendKeepsTheArmAndTheHintAndNeverSendsTheOtherEngine()
+    {
+        EngineTracker t;
+        bool ok = true;
+        QList<QString> wire;
+        t.setSender([&](const d05::PatchAddress &a) {
+            wire << a.toString();
+            return ok;
+        });
+        const auto a60 = *PatchAddress::parse(QStringLiteral("60:2-1"), Model::JU06A);
+        const auto a106 = *PatchAddress::parse(QStringLiteral("106:1-1"), Model::JU06A);
+        t.setState(60, 5, 28);
+        QVERIFY(t.select(a106));  // armed
+        QVERIFY(t.sendQuiet(a60));
+        QVERIFY(t.armed().has_value());
+        QCOMPARE(t.armed().value(), a106);
+        QCOMPARE(t.remembered(60), a60.program());  // committed on success
+        QCOMPARE(t.current().value(), a60);
+        // The other engine's patch is never sent.
+        wire.clear();
+        QVERIFY(!t.sendQuiet(a106));
+        QVERIFY(wire.isEmpty());
+        QCOMPARE(t.remembered(106), 28);
+        // A failed quiet send commits nothing and still leaves the arm.
+        ok = false;
+        const auto before = t.current();
+        QVERIFY(!t.sendQuiet(*PatchAddress::parse(QStringLiteral("60:8-8"), Model::JU06A)));
+        QCOMPARE(t.current(), before);
+        QCOMPARE(t.remembered(60), a60.program());
+        QVERIFY(t.armed().has_value());
+        // The hint stays too.
+        ok = true;
+        t.setState(60, 5, 28);
+        t.programChange(28);  // 106's remembered patch arrives unprompted
+        QCOMPARE(t.hint(), 106);
+        QVERIFY(t.sendQuiet(a60));
+        QCOMPARE(t.hint(), 106);
+    }
+
     void signalOrderOnCtrlE()
     {
         EngineTracker t;

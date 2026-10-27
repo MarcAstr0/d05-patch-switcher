@@ -31,18 +31,28 @@ DeviceRouter::DeviceRouter(PortHub *hub, QObject *parent, MidiLink *d05Link)
             c.channel = l->channel();
             c.follow = l->followEnabled();
         }
+        l->setOpenGuard([this, m](const QString &port, bool input) { return openVeto(m, port, input); });
         connect(l, &MidiLink::pollNeededChanged, this, [this] { updatePolling(); });
         connect(l, &MidiLink::inputConnectedChanged, this, [this] { updateFlipDetectable(); });
     }
     MidiLink *ju = link(Model::JU06A);
     connect(m_tracker, &EngineTracker::engineChanged, ju, &MidiLink::setEngine);
     // The tracker commits a send only when the link really put it on the wire.
-    m_tracker->setSender([ju](const PatchAddress &a) { return ju->sendPatch(a); });
+    m_tracker->setSender([this, ju](const PatchAddress &a) {
+        const bool ok = ju->sendPatch(a);
+        if (ok)
+            ++m_ju06aSends;
+        return ok;
+    });
     // Slots run in connection order: the tracker classifies the program first (an armed flip
     // confirmation sends the armed patch whether or not the JU-06A is the current device), then
     // the follow-induced device switch happens. Only a user switch clears an arm (setCurrentDevice).
+    connect(ju, &MidiLink::programReceived, this, [this](int) { m_sendsAtEvent = m_ju06aSends; });
     connect(ju, &MidiLink::programReceived, m_tracker, &EngineTracker::programChange);
-    connect(ju, &MidiLink::programReceived, this, [this](int) { onFollowEvent(Model::JU06A); });
+    connect(ju, &MidiLink::programReceived, this, [this](int) {
+        onFollowEvent(Model::JU06A);
+        emit ju06aProgramHandled(m_ju06aSends != m_sendsAtEvent);
+    });
     connect(link(Model::D05), &MidiLink::followReceived, this, [this] { onFollowEvent(Model::D05); });
     connect(link(Model::JP08), &MidiLink::followReceived, this, [this] { onFollowEvent(Model::JP08); });
 }
@@ -59,6 +69,27 @@ bool DeviceRouter::samePort(const QString &a, const QString &b)
     if (!isKey(a) && !isKey(b))
         return false;
     return MidiLink::portKey(a).compare(MidiLink::portKey(b), Qt::CaseInsensitive) == 0;
+}
+
+// The literal check (findConflict) cannot see a port that is given abbreviated and resolves later
+// (hot-plug). Whenever a link is about to open a port it has resolved, compare the real name with
+// what the other enabled devices on the same channel hold open.
+QString DeviceRouter::openVeto(Model m, const QString &port, bool input) const
+{
+    const Dev &self = m_dev[idx(m)];
+    for (Model o : allModels()) {
+        const Dev &d = m_dev[idx(o)];
+        if (o == m || !d.cfg.enabled || m_pending[size_t(idx(o))] || d.cfg.channel != self.cfg.channel)
+            continue;
+        const QString theirs = input ? (d.cfg.follow && self.cfg.follow ? d.link->connectedInputName() : QString())
+                                     : d.link->connectedPortName();
+        if (!theirs.isEmpty() && theirs.compare(port, Qt::CaseInsensitive) == 0) {
+            return QStringLiteral("Conflict: the %1 already uses this %2 port on channel %3")
+                .arg(modelInfo(o).name, input ? QStringLiteral("input") : QStringLiteral("output"))
+                .arg(self.cfg.channel);
+        }
+    }
+    return {};
 }
 
 std::optional<DeviceRouter::Conflict> DeviceRouter::findConflict(const Configs &cfgs, Model m, bool earlierOnly)
@@ -157,8 +188,13 @@ bool DeviceRouter::configureAll(const Configs &in, Model *a, Model *b)
         }
     }
     for (Model m : allModels())
-        if (cfgs[idx(m)] != m_dev[idx(m)].cfg)
-            applyConfig(m, cfgs[idx(m)]);
+        m_pending[size_t(idx(m))] = cfgs[idx(m)] != m_dev[idx(m)].cfg;
+    for (Model m : allModels()) {
+        if (!m_pending[size_t(idx(m))])
+            continue;
+        applyConfig(m, cfgs[idx(m)]);
+        m_pending[size_t(idx(m))] = false;
+    }
     updateFlipDetectable();
     updatePolling();
     return true;
@@ -242,6 +278,16 @@ void DeviceRouter::onFollowEvent(Model m)
     m_current = m;
     // A switch caused by a follow event does not touch the JU-06A tracker's arm.
     emit currentDeviceChanged(m, true);
+}
+
+bool DeviceRouter::resend(const PatchAddress &a)
+{
+    MidiLink *l = link(a.model());
+    if (!l->isConnected())
+        return false;
+    if (a.model() == Model::JU06A)
+        return m_tracker->sendQuiet(a);
+    return l->sendPatch(a);
 }
 
 bool DeviceRouter::select(const PatchAddress &a)

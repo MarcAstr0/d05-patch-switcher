@@ -99,6 +99,9 @@ public:
     // remembered programs and current patch are then as they were (a disconnected JU-06A
     // selection still ends an arm and a hint). See EngineTracker for the failed-send rules.
     bool select(const PatchAddress &a);
+    // A send that is not a selection (resend on connect, Settings TEST): the same wire message, but a
+    // JU-06A arm or flip hint is left as it is, and nothing is sent for the other engine.
+    bool resend(const PatchAddress &a);
 
     // --- Poll --------------------------------------------------------------------------------
     // Re-tries every enabled device that wants a port it does not have. The timer calls this.
@@ -115,6 +118,11 @@ public:
     void checkConnections();
 
 signals:
+    // A JU-06A Program Change was fully handled: the tracker classified it and, for FR-20, the
+    // window device was switched. `sentPatch` is true when the tracker put a patch on the wire for
+    // it (an armed flip confirmation). The window uses it to end a SENT flash for an ordinary panel
+    // change but not for a confirmation.
+    void ju06aProgramHandled(bool sentPatch);
     // The current device changed; `byFollow` is true when FR-20 caused it. The UI acts in M8.
     void currentDeviceChanged(d05::Model model, bool byFollow);
 
@@ -131,11 +139,15 @@ private:
     void updatePolling();
     void updateFlipDetectable();
     void onFollowEvent(Model m);
+    QString openVeto(Model m, const QString &port, bool input) const;
 
     PortHub *m_hub;
     std::array<Dev, 3> m_dev;
     EngineTracker *m_tracker;
     QTimer m_timer;
+    int m_ju06aSends = 0;       // JU-06A patches the tracker put on the wire
+    int m_sendsAtEvent = 0;
+    std::array<bool, 3> m_pending{};  // devices of a configureAll() batch not applied yet
     Model m_current = Model::D05;
     bool m_followSwitches = true;
 };

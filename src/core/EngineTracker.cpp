@@ -100,6 +100,13 @@ bool EngineTracker::select(const PatchAddress &a)
     return true;
 }
 
+bool EngineTracker::sendQuiet(const PatchAddress &a)
+{
+    if (a.model() != Model::JU06A || a.engine() != m_engine)
+        return false;
+    return doSend(a);
+}
+
 void EngineTracker::toggleEngine()
 {
     const int newEngine = otherEngine();

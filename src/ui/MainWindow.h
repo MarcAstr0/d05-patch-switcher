@@ -337,6 +337,7 @@ private:
     bool m_settingsOpen = false;
     std::array<bool, 3> m_runOnly{};
     bool m_engineChanged = false;  // the JU-06A's engine changed after startup (not a --engine override)
+    bool m_followSwitched = false;  // FR-20 changed the current device since it was last saved
     bool m_writeReported = false;  // the settings-not-saved message was shown
 
     QWidget *m_central = nullptr;

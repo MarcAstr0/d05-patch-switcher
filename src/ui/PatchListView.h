@@ -59,6 +59,10 @@ protected:
     void keyReleaseEvent(QKeyEvent *event) override;
     void focusOutEvent(QFocusEvent *event) override;
     bool edit(const QModelIndex &index, EditTrigger trigger, QEvent *event) override;
+    // Rows are a fixed height whatever their data, so a data change repaints the changed rows and
+    // schedules no relayout (QListView would start a zero-length timer whose later layout repaints the
+    // whole list a second time after the flush of the same turn).
+    void dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight, const QList<int> &roles = QList<int>()) override;
 
 private:
     void prepareDelegate();

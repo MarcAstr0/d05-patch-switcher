@@ -334,6 +334,17 @@ MainWindow::~MainWindow()
 {
     if (!m_firstShow)  // shown at least once: remember where it was (Ctrl+Q skips closeEvent on some platforms)
         saveStateNow();
+    // Quiet the window while it is still whole: ~QWidget would hide it after this destructor, the grid
+    // or a name editor would lose focus and finish an entry, and the slots would run on a window that
+    // is half destroyed.
+    qApp->removeEventFilter(this);
+    if (m_grid)
+        m_grid->disconnect(this);
+    if (m_delegate)
+        m_delegate->disconnect(this);
+    if (QWidget *f = QApplication::focusWidget(); f && f->window() == this)
+        f->clearFocus();
+    hide();
 }
 
 void MainWindow::buildWidgets()
@@ -477,10 +488,12 @@ void MainWindow::buildWidgets()
     connect(&m_link, &MidiLink::currentChanged, this, &MainWindow::onFollowed);
     connect(m_router->link(Model::JP08), &MidiLink::currentChanged, this, &MainWindow::onFollowed);
     // (The router's own slot ran first: with FR-20 on the JU-06A is already the current device here.)
-    connect(m_router->link(Model::JU06A), &MidiLink::programReceived, this, [this](int) {
+    connect(m_router, &DeviceRouter::ju06aProgramHandled, this, [this](bool sentPatch) {
         if (currentDevice() != Model::JU06A)
             return;  // another device is shown: nothing of the JU-06A's event touches its UI
-        m_sendFlash = false;
+        // An armed flip confirmation did send: its SENT flash shows (FR-12), also when the same event
+        // switched the window to this device (onDeviceChanged ended the flash). A panel change ends it.
+        m_sendFlash = sentPatch;
         m_display->flashActivity();
         updateLedDisplay();
     });
@@ -1533,7 +1546,12 @@ void MainWindow::onDeviceChanged(Model model, bool byFollow)
     refreshConnection();  // status bar, display, switcher
     if (model == Model::D05 || !QApplication::focusWidget() || QApplication::focusWidget()->window() != this)
         m_search->setFocus();
-    if (m_settings) {
+    // Only a switch the user makes is written now (a synchronous file write); a switch a follow event
+    // caused (FR-20) can come with every panel press and is written when the window saves its state.
+    if (byFollow) {
+        m_followSwitched = true;
+    } else if (m_settings) {
+        m_followSwitched = false;
         m_settings->setCurrentDevice(model);
         noteSettingsWrite();
     }
@@ -1694,7 +1712,7 @@ bool MainWindow::sendQuiet(Model model)
     if (model == Model::JU06A && cur->engine() != m_router->ju06aTracker()->engine())
         return true;
     const QScopedValueRollback<bool> quiet(m_quietSend, true);
-    return m_router->select(*cur);
+    return m_router->resend(*cur);
 }
 
 void MainWindow::notAvailable(const QString &what)
@@ -1883,7 +1901,7 @@ void MainWindow::onSettingsTest(Model model, const AppSettings::DeviceValues &v)
     if (!a)
         a = PatchAddress::fromBankNumber(model, 1, 1, model == Model::JU06A ? m_router->ju06aTracker()->engine() : 0);
     const QScopedValueRollback<bool> quiet(m_quietSend, true);  // TEST is not a selection
-    if (a && !m_router->select(*a))
+    if (a && !m_router->resend(*a))
         showMessage(QStringLiteral("Not sent: ") + l->status());
 }
 
@@ -1998,7 +2016,7 @@ void MainWindow::saveStateNow()
     // Command-line overrides are never persisted (Cli::startup): a device that a flag turned on for
     // this run only (markRunOnly) writes nothing, the saved engine stays unless
     // it changed during the run, and the current device is written when the user switches (see
-    // onDeviceChanged), not here.
+    // onDeviceChanged) or, after a follow switch (FR-20), here.
     auto savedOn = [this](Model m) { return !m_runOnly[int(m)]; };
     if (savedOn(Model::D05))
         m_settings->setLastPatch(Model::D05, m_current);
@@ -2016,6 +2034,10 @@ void MainWindow::saveStateNow()
             const int r = t->remembered(e);
             m_settings->setRemembered(e, r >= 0 ? std::optional<int>(r) : std::nullopt);
         }
+    }
+    if (m_followSwitched && savedOn(m_router->currentDevice())) {
+        m_settings->setCurrentDevice(m_router->currentDevice());
+        m_followSwitched = false;
     }
     m_settings->setWindowGeometry(saveGeometry());
     noteSettingsWrite();

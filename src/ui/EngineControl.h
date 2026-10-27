@@ -46,6 +46,7 @@ protected:
 private:
     int m_believed = 60;
     int m_marked = 0;
+    QString m_caption1, m_caption2;  // built outside paint (construction, skin change)
 };
 
 }  // namespace d05

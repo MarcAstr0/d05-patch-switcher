@@ -623,6 +623,32 @@ private slots:
         QVERIFY(r.router.link(Model::D05)->isConnected());  // untouched
     }
 
+    void anAbbreviatedPortThatResolvesLaterIsRefusedOnAConflict()
+    {
+        Rig r;
+        r.outs = {};  // the forwarder is not there yet
+        QVERIFY(r.router.configure(Model::D05, Rig::cfg(1, false, "Hapax")));
+        // The literal check cannot see that "Hap" will be the same port.
+        QVERIFY(r.router.configure(Model::JP08, Rig::cfg(1, false, "Hap")));
+        r.fake()->setOutputPorts({S("Hapax Out")}, false);
+        r.router.pollNow();
+        QVERIFY(r.router.link(Model::D05)->isConnected());
+        QVERIFY(!r.router.link(Model::JP08)->isConnected());
+        QVERIFY(r.router.link(Model::JP08)->status().contains(S("Conflict")));
+        QVERIFY(r.router.link(Model::JP08)->status().contains(S("D-05")));
+        QVERIFY(r.router.isPolling());  // it keeps trying, in case the other device moves
+        QVERIFY(!r.router.select(addr(Model::JP08, "4-5")));
+        QVERIFY(r.fake()->sentMessages().isEmpty());
+        QCOMPARE(r.hub.openOutputCount(), 1);
+        // The same through a Settings apply with the port already present.
+        QVERIFY(r.router.configure(Model::JP08, Rig::cfg(2, false, "Hap")));
+        QVERIFY(r.router.link(Model::JP08)->isConnected());  // another channel: fine
+        QVERIFY(r.router.configure(Model::JP08, Rig::cfg(1, false, "Hap")));
+        QVERIFY(!r.router.link(Model::JP08)->isConnected());
+        QVERIFY(r.router.link(Model::JP08)->status().contains(S("Conflict")));
+        QVERIFY(r.fake()->sentMessages().isEmpty());
+    }
+
     void reapplyingAnUnchangedConfigurationReopensNothing()
     {
         Rig r;

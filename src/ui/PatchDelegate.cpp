@@ -299,7 +299,7 @@ void PatchDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const
     // Name, with the search ranges drawn first (all measured in prepare()).
     RowLayout local;
     const RowLayout *rl;
-    if (m_layoutWidth == Wl && index.row() < m_layouts.size()) {
+    if (m_layoutWidth == Wl && m_layouts.size() == model->rowCount() && index.row() < m_layouts.size()) {
         rl = &m_layouts[index.row()];
     } else {
         layoutRow(row, Wl, &local);  // stale cache: same values, computed here

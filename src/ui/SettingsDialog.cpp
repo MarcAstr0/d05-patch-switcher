@@ -37,6 +37,13 @@ SettingsDialog::SettingsDialog(DeviceRouter &router, const State &initial, Model
     setModal(true);
     setFixedSize(ClientWidth, ClientHeight);
     buildUi(shown, initial);
+    // The JU-06A page's engine information follows the tracker while the dialog is open (a panel
+    // press or a flip confirmation can arrive meanwhile).
+    if (const EngineTracker *t = m_router.ju06aTracker()) {
+        connect(t, &EngineTracker::engineChanged, this, [this] { refreshEngineInfo(); });
+        connect(t, &EngineTracker::rememberedChanged, this, [this] { refreshEngineInfo(); });
+        connect(t, &EngineTracker::currentChanged, this, [this] { refreshEngineInfo(); });
+    }
     refreshPorts();
     refreshEngineInfo();
     updateAll();

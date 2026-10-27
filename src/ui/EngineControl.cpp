@@ -38,6 +38,12 @@ EngineControl::EngineControl(QWidget *parent)
         m_slots.append(s);
     }
     setCursor(0);
+    const auto rebuild = [this] {
+        m_caption1 = captionLine1();
+        m_caption2 = captionLine2();
+    };
+    rebuild();
+    connect(Theme::notifier(), &Theme::Notifier::skinChanged, this, rebuild);
 }
 
 void EngineControl::setState(int believed, int marked)
@@ -82,8 +88,8 @@ void EngineControl::paintBackdrop(QPainter *p)
     SectionRule::paint(p, 4, 0, 394, Theme::skin().engineTitle, true, true);
     p->setFont(Theme::font(Theme::Role::Note));
     p->setPen(Theme::colors().labelDim);
-    p->drawText(QPoint(4 + 112, 25), captionLine1());
-    p->drawText(QPoint(4 + 112, 40), captionLine2());
+    p->drawText(QPoint(4 + 112, 25), m_caption1);
+    p->drawText(QPoint(4 + 112, 40), m_caption2);
 }
 
 }  // namespace d05

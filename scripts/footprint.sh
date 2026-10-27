@@ -148,8 +148,8 @@ wait 2>/dev/null
 pids=()
 
 pct() { awk -v d="$1" -v hz="$hz" -v w="$window" 'BEGIN { printf "%.2f", 100 * d / (hz * w) }'; }
-d=$((t1[three] - t0[three])); v=PASS; le "$(pct "$d")" 0.2 || v=FAIL
-add_row "Idle CPU, 3 devices + clock" "$(pct "$d")% ($d ticks/${window}s)" "<= 0.2%" "$v"
+d=$((t1[three] - t0[three])); v=PASS; le "$(pct "$d")" 1 || v=FAIL
+add_row "Idle CPU, 3 devices + clock" "$(pct "$d")% ($d ticks/${window}s)" "<= 1% (SPEC-2 5)" "$v"
 add_row "  per thread, run time in window" "${tt[three]}" "info" info
 if [ -n "${t1[one]:-}" ]; then
     d=$((t1[one] - t0[one])); v=PASS; [ "$d" -gt 1 ] && v=FAIL   # 1 tick/30 s = 0.03%, prints as 0.0

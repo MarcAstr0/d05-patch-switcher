@@ -8,6 +8,7 @@
 #include "midi/MidiLink.h"
 #include "ui/BankGrid.h"
 #include "ui/DisplayWidget.h"
+#include "ui/EngineControl.h"
 #include "ui/GroupBar.h"
 #include "ui/MainWindow.h"
 #include "ui/Nameplate.h"
@@ -68,6 +69,12 @@ std::atomic<bool> g_counting{false};
 using namespace d05;
 
 namespace {
+
+// Reaches the engine control's protected backdrop paint.
+class EngineProbe : public EngineControl {
+public:
+    void backdrop(QPainter *p) { paintBackdrop(p); }
+};
 
 PatchAddress addr(const char *t)
 {
@@ -779,7 +786,8 @@ private slots:
         Rig r;
         r.w->resize(960, 560);
         QVERIFY(r.show());
-        QWidget *widgets[] = {r.w->groupBar(), r.w->bankGrid(), r.w->prevButton(), r.w->nextButton()};
+        QWidget *widgets[] = {r.w->groupBar(), r.w->bankGrid(), r.w->prevButton(), r.w->nextButton(),
+                              r.w->engineControl()};
         const auto paintAll = [&](int n) {
             for (int i = 0; i < n; ++i)
                 for (QWidget *w : widgets) {
@@ -802,6 +810,46 @@ private slots:
         const long hundred = g_allocs.load();
         QCOMPARE(PanelButton::metricsBuildCount(), builds);
         QVERIFY2(hundred <= ten * 10 + 100, qPrintable(QStringLiteral("%1 vs %2").arg(hundred).arg(ten)));
+    }
+
+    // The engine control's caption (a key sequence rendered to native text and a concatenation) is built
+    // once, not in every paint: its backdrop allocates no more than drawing the same prebuilt strings.
+    void engineControlBackdropBuildsNoStrings()
+    {
+#ifdef Q_OS_WIN
+        QSKIP("allocation counting needs the replaced operator new, not used on Windows");
+#endif
+        Theme::setSkin(QStringLiteral("ju06a-60"));
+        EngineProbe probe;
+        QImage img(EngineControl::WidgetWidth, EngineControl::WidgetHeight, QImage::Format_RGB32);
+        QPainter p(&img);
+        const QString l1 = EngineControl::captionLine1(), l2 = EngineControl::captionLine2();
+        const auto reference = [&] {
+            SectionRule::paint(&p, 4, 0, 394, Theme::skin().engineTitle, true, true);
+            p.setFont(Theme::font(Theme::Role::Note));
+            p.setPen(Theme::colors().labelDim);
+            p.drawText(QPoint(4 + 112, 25), l1);
+            p.drawText(QPoint(4 + 112, 40), l2);
+        };
+        for (int i = 0; i < 3; ++i) {  // warm up (glyph caches)
+            probe.backdrop(&p);
+            reference();
+        }
+        g_allocs = 0;
+        g_counting = true;
+        for (int i = 0; i < 100; ++i)
+            reference();
+        g_counting = false;
+        const long base = g_allocs.load();
+        g_allocs = 0;
+        g_counting = true;
+        for (int i = 0; i < 100; ++i)
+            probe.backdrop(&p);
+        g_counting = false;
+        const long mine = g_allocs.load();
+        p.end();
+        QVERIFY2(mine <= base, qPrintable(QStringLiteral("%1 vs %2 allocations per 100 backdrops").arg(mine).arg(base)));
+        Theme::setSkin(QStringLiteral("d05"));
     }
 
     void delegatePaintAllocationsDoNotGrowWithElisionOrRanges()

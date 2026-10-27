@@ -82,6 +82,13 @@ public:
     // The input port that is wanted (as given), and whether it is open now (never while follow is off).
     QString inputPortName() const { return m_inName; }
     bool inputConnected() const { return !m_connectedInName.isEmpty(); }
+    QString connectedInputName() const { return m_connectedInName; }
+
+    // A veto asked just before this link opens a port it has resolved (startup, poll reconnect,
+    // Settings): `port` is the full OS name, `input` says which side. A non-empty return refuses the
+    // open and becomes the link's status (output) or input status; the poll keeps trying.
+    using OpenGuard = std::function<QString(const QString &port, bool input)>;
+    void setOpenGuard(OpenGuard g) { m_openGuard = std::move(g); }
     std::optional<PatchAddress> current() const { return m_current; }
     // Sets the current patch without sending anything (e.g. restored from settings).
     void setCurrent(const PatchAddress &a);
@@ -157,6 +164,7 @@ private:
     bool m_needPoll = false;
     QTimer m_timer;
     std::function<qint64()> m_clock;
+    OpenGuard m_openGuard;
     QString m_outName;
     QString m_inName;
     QString m_connectedName;
