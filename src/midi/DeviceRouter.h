@@ -88,8 +88,8 @@ public:
 
     // --- Current device ----------------------------------------------------------------------
     Model currentDevice() const { return m_current; }
-    // The user (or FR-20) switches the window to `m`. Sends nothing. Calls deviceSwitch() on the
-    // JU-06A tracker when the JU-06A is the device left or entered.
+    // The user (or FR-20) switches the window to `m`. Sends nothing. Always calls deviceSwitch() on
+    // the JU-06A tracker (ends a pending arm, keeps a hint), whichever devices are involved.
     void setCurrentDevice(Model m);
 
     // --- Sending -----------------------------------------------------------------------------

@@ -82,3 +82,8 @@ target_link_libraries(test_devices_ui PRIVATE d05ui Qt6::Widgets)
 # F2, per-device state, the first-run hint with detection).
 d05_add_test(test_model_window test_model_window.cpp)
 target_link_libraries(test_model_window PRIVATE d05ui Qt6::Widgets)
+
+# T8.4: follow across devices at the window level (FR-20, the JU-06A tracker with another device
+# current, echo suppression on a shared port).
+d05_add_test(test_follow_devices test_follow_devices.cpp)
+target_link_libraries(test_follow_devices PRIVATE d05ui Qt6::Widgets)

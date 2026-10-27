@@ -224,10 +224,11 @@ void DeviceRouter::setCurrentDevice(Model m)
 {
     if (m == m_current)
         return;
-    const Model left = m_current;
     m_current = m;
-    if (left == Model::JU06A || m == Model::JU06A)
-        m_tracker->deviceSwitch();
+    // Any switch the user makes ends a pending arm, also between two other devices: a follow switch
+    // may have left the JU-06A with its arm pending (R6), and the user's next switch is "a device
+    // switch" for FR-19. The hint is kept.
+    m_tracker->deviceSwitch();
     emit currentDeviceChanged(m, false);
 }
 
