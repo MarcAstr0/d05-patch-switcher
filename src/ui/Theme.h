@@ -83,10 +83,10 @@ Notifier *notifier();
 
 // Switches skin (DESIGN-2.md 2.6): swaps the palette, sets the application QPalette and the
 // style sheet :/theme/<id>.qss (each read from the resources once and kept), then emits
-// skinChanged(). When `window` is given its updates are disabled around the switch so it
-// paints once. Does nothing, and returns true, when `id` is already current; returns false
-// for an unknown id. No animation, no timer.
-bool setSkin(const QString &id, QWidget *window = nullptr);
+// skinChanged(). Does nothing, and returns true, when `id` is already current; returns false
+// for an unknown id or when the style sheet cannot be loaded (the previous skin stays).
+// No animation, no timer.
+bool setSkin(const QString &id);
 
 // 3.2 Type roles (and DESIGN-2.md 3 for the last eight).
 enum class Role {

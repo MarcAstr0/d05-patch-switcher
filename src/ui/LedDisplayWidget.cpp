@@ -85,12 +85,13 @@ LedDisplayWidget::LedDisplayWidget(QWidget *parent)
     m_readout = QString(m_cells, QLatin1Char('-'));
     connect(Theme::notifier(), &Theme::Notifier::skinChanged, this, [this] {
         ++m_skinGeneration;
-        if (isVisible()) {  // a hidden widget rebuilds when it is next shown or driven
+        // A hidden widget, or one whose skin has no LED display, rebuilds when next shown or driven.
+        if (isVisible() && Theme::skin().display == Theme::DisplayKind::Led) {
             ensureResources();
             update();
         }
     });
-    ensureResources();
+    // No atlas here: showEvent, setStep and setContent build it, so a hidden widget costs nothing.
 }
 
 int LedDisplayWidget::atlasBuildCount()

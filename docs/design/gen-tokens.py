@@ -13,7 +13,7 @@ Outputs (DESIGN-2.md section 2.5):
                             else of the form @{word}, and any literal #RRGGBB after the first "*/",
                             is an error.
   web/src/ui/theme.css      CSS custom properties for the web version (DESIGN-WEB.md section 2) from
-                            the version 1 subset of base (the 45 colours of groups 2.1 to 2.4, the 13
+                            the version 1 subset of base (the 41 colours of groups 2.1 to 2.4, the 13
                             version 1 type roles, webColors, webType, size, breakpoints). The web
                             stays the D-05: this file is byte-identical to the version 1 output.
   src/ui/SkinTables.inc     the runtime palette of ui/Theme: one row per skin with every resolved
@@ -151,12 +151,15 @@ def token_block(tok, skin):
     out += [" *",
             DASH,
             f" * TYPE ROLES (DESIGN.md section 3). {family_line}",
-            " * px. Weight 400 = Regular, 500 = Medium. \"Caps\" strings are stored in capitals by the",
-            " * code: QSS cannot change case.",
+            *([" * px. Weight 400 = Regular, 500 = Medium, 600 = SemiBold, 700 = Bold. \"Caps\" strings are stored in",
+               " * capitals by the code: QSS cannot change case."]
+              if other_family else
+              [" * px. Weight 400 = Regular, 500 = Medium. \"Caps\" strings are stored in capitals by the",
+               " * code: QSS cannot change case."]),
             DASH,
             f" *   {'role':<18}{'weight':<8}{'size':<6}{'spacing':<9}{'case':<12}colour"]
     for name, role in r["type"].items():
-        line = (f" *   {'type.' + name:<19}{role['weight']:<8}{role['size']:<6}{spacing_text(role):<9}"
+        line = (f" *   {'type.' + name + ' ':<19}{role['weight']:<8}{role['size']:<6}{spacing_text(role):<9}"
                 f"{role['case']:<12}{role['colour']}")
         fam = family_of(tok, role)
         if fam != tok["font"]["family"]:

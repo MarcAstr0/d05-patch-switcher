@@ -509,22 +509,23 @@ PanelButton *MainWindow::viewButton(PatchListModel::View view) const
 
 // The parts of the window that depend on the skin (DESIGN-2.md 2.6): which display fills the
 // slot, whether the group slot holds the group bar, the search placeholder. Called once at
-// construction and from Theme::skinChanged(), which Theme::setSkin() emits with this window's
-// updates disabled, so the window paints once. The style sheet and the painted widgets follow
+// construction and from Theme::skinChanged(), which Theme::setSkin() emits; the style sheet
+// change and this method run in one event-loop turn, so the window paints once. The style sheet and the painted widgets follow
 // the palette on their own; the group-slot content of the JU-06A skins is T8.3.
 void MainWindow::applySkin()
 {
     const Theme::Skin &skin = Theme::skin();
     const bool led = skin.display == Theme::DisplayKind::Led;
+    // The geometry first (it sizes and builds the LED display's atlas once, while it is still
+    // hidden), then the visibility and the content.
+    m_groupBar->setVisible(skin.groupSlot == Theme::GroupSlot::GroupBar);
+    m_search->setPlaceholderText(skin.searchPlaceholder);
+    layoutAll();
     m_display->setVisible(!led);
     m_led->setVisible(led);
     if (led)  // until the window drives it (T8.3): dashes and the idle context
         m_led->setContent(QString(skin.ledCells, QLatin1Char('-')), QString(), skin.idleContext,
                           LedDisplayWidget::Tone::Secondary);
-    // The JP-08's group slot is empty and the JU-06A's holds the engine control (T8.3).
-    m_groupBar->setVisible(skin.groupSlot == Theme::GroupSlot::GroupBar);
-    m_search->setPlaceholderText(skin.searchPlaceholder);
-    layoutAll();
     update();
 }
 

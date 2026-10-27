@@ -14,6 +14,11 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+namespace {
+// The Qt version the references in tests/reference/ were rendered with (see its README.md).
+constexpr const char *kReferenceQt = "6.4.2";
+}  // namespace
+
 class TestReference : public QObject {
     Q_OBJECT
 private slots:
@@ -35,6 +40,9 @@ private slots:
 #ifndef Q_OS_LINUX
         QSKIP("the reference images were rendered on Linux; text rasterisation differs on other platforms");
 #endif
+        if (QString::fromLatin1(qVersion()) != QLatin1String(kReferenceQt))
+            QSKIP(qPrintable(QStringLiteral("the references were rendered with Qt %1; this run uses Qt %2")
+                                 .arg(QLatin1String(kReferenceQt), QString::fromLatin1(qVersion()))));
         QFETCH(QString, state);
         QFETCH(int, scale);
         QTemporaryDir out;

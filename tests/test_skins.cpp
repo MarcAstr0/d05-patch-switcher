@@ -27,6 +27,8 @@
 #include <QTest>
 #include <QTimer>
 
+#include "ui/PatchListView.h"
+
 #include <atomic>
 #include <cstdlib>
 #include <new>
@@ -63,11 +65,30 @@ namespace {
 class PaintCounter : public QObject {
 public:
     int paints = 0;
+    int polishes = 0;
+    int styleChanges = 0;
     bool eventFilter(QObject *, QEvent *e) override
     {
         if (e->type() == QEvent::Paint)
             ++paints;
+        else if (e->type() == QEvent::Polish)
+            ++polishes;
+        else if (e->type() == QEvent::StyleChange)
+            ++styleChanges;
         return false;
+    }
+};
+
+// The least a cached-frame widget does in paintEvent: one QPainter and one drawPixmap.
+class BlitWidget : public QWidget {
+public:
+    QPixmap pixmap;
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter p(this);
+        p.drawPixmap(0, 0, pixmap);
     }
 };
 
@@ -582,32 +603,99 @@ private slots:
                        LedDisplayWidget::Tone::Secondary);
         led.show();
         QVERIFY(QTest::qWaitForWindowExposed(&led));
-        const auto paintAll = [&](int n) {
+        // The baseline paints nothing through the same image, painter and blit path: whatever Qt itself
+        // allocates per render is in it, so the LED widget must add exactly nothing on top.
+        BlitWidget blank;
+        blank.setAttribute(Qt::WA_OpaquePaintEvent);
+        blank.pixmap = QPixmap(led.size());
+        blank.pixmap.fill(Qt::black);
+        blank.resize(led.size());
+        blank.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&blank));
+        const auto paintAll = [](QWidget &w, int n) {
             for (int i = 0; i < n; ++i) {
-                QImage img(led.size(), QImage::Format_RGB32);
+                QImage img(w.size(), QImage::Format_RGB32);
                 QPainter p(&img);
-                led.render(&p);
+                w.render(&p);
             }
         };
-        paintAll(2);
+        paintAll(led, 2);
+        paintAll(blank, 2);
         const int frames = led.frameBuildCount();
         const int atlases = LedDisplayWidget::atlasBuildCount();
         const int measured = PanelButton::metricsBuildCount();
-        g_allocs = 0;
-        g_counting = true;
-        paintAll(10);
-        g_counting = false;
-        const long ten = g_allocs.load();
-        g_allocs = 0;
-        g_counting = true;
-        paintAll(100);
-        g_counting = false;
-        const long hundred = g_allocs.load();
+        const auto count = [&](QWidget &w) {
+            g_allocs = 0;
+            g_counting = true;
+            paintAll(w, 100);
+            g_counting = false;
+            return g_allocs.load();
+        };
+        const long base = count(blank);
+        const long withLed = count(led);
         QCOMPARE(led.frameBuildCount(), frames);
         QCOMPARE(LedDisplayWidget::atlasBuildCount(), atlases);
         QCOMPARE(PanelButton::metricsBuildCount(), measured);
-        // What Qt itself allocates per paint (the image, the painter) does not grow with the content.
-        QVERIFY2(hundred <= ten * 10 + 100, qPrintable(QStringLiteral("%1 vs %2").arg(hundred).arg(ten)));
+        QVERIFY2(base > 0, "the baseline path should allocate (image, painter)");
+        QVERIFY2(withLed <= base, qPrintable(QStringLiteral("led %1 vs blank %2 allocations per 100 paints").arg(withLed).arg(base)));
+    }
+
+    void ledAtlasIsNotBuiltOnAD05OnlyRun()
+    {
+        Rig r;
+        r.window.resize(960, 560);
+        const int before = LedDisplayWidget::atlasBuildCount();
+        r.window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&r.window));
+        QTest::qWait(30);
+        r.window.grab();
+        QVERIFY(!r.window.ledDisplay()->isVisible());
+        QCOMPARE(LedDisplayWidget::atlasBuildCount(), before);
+        // One switch to a LED skin builds exactly one atlas.
+        QVERIFY(Theme::setSkin(QStringLiteral("jp08")));
+        QTest::qWait(30);
+        QCOMPARE(LedDisplayWidget::atlasBuildCount(), before + 1);
+        // A later D-05 switch builds none; the LED widget is hidden and rebuilds when next needed.
+        QVERIFY(Theme::setSkin(QStringLiteral("d05")));
+        QTest::qWait(30);
+        QCOMPARE(LedDisplayWidget::atlasBuildCount(), before + 1);
+    }
+
+    void skinSwitchPaintsAndPolishesEachWidgetOnce()
+    {
+        Rig r;
+        r.window.resize(960, 560);
+        r.window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&r.window));
+        QTest::qWait(50);
+        const auto switchTo = [&](const QString &id, bool led) {
+            PaintCounter win, list, button, plate, leds;
+            r.window.installEventFilter(&win);
+            r.window.list()->viewport()->installEventFilter(&list);
+            r.window.prevButton()->installEventFilter(&button);
+            r.window.nameplate()->installEventFilter(&plate);
+            r.window.ledDisplay()->installEventFilter(&leds);
+            QVERIFY(Theme::setSkin(id));
+            QTest::qWait(100);
+            r.window.removeEventFilter(&win);
+            r.window.list()->viewport()->removeEventFilter(&list);
+            r.window.prevButton()->removeEventFilter(&button);
+            r.window.nameplate()->removeEventFilter(&plate);
+            r.window.ledDisplay()->removeEventFilter(&leds);
+            QCOMPARE(win.paints, 1);
+            QCOMPARE(list.paints, 1);
+            QCOMPARE(button.paints, 1);
+            QCOMPARE(plate.paints, 1);
+            if (led)
+                QCOMPARE(leds.paints, 1);
+            // Polish happens once per widget when it is first shown; a skin switch only changes the style sheet
+            // (Qt sends StyleChange several times per widget for one style sheet change; not asserted).
+            QCOMPARE(win.polishes, 0);
+            QCOMPARE(button.polishes, 0);
+        };
+        switchTo(QStringLiteral("jp08"), true);
+        switchTo(QStringLiteral("ju06a-60"), true);
+        switchTo(QStringLiteral("d05"), false);
     }
 
     // ---------------------------------------------------------------- the window
@@ -627,7 +715,7 @@ private slots:
         const QString d05Placeholder = r.window.searchField()->placeholderText();
 
         for (const QString &id : {QStringLiteral("jp08"), QStringLiteral("ju06a-60"), QStringLiteral("ju06a-106")}) {
-            QVERIFY(Theme::setSkin(id, &r.window));
+            QVERIFY(Theme::setSkin(id));
             QTest::qWait(30);
             QVERIFY(!r.window.display()->isVisible());
             QVERIFY(r.window.ledDisplay()->isVisible());
@@ -641,7 +729,7 @@ private slots:
             QVERIFY(r.window.searchField()->placeholderText() != d05Placeholder);
             QCOMPARE(r.window.ledDisplay()->context(), Theme::skin().idleContext);
         }
-        QVERIFY(Theme::setSkin(QStringLiteral("d05"), &r.window));
+        QVERIFY(Theme::setSkin(QStringLiteral("d05")));
         QTest::qWait(30);
         QVERIFY(r.window.display()->isVisible());
         QVERIFY(!r.window.ledDisplay()->isVisible());

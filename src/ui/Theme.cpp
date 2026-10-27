@@ -295,19 +295,17 @@ Notifier *notifier()
     return g_notifier;
 }
 
-bool setSkin(const QString &id, QWidget *window)
+bool setSkin(const QString &id)
 {
     const int i = indexOf(id);
     if (i < 0)
         return false;
     if (i == g_skinIndex)
         return true;
-    if (window)
-        window->setUpdatesEnabled(false);
+    if (!loadQss(i))  // the style sheet cannot be read: keep the previous skin untouched
+        return false;
     apply(i);
     emit notifier()->skinChanged();
-    if (window)
-        window->setUpdatesEnabled(true);
     return true;
 }
 

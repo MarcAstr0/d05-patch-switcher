@@ -126,9 +126,9 @@
  *   type.displayName3  500     28    0        as stored   labelPrimary
  *   type.displayName4  500     37    0        as stored   labelPrimary
  *   type.displayName5  500     46    0        as stored   labelPrimary
- *   type.displayContext3500     13    1.0      caps        per state
- *   type.displayContext4500     17    1.5      caps        per state
- *   type.displayContext5500     21    2.0      caps        per state
+ *   type.displayContext3 500     13    1.0      caps        per state
+ *   type.displayContext4 500     17    1.5      caps        per state
+ *   type.displayContext5 500     21    2.0      caps        per state
  *   type.ruleTitle     500     10    1.0      caps        ruleTitleText / ruleBandText
  *   type.switcherTab   500     10    1.0      caps        per state
  * Application font (Theme): Inter Regular 13 px.
