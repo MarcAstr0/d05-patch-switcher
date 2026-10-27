@@ -61,12 +61,10 @@ re-skin if it changes while they are open.
 
 ### 2.2 Token file, version 2
 
-**Where it is.** `docs/design/tokens-2.json`. The version 1 file `docs/design/tokens.json`
-is untouched, so `python3 docs/design/gen-tokens.py --check` keeps passing against the
-current tree until the builder updates the generator (T8.1). In T8.1 the builder
-replaces `tokens.json` with the contents of `tokens-2.json`, deletes `tokens-2.json`,
-and folds `docs/design/resolve-tokens-2.py --check` (written for this task) into
-`gen-tokens.py --check`.
+**Where it is.** `docs/design/tokens.json`, `"version": 2`. T8.1 replaced the version 1
+file with it (the version 1 file is in git at `v1.0.0`) and folded the version 2 checks
+into `python3 docs/design/gen-tokens.py --check`, which is the one check for every
+generated output and every invariant below.
 
 **Schema** (also at the top of the file, key `_schema`):
 
@@ -75,7 +73,7 @@ and folds `docs/design/resolve-tokens-2.py --check` (written for this task) into
 | `version` | `2` |
 | `skinOrder` | `["d05", "jp08", "ju06a-60", "ju06a-106"]`: the order outputs are written in |
 | `colorGroups` | `[{id, title}]`: `2.1` to `2.4` as version 1, plus `2.5` LED readout, `2.6` Panel faces by role, `2.7` Version 2 lettering and section rules |
-| `base.colors` | every colour token: `{hex, group, qss, use, source?}`. The hex values are the D-05 skin. The 45 version 1 entries are byte-identical to version 1 |
+| `base.colors` | every colour token: `{hex, group, qss, use, source?}`. The hex values are the D-05 skin. The 41 version 1 entries are byte-identical to version 1 |
 | `base.type` | every type role: `{weight, size, spacing, case, colour, lineHeight, usedFor[, cells][, family]}`. The 13 version 1 roles are identical; 8 roles are new (section 3). No base role has `family`: a role without one is drawn in `font.family` (Inter) |
 | `base.switches` | `lcdShowGhost`, `keyModeOnLine2`, `displayEntryEcho` (version 1 values), `ledShowGhost` (`true`) |
 | `base.components` | `display`, `groupSlot`, `rowTag`, `sectionRule`, `buttonLed`, `ledCells`: the D-05 values (2.4) |
@@ -90,8 +88,7 @@ and folds `docs/design/resolve-tokens-2.py --check` (written for this task) into
 that is not in `base` is an error. `skins.d05` is empty in every map, so the D-05 skin
 is `base`. Hex values are upper case `#RRGGBB`.
 
-**Invariants** (`resolve-tokens-2.py --check` enforces them today; `gen-tokens.py
---check` after T8.1):
+**Invariants** (`gen-tokens.py --check` enforces them):
 
 1. Every version 1 colour, type role and switch resolves for `d05` to its version 1 value,
    and `font`, `webColors`, `webType`, `breakpoints`, `size` equal version 1.
@@ -192,7 +189,7 @@ between the device and the engine name, as the brief gives them.
 | Output | From | Content |
 |---|---|---|
 | `assets/theme/<skin>.qss`, one per skin in `skinOrder` | `assets/theme/app.qss.in` | the template with every placeholder replaced (below) |
-| `web/src/ui/theme.css` | `base` and the version 1 blocks only | **byte-identical to today's output**: the web stays the D-05. The CSS function reads `base.colors` filtered to the 45 version 1 names (groups 2.1 to 2.4), `base.type` filtered to the 13 version 1 roles, `webColors`, `webType`, `size`, `breakpoints`, exactly as version 1 |
+| `web/src/ui/theme.css` | `base` and the version 1 blocks only | **byte-identical to today's output**: the web stays the D-05. The CSS function reads `base.colors` filtered to the 41 version 1 names (groups 2.1 to 2.4), `base.type` filtered to the 13 version 1 roles, `webColors`, `webType`, `size`, `breakpoints`, exactly as version 1 |
 | a runtime palette for `Theme` (builder's choice of form; recommended: generated `src/ui/SkinTables.inc` with one row per skin and one `QColor` member per token name, plus the components and strings) | `skins` resolved | every resolved colour, switch, component and string per skin, and the resolved `type.wordmark` (family, weight, size, spacing, colour token) |
 
 **Template syntax** of `assets/theme/app.qss.in` (committed with this task):
@@ -211,13 +208,14 @@ the version 1 block format of `gen-tokens.py` `qss_block()` extended: a first li
 and one line per token in that group in `base.colors` order with the **resolved** hex
 (`name<pad to 18>#RRGGBB  qss`), then the `TYPE ROLES` block with all 21 roles in
 `base.type` order, **resolved for the skin**, then the `Application font` line. Column
-widths as version 1. A role whose resolved family is not `font.family` gets two spaces and
-the family after the colour (`type.wordmark      600     16    2.0      caps        labelAccent  Archivo`),
+widths as version 1, except that a name longer than its column (`type.displayContext3`
+to `5`, 20 characters) is followed by exactly one space, never run into the weight. A
+role whose resolved family is not `font.family` gets two spaces and the family after the colour (`type.wordmark      600     16    2.0      caps        labelAccent  Archivo`),
 and the block's second header line reads `Family "Inter" (assets/fonts, OFL 1.1) unless
 the line names another (DESIGN-2.md 3.1), sizes in`. In `d05.qss` every role line is as
 version 1.
 
-**Rules part.** `app.qss.in` holds today's `app.qss` rules with each hex replaced by its
+**Rules part.** `app.qss.in` holds version 1's `app.qss` rules with each hex replaced by its
 token (one-to-one; the three button colours used by dialog buttons, key caps and the
 scrollbar handle became `controlFace`, `controlFaceHover`, `controlPressed`), plus the
 version 2 rules: `#useOutputButton` / `#useInputButton` (7.3), `QLabel[role="engineValue"]`,
@@ -228,10 +226,10 @@ changed; the template was produced and checked that way.
 **`--check`** (read only) verifies: each `<skin>.qss` equals the rendered template;
 `theme.css` equals the version 1 function's output; the 2.2 invariants; the runtime
 palette agrees with the resolved tokens; `docs/design/mockup/build.py`'s `T` and `ROLES`
-equal the version 1 subset of `base` (as today; `build2.py` reads `tokens-2.json`
-directly and needs no check); line heights per skin and the `extraFonts` coverage
-(invariants 4 and 5, as `resolve-tokens-2.py --check` does today). `assets/theme/app.qss` is deleted in T8.1;
-resources become `:/theme/d05.qss` and so on.
+equal the version 1 subset of `base` (`build2.py` reads `tokens.json` directly and
+needs no check); line heights per skin and the `extraFonts` coverage (invariants 4
+and 5). Version 1's `assets/theme/app.qss` was deleted in T8.1; the resources are
+`:/theme/d05.qss`, `:/theme/jp08.qss`, `:/theme/ju06a-60.qss`, `:/theme/ju06a-106.qss`.
 
 ### 2.6 Applying a skin (`ui/Theme`)
 
@@ -291,15 +289,17 @@ decisions 23 to 26.
 
 | Skin | Family, file in `assets/fonts/` | Weight | Size | Spacing | Case | Colour (resolved) | Line height | Cap height | Advance: mockup / Qt |
 |---|---|---|---|---|---|---|---|---|---|
-| `d05` | Inter, `Inter-Medium.ttf` (unchanged) | 500 Medium | 15 | 3.0 | Caps | `labelAccent` `#86A6D4` | 19 | 11 | 174.4 / 177 |
-| `jp08` | Archivo, `Archivo-SemiBold-nameplate.ttf` | 600 SemiBold | 16 | 2.0 | Caps | `labelAccent` `#F07A4A` | 17 | 11 | 169.3 / 172 |
-| `ju06a-60` | Archivo, `Archivo-Bold-nameplate.ttf` | 700 Bold | 16 | 1.0 | Caps | `labelPrimary` `#F0EDE2` | 17 | 11 | 158.4 / 160 |
-| `ju06a-106` | Archivo, `Archivo-Bold-nameplate.ttf` | 700 Bold | 16 | 1.0 | Caps | `labelPrimary` `#F4F3EE` | 17 | 11 | 158.4 / 160 |
+| `d05` | Inter, `Inter-Medium.ttf` (unchanged) | 500 Medium | 15 | 3.0 | Caps | `labelAccent` `#86A6D4` | 19 | 11 | 174.4 / 174 |
+| `jp08` | Archivo, `Archivo-SemiBold-nameplate.ttf` | 600 SemiBold | 16 | 2.0 | Caps | `labelAccent` `#F07A4A` | 17 | 11 | 169.3 / 169 |
+| `ju06a-60` | Archivo, `Archivo-Bold-nameplate.ttf` | 700 Bold | 16 | 1.0 | Caps | `labelPrimary` `#F0EDE2` | 17 | 11 | 158.4 / 158 |
+| `ju06a-106` | Archivo, `Archivo-Bold-nameplate.ttf` | 700 Bold | 16 | 1.0 | Caps | `labelPrimary` `#F4F3EE` | 17 | 11 | 158.4 / 158 |
 
 Advances include the spacing after every character, as `QFontMetricsF::horizontalAdvance`
 reports it. "Mockup" is the unhinted, kerned value `build2.py` measures (Pillow and
-libraqm); "Qt" is Qt 6.4.2 at 1x, offscreen on Linux with default hinting, measured with
-a throwaway harness. The code never hard-codes either: it measures (step 5 below).
+libraqm); "Qt" is Qt 6.4.2 offscreen on Linux as the T8.1 build renders it (divider at
+plate right + 14 in the 1x and 2x screenshots, D8 round 1; the design-time harness had
+reported 177 / 172 / 160 under a different fontconfig). The code never hard-codes either:
+it measures (step 5 below).
 
 Why these numbers. Archivo at 16 px has the cap height of Inter at 15 px (10.97 and
 10.91 px by `QFontMetricsF::capHeight`), so every skin's nameplate stands equally tall on
@@ -879,7 +879,7 @@ Drawn for this project; no Roland mark, logotype or artwork. Source written by
 ## 10. Mockups
 
 Source: `docs/design/mockup/build2.py` (reuses `build.py`'s helpers without changing it,
-reads `tokens-2.json`, renders with Inkscape at 1x and 2x with a private `FONTCONFIG_FILE`
+reads `tokens.json` (version 2), renders with Inkscape at 1x and 2x with a private `FONTCONFIG_FILE`
 in a temporary directory whose only font directory is `assets/fonts`, so Inkscape sees the
 committed Inter and Archivo subsets and no system font). Run
 `python3 docs/design/mockup/build2.py`.

@@ -37,24 +37,28 @@ drawing rules · 13 PWA visuals · 14 Mockups · 15 Readings and open items · 1
 
 ## 2. Tokens
 
-`docs/design/tokens.json` is the single source of every colour and type value. Same
-names as DESIGN.md sections 2 and 3. `docs/design/gen-tokens.py` (Python 3, stdlib only)
-writes:
+`docs/design/tokens.json` (version 2 since T8.1, DESIGN-2.md 2.2) is the single source of
+every colour and type value. Same names as DESIGN.md sections 2 and 3. The web reads only
+its version 1 subset (the 41 colours of groups 2.1 to 2.4, the 13 version 1 type roles,
+`webColors`, `webType`, `size`, `breakpoints`): the web stays the D-05.
+`docs/design/gen-tokens.py` (Python 3, stdlib only) writes:
 
-- the token comment block at the top of `assets/theme/app.qss` (byte-identical to the
-  v1.0.0 file when the tokens are unchanged; verified), and
+- `assets/theme/<skin>.qss`, one per desktop skin, from the template
+  `assets/theme/app.qss.in` (DESIGN-2.md 2.5), and `src/ui/SkinTables.inc`, the desktop
+  runtime palette, and
 - `web/src/ui/theme.css`: one custom property per token (`--panel`, `--lcdOn`, ...),
   per type role (`--type-<role>-weight`, `-size`, `-spacing`, `-line`), per size
   (`--size-desktop-<name>`, `--size-phone-<name>`), and one class per type role
   (`.type-panelLabel` sets family, weight, size, letter spacing, line height and the
   role's colour when it has a fixed one).
 
-`python3 docs/design/gen-tokens.py --check` writes nothing and fails if `app.qss`,
-`theme.css`, `src/ui/Theme.h`, `docs/design/mockup/build.py` or the line heights
-disagree with `tokens.json`, or if an `app.qss` rule uses a hex that is not a token.
-Suggested for the `web` CI job and the desktop job alike. To change a colour: edit
-`tokens.json`, run the generator, edit `Theme.h` and the matching `app.qss` rules
-(the check lists them), update DESIGN.md's table.
+`python3 docs/design/gen-tokens.py --check` writes nothing and fails if a `<skin>.qss`,
+`theme.css`, `SkinTables.inc`, the `ui/Theme` sources, `docs/design/mockup/build.py`,
+the DESIGN-2.md 2.2 invariants or the line heights disagree with `tokens.json`, or if
+`app.qss.in` holds a literal hex or an unknown placeholder. Suggested for the `web` CI
+job and the desktop job alike. To change a colour: edit `tokens.json`, run the
+generator (the style sheets, `theme.css` and the runtime palette follow), update
+DESIGN.md's or DESIGN-2.md's table.
 
 Rules for `web/`:
 
