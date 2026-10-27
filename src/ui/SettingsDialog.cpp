@@ -1,6 +1,9 @@
 #include "ui/SettingsDialog.h"
 
+#include "core/PatchCatalog.h"
+#include "midi/DeviceRouter.h"
 #include "midi/MidiLink.h"
+#include "ui/DeviceListWidget.h"
 #include "ui/SectionRule.h"
 #include "ui/Theme.h"
 
@@ -8,162 +11,78 @@
 #include <QComboBox>
 #include <QFontMetrics>
 #include <QLabel>
-#include <QPainter>
 #include <QPushButton>
 #include <QSpinBox>
-#include <QStyle>
-#include <QStyledItemDelegate>
 
 namespace d05 {
 
 namespace {
-
 constexpr int kMargin = 20;
-constexpr int kContentW = 480;
-constexpr int kControlX = 112;
-constexpr int kStatusElideW = 350;
-constexpr int kIsKeyRole = Qt::UserRole + 1;  // item data: true when the data is a saved key, not an OS name
-constexpr int kIsFullRole = Qt::UserRole + 2;  // item data: true when the key is ambiguous, so the full OS name is kept
+constexpr int kContentW = 720;
 
-// The 10 x 4 LED beside the connection text: lit (no core) when connected, else off.
-class StatusLed : public QWidget {
-public:
-    explicit StatusLed(QWidget *parent)
-        : QWidget(parent)
-    {
-        setFixedSize(10, 4);
-        setAttribute(Qt::WA_TransparentForMouseEvents);
-    }
-    void setLit(bool on)
-    {
-        if (on != m_lit) {
-            m_lit = on;
-            update();
-        }
-    }
-
-protected:
-    void paintEvent(QPaintEvent *) override
-    {
-        QPainter p(this);
-        p.fillRect(rect(), m_lit ? Theme::colors().ledOn : Theme::colors().ledOff);
-    }
-
-private:
-    bool m_lit = false;
-};
-
-// The selected port as it is saved: OS names are stripped to a key, except when several ports
-// share that key (two identical devices), which keep their full name; a saved key or name is
-// kept as it is.
-QString selectedKey(const QComboBox *c)
+QString portLabel(const QString &key)
 {
-    const QString data = c->currentData().toString();
-    return c->currentData(kIsKeyRole).toBool() || c->currentData(kIsFullRole).toBool() ? data : MidiLink::portKey(data);
+    return key.isEmpty() ? QStringLiteral("no port") : MidiLink::portKey(key);
 }
-
 }  // namespace
 
-SettingsDialog::SettingsDialog(const MidiLink &link, const AppSettings::Values &initial, QWidget *parent)
+SettingsDialog::SettingsDialog(DeviceRouter &router, const State &initial, Model shown, QWidget *parent,
+                               bool systemLookup)
     : QDialog(parent)
-    , m_link(link)
-    , m_initial(initial)
+    , m_router(router)
+    , m_systemLookup(systemLookup)
 {
     setObjectName(QStringLiteral("settingsDialog"));
     setWindowTitle(QStringLiteral("Settings"));
     setModal(true);
     setFixedSize(ClientWidth, ClientHeight);
-    buildUi();
-
-    m_channel->setValue(initial.channel);
-    m_follow->setChecked(initial.follow);
-    m_autoSend->setChecked(initial.autoSend);
-    m_resend->setChecked(initial.resendOnConnect);
+    buildUi(shown, initial);
     refreshPorts();
-    m_outCombo->setFocus();  // DESIGN 10.1: initial focus
+    refreshEngineInfo();
+    updateAll();
+    currentPage()->outputCombo()->setFocus();  // DESIGN 10.1: initial focus
 }
 
-void SettingsDialog::buildUi()
+void SettingsDialog::buildUi(Model shown, const State &initial)
 {
-    // Everything is placed at the design's coordinates: content origin (20, 20).
+    m_shown = shown;
     auto at = [](int x, int y) { return QPoint(kMargin + x, kMargin + y); };
-    auto rule = [&](const QString &title, int y) {
-        auto *r = new SectionRule(title, false, this);
-        r->setGeometry(QRect(at(0, y), QSize(kContentW, SectionRule::Height)));
-    };
-    auto formLabel = [&](const QString &text, int y) {
-        auto *l = new QLabel(text, this);
-        l->setProperty("role", QStringLiteral("formLabel"));
-        l->setFont(Theme::font(Theme::Role::PanelLabel));
-        l->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        l->setGeometry(QRect(at(0, y), QSize(100, 26)));  // right edge at content x 100
-    };
-    auto itemDelegate = [](QComboBox *c) { c->setItemDelegate(new QStyledItemDelegate(c)); };
 
-    rule(QStringLiteral("MIDI OUTPUT"), 0);
-    formLabel(QStringLiteral("PORT"), 20);
-    m_outCombo = new QComboBox(this);
-    m_outCombo->setObjectName(QStringLiteral("outputCombo"));
-    itemDelegate(m_outCombo);
-    m_outCombo->setGeometry(QRect(at(kControlX, 20), QSize(260, 26)));
-    m_refresh = new QPushButton(QStringLiteral("REFRESH"), this);
-    m_refresh->setObjectName(QStringLiteral("refreshButton"));
-    m_refresh->setAutoDefault(false);
-    // 26 tall like the combo: the QSS rule on #refreshButton sets the height (DESIGN 10.1);
-    // the fixed height is kept so the size is right even before the style sheet applies.
-    m_refresh->setFixedHeight(26);
-    m_refresh->setGeometry(QRect(at(380, 20), QSize(100, 26)));
+    m_list = new DeviceListWidget(this);
+    m_list->move(at(0, 0));
+    for (Model m : allModels()) {
+        m_enabled[int(m)] = initial.devices[int(m)].enabled;
+        auto *page = new DevicePage(m, *m_router.link(m), this);
+        page->move(at(160, 0));
+        page->setValues(initial.devices[int(m)]);
+        m_pages[int(m)] = page;
+        page->setVisible(m == shown);
+        connect(page, &DevicePage::changed, this, [this] { updateAll(); });
+        connect(page, &DevicePage::refreshRequested, this, [this] { refreshPorts(); });
+    }
+    m_list->setCurrent(shown);
+    connect(m_list, &DeviceListWidget::currentChanged, this, [this](Model m) { setShown(m); });
+    connect(m_list, &DeviceListWidget::enabledToggled, this, [this](Model m, bool on) {
+        m_enabled[int(m)] = on;
+        updateAll();
+    });
 
-    formLabel(QStringLiteral("CHANNEL"), 54);
-    m_channel = new QSpinBox(this);
-    m_channel->setObjectName(QStringLiteral("channelSpin"));
-    m_channel->setRange(1, 16);
-    m_channel->setGeometry(QRect(at(kControlX, 54), QSize(72, 26)));
-
-    m_led = new StatusLed(this);
-    m_led->move(at(kControlX, 88 + 8));
-    m_connectionText = new QLabel(this);
-    m_connectionText->setObjectName(QStringLiteral("connectionText"));
-    m_connectionText->setFont(Theme::font(Theme::Role::Body));
-    m_connectionText->setProperty("state", QStringLiteral("error"));
-    m_connectionText->setGeometry(QRect(at(130, 88), QSize(kStatusElideW + 8, 20)));
-
-    rule(QStringLiteral("MIDI INPUT"), 124);
-    formLabel(QStringLiteral("PORT"), 144);
-    m_inCombo = new QComboBox(this);
-    m_inCombo->setObjectName(QStringLiteral("inputCombo"));
-    itemDelegate(m_inCombo);
-    m_inCombo->setGeometry(QRect(at(kControlX, 144), QSize(260, 26)));
-    // DESIGN 10.1 has no slot for an input error; this small red line sits right of the combo,
-    // where the output row has REFRESH.
-    m_inputStatus = new QLabel(this);
-    m_inputStatus->setObjectName(QStringLiteral("inputStatusText"));
-    m_inputStatus->setFont(Theme::font(Theme::Role::Body));  // colour and size: QLabel#inputStatusText in app.qss
-    m_inputStatus->setGeometry(QRect(at(380, 144), QSize(100, 26)));
-    m_follow = new QCheckBox(QStringLiteral("Follow the panel"), this);
-    m_follow->setObjectName(QStringLiteral("followCheck"));
-    m_follow->setGeometry(QRect(at(kControlX, 178), QSize(kContentW - kControlX, 20)));
-
-    rule(QStringLiteral("BEHAVIOUR"), 214);
+    auto *rule = new SectionRule(QStringLiteral("ALL DEVICES"), false, this);
+    rule->setGeometry(QRect(at(0, 439), QSize(kContentW, SectionRule::Height)));
     m_autoSend = new QCheckBox(QStringLiteral("Auto-send on highlight"), this);
     m_autoSend->setObjectName(QStringLiteral("autoSendCheck"));
-    m_autoSend->setGeometry(QRect(at(kControlX, 234), QSize(kContentW - kControlX, 20)));
-    m_resend = new QCheckBox(QStringLiteral("Resend the current patch on connect"), this);
-    m_resend->setObjectName(QStringLiteral("resendCheck"));
-    m_resend->setGeometry(QRect(at(kControlX, 262), QSize(kContentW - kControlX, 20)));
+    m_autoSend->setGeometry(QRect(at(272, 459), QSize(kContentW - 272, 20)));
+    m_autoSend->setChecked(initial.autoSend);
+    m_followSwitches = new QCheckBox(QStringLiteral("Follow switches device"), this);
+    m_followSwitches->setObjectName(QStringLiteral("followSwitchesCheck"));
+    m_followSwitches->setGeometry(QRect(at(272, 487), QSize(kContentW - 272, 20)));
+    m_followSwitches->setChecked(initial.followSwitches);
+    auto *hint = new QLabel(QStringLiteral("An incoming patch change from another device switches the window to it."), this);
+    hint->setProperty("role", QStringLiteral("dim"));
+    hint->setFont(Theme::font(Theme::Role::Note));
+    hint->setGeometry(QRect(at(298, 507), QSize(420, 16)));
 
-    rule(QStringLiteral("ON THE D-05"), 298);
-    auto *note = new QLabel(
-        QStringLiteral("The D-05 changes patch only when SYSTEM > MIDI > Prog.C is ON. If your unit also has a "
-                       "Bank.S switch, turn it ON too."),
-        this);
-    note->setProperty("role", QStringLiteral("note"));
-    note->setFont(Theme::font(Theme::Role::Note));
-    note->setWordWrap(true);
-    note->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    note->setGeometry(QRect(at(0, 318), QSize(kContentW, 30)));
-
-    constexpr int buttonY = 368;
+    constexpr int buttonY = 542;
     m_test = new QPushButton(QStringLiteral("TEST"), this);
     m_test->setObjectName(QStringLiteral("testButton"));
     m_test->setAutoDefault(false);
@@ -179,154 +98,174 @@ void SettingsDialog::buildUi()
 
     Theme::applyDialogButtonFonts(this);
 
-    // Tab order follows the reading order.
-    QWidget *order[] = {m_outCombo, m_refresh, m_channel, m_inCombo, m_follow, m_autoSend, m_resend,
-                        m_test, m_cancel, m_ok};
-    for (size_t i = 0; i + 1 < sizeof(order) / sizeof(order[0]); ++i)
+    // Tab order: the device list, the pages (top to bottom), the global checkboxes, TEST, CANCEL, OK.
+    QList<QWidget *> order{m_list};
+    for (Model m : allModels()) {
+        DevicePage *p = m_pages[int(m)];
+        order << p->outputCombo() << p->useOutputButton() << p->refreshButton() << p->channelSpin() << p->inputCombo()
+              << p->useInputButton() << p->followCheck() << p->resendCheck();
+    }
+    order << m_autoSend << m_followSwitches << m_test << m_cancel << m_ok;
+    for (int i = 0; i + 1 < order.size(); ++i)
         setTabOrder(order[i], order[i + 1]);
 
     connect(m_ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(m_cancel, &QPushButton::clicked, this, &QDialog::reject);
-    connect(m_refresh, &QPushButton::clicked, this, &SettingsDialog::refreshPorts);
-    connect(m_outCombo, &QComboBox::currentIndexChanged, this, [this] { updateStatus(); });
-    connect(m_inCombo, &QComboBox::currentIndexChanged, this, [this] { updateEnabled(); updateInputStatus(); });
-    connect(&m_link, &MidiLink::inputStatusChanged, this, [this] { updateInputStatus(); });
-    connect(&m_link, &MidiLink::statusChanged, this, [this] { updateStatus(); });
-    connect(&m_link, &MidiLink::connectedChanged, this, [this] { updateStatus(); });
     connect(m_test, &QPushButton::clicked, this, [this] {
-        m_testPressed = true;
-        emit testRequested(values());
+        m_testPressed[int(m_shown)] = true;
+        emit testRequested(m_shown, deviceValues(m_shown));
     });
 }
 
-// Item text is the port key; two ports with the same key show their full names instead.
-void SettingsDialog::fillCombo(QComboBox *combo, const QStringList &names, const QString &wanted, bool withNone)
+void SettingsDialog::setShown(Model m)
 {
-    QSignalBlocker block(combo);
-    combo->clear();
-    if (withNone)
-        combo->addItem(QStringLiteral("None"), QString());
-    QStringList keys;
-    for (const QString &n : names)
-        keys << MidiLink::portKey(n);
-    for (int i = 0; i < names.size(); ++i) {
-        const bool dup = keys.count(keys.at(i)) > 1;
-        combo->addItem(dup ? names.at(i) : keys.at(i), names.at(i));
-        if (dup)
-            combo->setItemData(combo->count() - 1, true, kIsFullRole);
-    }
-    const QString match = MidiLink::matchPort(names, wanted);
-    int index = -1;
-    if (!match.isEmpty()) {
-        index = combo->findData(match);
-    } else if (!wanted.isEmpty()) {
-        // Configured but not listed right now: keep it visible so OK does not forget it.
-        combo->addItem(wanted, wanted);
-        combo->setItemData(combo->count() - 1, true, kIsKeyRole);  // already a key: never strip it again
-        index = combo->count() - 1;
-    }
-    combo->setCurrentIndex(index >= 0 ? index : 0);
+    if (m == m_shown && m_pages[int(m)]->isVisibleTo(this))
+        return;
+    m_shown = m;
+    for (Model o : allModels())
+        m_pages[int(o)]->setVisible(o == m);
+    m_list->setCurrent(m);
+    updateAll();
 }
 
+// Reads the port lists once and hands them, with what Identify makes of each name, to every page.
 void SettingsDialog::refreshPorts()
 {
-    // Re-enumerates; whatever is selected stays selected (or stays as a "missing" entry).
-    const QString wantOut = m_outCombo->count() > 0 ? selectedKey(m_outCombo) : m_initial.outputPort;
-    const QString wantIn = m_inCombo->count() > 0 ? selectedKey(m_inCombo) : m_initial.inputPort;
     QString outErr, inErr;
-    const QStringList outs = m_link.outputPortNames(&outErr);
-    const QStringList ins = m_link.inputPortNames(&inErr);
-    m_listError = outErr;
-    m_outNames = outs;
-    m_inListError = inErr;
-    m_inNames = ins;
-    fillCombo(m_outCombo, outs, wantOut, false);
-    fillCombo(m_inCombo, ins, wantIn, true);
-    updateStatus();
-    updateInputStatus();
-    updateEnabled();
+    const MidiLink *lister = m_router.link(Model::D05);
+    const QStringList outs = lister->outputPortNames(&outErr);
+    const QStringList ins = lister->inputPortNames(&inErr);
+    const QList<Identify::Result> outIds = Identify::identifyPorts(outs, m_systemLookup);
+    const QList<Identify::Result> inIds = Identify::identifyPorts(ins, m_systemLookup);
+    for (Model m : allModels())
+        m_pages[int(m)]->setPorts(outs, outErr, outIds, ins, inErr, inIds);
 }
 
-// The input row's problem, if any: a listing error, a port that is not listed, or the link's own
-// open error for the port that is wanted. Empty when the input is None or fine.
-void SettingsDialog::updateInputStatus()
+// The JU-06A page's read-only information: the believed engine and the remembered program of each
+// engine with its factory name.
+void SettingsDialog::refreshEngineInfo()
 {
-    const QString selected = m_inCombo->currentData().toString();
-    QString text;
-    if (!m_inListError.isEmpty()) {
-        text = QStringLiteral("Error: ") + m_inListError;
-    } else if (!selected.isEmpty() && MidiLink::matchPort(m_inNames, selected).isEmpty()) {
-        text = QStringLiteral("Port not found");
-    } else if (!selected.isEmpty() && !m_link.inputConnected() && m_link.inputStatus().startsWith(QStringLiteral("Error"))
-               && !MidiLink::matchPort({selected}, m_link.inputPortName()).isEmpty()) {
-        text = m_link.inputStatus();
-    }
-    m_inputFullStatus = text;
-    const QFontMetrics fm(Theme::font(Theme::Role::Body));
-    m_inputStatus->setText(fm.elidedText(text, Qt::ElideRight, 100));
-    m_inputStatus->setToolTip(text);
+    const EngineTracker *t = m_router.ju06aTracker();
+    if (!t)
+        return;
+    static const PatchCatalog catalog(Model::JU06A);
+    DevicePage::EngineInfo info;
+    info.engine = t->engine();
+    const auto describe = [&](int engine, QString *on, QString *name) {
+        const int program = t->remembered(engine);
+        if (program < 0)
+            return;
+        const auto a = PatchAddress::fromBankNumber(Model::JU06A, program / 8 + 1, program % 8 + 1, engine);
+        if (!a)
+            return;
+        *on = QStringLiteral("%1-%2").arg(a->bank()).arg(a->number());
+        *name = catalog.name(*a);
+    };
+    describe(60, &info.on60, &info.name60);
+    describe(106, &info.on106, &info.name106);
+    m_pages[int(Model::JU06A)]->setEngineInfo(info);
 }
 
-void SettingsDialog::updateEnabled()
+AppSettings::DeviceValues SettingsDialog::deviceValues(Model m) const
 {
-    m_follow->setEnabled(!m_inCombo->currentData().toString().isEmpty());
+    AppSettings::DeviceValues v = m_pages[int(m)]->values();
+    v.enabled = m_enabled[int(m)];
+    return v;
+}
+
+SettingsDialog::State SettingsDialog::state() const
+{
+    State s;
+    for (Model m : allModels())
+        s.devices[int(m)] = deviceValues(m);
+    s.autoSend = m_autoSend->isChecked();
+    s.followSwitches = m_followSwitches->isChecked();
+    return s;
 }
 
 AppSettings::Values SettingsDialog::values() const
 {
+    const AppSettings::DeviceValues d = deviceValues(Model::D05);
     AppSettings::Values v;
-    v.outputPort = selectedKey(m_outCombo);
-    v.inputPort = selectedKey(m_inCombo);
-    v.channel = m_channel->value();
+    v.outputPort = d.outputPort;
+    v.inputPort = d.inputPort;
+    v.channel = d.channel;
     v.autoSend = m_autoSend->isChecked();
-    // Follow needs an input port: with None it is off whatever the (disabled) box shows.
-    v.follow = m_follow->isChecked() && !v.inputPort.isEmpty();
-    v.resendOnConnect = m_resend->isChecked();
+    v.follow = d.follow;
+    v.resendOnConnect = d.resendOnConnect;
     return v;
 }
 
-QString SettingsDialog::connectionState() const
+// "Channel 4 on Hapax MIDI 1 is used by the D-05." (DESIGN-2.md 7.3); for inputs "Channel 4 on
+// JU-06A (input) is used by the D-05." Empty when device `m` collides with no earlier device.
+QString SettingsDialog::conflictTextFor(Model m, const DeviceRouter &) const
 {
-    return m_connectionText->property("state").toString();
+    DeviceRouter::Configs cfgs;
+    for (Model o : allModels()) {
+        const AppSettings::DeviceValues v = deviceValues(o);
+        DeviceRouter::DeviceConfig c;
+        c.enabled = v.enabled;
+        c.outputPort = v.outputPort;
+        c.inputPort = v.inputPort;
+        c.channel = v.channel;
+        c.follow = v.follow;
+        cfgs[int(o)] = c;
+    }
+    const auto conflict = DeviceRouter::findConflict(cfgs, m, true);
+    if (!conflict)
+        return QString();
+    const DeviceRouter::DeviceConfig &mine = cfgs[int(m)];
+    const QString port = portLabel(conflict->input ? mine.inputPort : mine.outputPort);
+    return QStringLiteral("Channel %1 on %2%3 is used by the %4.")
+        .arg(mine.channel)
+        .arg(port, conflict->input ? QStringLiteral(" (input)") : QString(), modelInfo(conflict->other).name);
 }
 
-void SettingsDialog::updateStatus()
+// Everything that depends on more than one control: the list rows (enabled, connection), the
+// conflict texts, OK (disabled while any conflict exists) and TEST (the shown device must be
+// enabled, its output listed, and free of conflict).
+void SettingsDialog::updateAll()
 {
-    const QString selected = m_outCombo->currentData().toString();
-    const QString key = MidiLink::portKey(selectedKey(m_outCombo));  // shown without ids
-    QString text;
-    bool ok = false;
-    if (!m_listError.isEmpty()) {
-        text = QStringLiteral("Error: ") + m_listError;
-    } else if (selected.isEmpty()) {
-        text = QStringLiteral("Port not found");
-    } else if (m_link.isConnected() && MidiLink::portKey(m_link.connectedPortName()) == key
-               && !MidiLink::matchPort(m_outNames, selected).isEmpty()) {
-        text = QStringLiteral("Connected to ") + key;
-        ok = true;
-    } else if (!m_link.isConnected() && m_link.status().startsWith(QStringLiteral("Error"))
-               && !MidiLink::matchPort({selected}, m_link.outputPortName()).isEmpty()) {
-        // The wanted port (matched the way the link matches: "bout" finds "Boutique") failed.
-        text = m_link.status();  // the port that is wanted failed to open: say why
-    } else if (!MidiLink::matchPort(m_outNames, selected).isEmpty()) {
-        // Listed: the port is there to be opened when OK applies (see the class comment).
-        text = QStringLiteral("Connected to ") + key;
-        ok = true;
-    } else {
-        text = QStringLiteral("Port not found");
+    bool conflict = false;
+    for (Model m : allModels()) {
+        const QString text = conflictTextFor(m, m_router);
+        m_pages[int(m)]->setConflictText(text);
+        conflict = conflict || !text.isEmpty();
+
+        DeviceListWidget::Row row;
+        row.enabled = m_enabled[int(m)];
+        const DevicePage *p = m_pages[int(m)];
+        if (!row.enabled) {
+            row.text = QStringLiteral("Off");
+            row.tone = DeviceListWidget::Tone::Dim;
+        } else {
+            switch (p->kind()) {
+            case DevicePage::Kind::Connected:
+                row.text = QStringLiteral("Connected");
+                row.tone = DeviceListWidget::Tone::Secondary;
+                row.lit = true;
+                break;
+            case DevicePage::Kind::NotFound:
+                row.text = QStringLiteral("Port not found");
+                row.tone = DeviceListWidget::Tone::Red;
+                break;
+            case DevicePage::Kind::Error:
+                row.text = QStringLiteral("Error");
+                row.tone = DeviceListWidget::Tone::Red;
+                row.tooltip = p->connectionText();
+                break;
+            case DevicePage::Kind::NoPort:
+                row.text = QStringLiteral("No output port");
+                row.tone = DeviceListWidget::Tone::Dim;
+                break;
+            }
+        }
+        m_list->setRow(m, row);
     }
-    m_fullStatus = text;
-    const QFontMetrics fm(Theme::font(Theme::Role::Body));
-    m_connectionText->setText(fm.elidedText(text, Qt::ElideRight, kStatusElideW));
-    m_connectionText->setToolTip(text);
-    const QString state = ok ? QStringLiteral("ok") : QStringLiteral("error");
-    if (m_connectionText->property("state").toString() != state) {
-        m_connectionText->setProperty("state", state);
-        m_connectionText->style()->unpolish(m_connectionText);
-        m_connectionText->style()->polish(m_connectionText);
-    }
-    static_cast<StatusLed *>(m_led)->setLit(ok);
-    m_test->setEnabled(ok);  // DESIGN 10.1: TEST is disabled while disconnected
+    m_conflict = conflict;
+    m_ok->setEnabled(!conflict);
+    const DevicePage *shown = currentPage();
+    m_test->setEnabled(m_enabled[int(m_shown)] && shown->connectionOk() && shown->conflictText().isEmpty());
 }
 
 }  // namespace d05

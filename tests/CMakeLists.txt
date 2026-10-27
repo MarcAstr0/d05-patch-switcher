@@ -73,3 +73,7 @@ target_link_libraries(test_help_ui PRIVATE d05ui Qt6::Widgets)
 
 d05_add_test(test_shared_vectors test_shared_vectors.cpp)
 target_compile_definitions(test_shared_vectors PRIVATE D05_VECTORS_FILE="${CMAKE_SOURCE_DIR}/data/test-vectors.json")
+
+# T8.2: the device switcher, switching, and the Settings dialog's device list and pages.
+d05_add_test(test_devices_ui test_devices_ui.cpp)
+target_link_libraries(test_devices_ui PRIVATE d05ui Qt6::Widgets)

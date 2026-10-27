@@ -96,6 +96,43 @@ check_pc "ju06a --engine 106 4-5" 4 28 --device ju06a --engine 106 --send 4-5
 check_pc "ju06a --engine 60 60:1-1" 16 0 --device ju06a --engine 60 --send 60:1-1
 check_pc "ju06a --engine 106 106:8-8" 2 63 --device ju06a --engine 106 --send 106:8-8
 
+# Saved per-device settings (SPEC-2 3.4): --send for the JP-08 and the JU-06A falls back to the
+# device's saved port and channel (and the JU-06A's saved engine), and --device defaults to the
+# saved current device. The file is written the way QSettings writes it.
+mkdir -p "$tmp/saved"
+printf '[devices]\njp08\\outputPort=Midi Through\njp08\\channel=5\nju06a\\outputPort=Midi Through\nju06a\\channel=4\nju06a\\engine=106\n\n[General]\ncurrentDevice=jp08\n' >"$tmp/saved/settings.ini"
+# check_saved LABEL CHANNEL PROGRAM ARGS...: no --port and no --channel, the settings are in --config-dir.
+check_saved() {
+    local label="$1" ch="$2" prog="$3" c=$(($2 - 1)) got want
+    shift 3
+    : >"$dump"
+    "$bin" --config-dir "$tmp/saved" "$@" >"$tmp/out.txt" 2>"$tmp/err.txt"
+    local rc=$?
+    [ "$rc" -eq 0 ] || { fail "$label: exit $rc ($(cat "$tmp/err.txt"))"; return; }
+    for _ in $(seq 20); do
+        tr -d "\000" <"$dump" | grep -q "Program change" && break
+        sleep 0.1
+    done
+    sleep 0.2
+    got="$(tr -d "\000" <"$dump" | grep -E "Control change|Program change" | sed -E 's/^ *[0-9]+:[0-9]+ +//; s/  +/ /g')"
+    want="Program change $c, program $prog"
+    if [ "$got" = "$want" ]; then
+        echo "ok   $label ch$ch (saved)"
+    else
+        fail "$label ch$ch: aseqdump saw:"$'\n'"$got"$'\n'"expected:"$'\n'"$want"
+    fi
+}
+check_saved "saved current device (jp08) 4-5" 5 28 --send 4-5
+check_saved "saved jp08 8-8" 5 63 --device jp08 --send 88
+check_saved "saved ju06a, saved engine 106" 4 28 --device ju06a --send 4-5
+check_saved "saved ju06a, --channel overrides" 9 0 --device ju06a --channel 9 --send 106:1-1
+# The saved engine is a belief like any other: a 60 address against it is a mismatch, nothing sent.
+"$bin" --config-dir "$tmp/saved" --device ju06a --send 60:4-5 >/dev/null 2>&1
+rc=$?; [ "$rc" -eq 5 ] && echo "ok   saved ju06a engine 106 vs 60:4-5 exits 5" || fail "saved engine mismatch exit $rc, expected 5"
+# A device with no saved channel needs --channel (usage error 64), as the JU-06A without an engine exits 1.
+"$bin" --config-dir "$tmp/cfg" --device jp08 --port "Midi Through" --send 4-5 >/dev/null 2>&1
+rc=$?; [ "$rc" -eq 64 ] && echo "ok   jp08 without a saved channel exits 64" || fail "jp08 no channel exit $rc, expected 64"
+
 # Exit codes: bad address -> 1, port not found -> 2, nothing reaches the port.
 : >"$dump"  # aseqdump keeps its file offset; NULs fill the gap, hence tr -d below
 "$bin" --config-dir "$tmp/cfg" --port "Midi Through" --send P1-19 >/dev/null 2>&1

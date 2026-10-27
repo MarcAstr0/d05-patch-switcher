@@ -4,9 +4,12 @@
 #include "core/Library.h"
 #include "core/PatchCatalog.h"
 #include "core/SearchQuery.h"
+#include "midi/MidiBackend.h"
 #include "midi/MidiLink.h"
+#include "midi/PortHub.h"
 #include "ui/AboutDialog.h"
 #include "ui/BankGrid.h"
+#include "ui/DeviceSwitcher.h"
 #include "ui/DisplayWidget.h"
 #include "ui/GroupBar.h"
 #include "ui/LedDisplayWidget.h"
@@ -37,6 +40,7 @@
 #include <QPushButton>
 #include <QPainter>
 #include <QRegularExpression>
+#include <QShortcut>
 #include <QScopedValueRollback>
 #include <QScrollBar>
 #include <QSignalBlocker>
@@ -225,11 +229,31 @@ QString shortcutText(const QKeySequence &seq)
 
 }  // namespace
 
-MainWindow::MainWindow(PatchCatalog &catalog, Library &library, MidiLink &link, QWidget *parent)
+MainWindow::MainWindow(PatchCatalog &catalog, Library &library, DeviceRouter &router, QWidget *parent)
     : QMainWindow(parent)
     , m_catalog(catalog)
     , m_library(library)
+    , m_router(&router)
+    , m_link(*router.link(Model::D05))
+{
+    init();
+}
+
+// Version 1's single-link form. The hub never makes a backend: the other two devices stay disabled
+// and nothing asks it for a port; the D-05 link keeps the private hub it was built with.
+MainWindow::MainWindow(PatchCatalog &catalog, Library &library, MidiLink &link, QWidget *parent)
+    : QMainWindow(parent)
+    , m_ownedHub(new PortHub(PortHub::BackendFactory([]() -> MidiBackend * { return nullptr; })))
+    , m_ownedRouter(new DeviceRouter(m_ownedHub.get(), nullptr, &link))
+    , m_catalog(catalog)
+    , m_library(library)
+    , m_router(m_ownedRouter.get())
     , m_link(link)
+{
+    init();
+}
+
+void MainWindow::init()
 {
     setWindowTitle(QStringLiteral("D-05 Patch Switcher"));
     {
@@ -246,6 +270,8 @@ MainWindow::MainWindow(PatchCatalog &catalog, Library &library, MidiLink &link, 
         m_current = *m_link.current();
     else
         m_current = *PatchAddress::fromParts(8, 1, 1);  // P1-11
+    for (Model m : allModels())  // the status bar's IN label of a device the router already configured
+        m_rt[int(m)].inputLabel = MidiLink::portKey(m_router->config(m).inputPort);
 
     buildWidgets();
     buildActions();
@@ -262,6 +288,21 @@ MainWindow::MainWindow(PatchCatalog &catalog, Library &library, MidiLink &link, 
     m_search->setFocus();
 }
 
+Model MainWindow::currentDevice() const
+{
+    return m_router->currentDevice();
+}
+
+const MidiLink *MainWindow::currentLink() const
+{
+    return m_router->link(m_router->currentDevice());
+}
+
+Nameplate *MainWindow::nameplate() const
+{
+    return m_switcher;
+}
+
 MainWindow::~MainWindow()
 {
     if (!m_firstShow)  // shown at least once: remember where it was (Ctrl+Q skips closeEvent on some platforms)
@@ -275,7 +316,7 @@ void MainWindow::buildWidgets()
 
     m_band = new Band(m_central);
 
-    m_nameplate = new Nameplate(Paths::logoPath(), m_central);
+    m_switcher = new DeviceSwitcher(Paths::logoPath(), m_central);
     m_display = new DisplayWidget(m_central);
     m_led = new LedDisplayWidget(m_central);
     m_led->hide();  // shown instead of the LCD on the JP-08 and JU-06A skins (applySkin)
@@ -399,12 +440,24 @@ void MainWindow::buildWidgets()
 
     connect(&m_link, &MidiLink::sent, this, &MainWindow::onSent);
     connect(&m_link, &MidiLink::currentChanged, this, &MainWindow::onFollowed);
-    connect(&m_link, &MidiLink::connectedChanged, this, &MainWindow::onConnectedChanged);
-    connect(&m_link, &MidiLink::inputStatusChanged, this, [this](const QString &status) {
-        if (status.startsWith(QStringLiteral("Error")))
-            showMessage(QStringLiteral("Input: ") + status);
-        refreshConnection();
-    });
+    // Every device's link: connection changes and errors (an error is told in the status bar only
+    // for the device the window shows).
+    for (Model m : allModels()) {
+        MidiLink *l = m_router->link(m);
+        connect(l, &MidiLink::connectedChanged, this, [this, m](bool connected) { onConnectedChanged(m, connected); });
+        connect(l, &MidiLink::inputStatusChanged, this, [this, m](const QString &status) {
+            if (m == currentDevice() && status.startsWith(QStringLiteral("Error")))
+                showMessage(QStringLiteral("Input: ") + status);
+            refreshConnection();
+        });
+        connect(l, &MidiLink::statusChanged, this, [this, m](const QString &status) {
+            if (m == currentDevice() && status.startsWith(QStringLiteral("Error")))
+                showMessage(status);
+            refreshConnection();
+        });
+    }
+    connect(m_router, &DeviceRouter::currentDeviceChanged, this, &MainWindow::onDeviceChanged);
+    connect(m_switcher, &DeviceSwitcher::switchRequested, this, &MainWindow::switchDevice);
     connect(m_display, &DisplayWidget::sizeChanged, this, [this] {
         if (!m_inLayout)
             layoutAll();  // a DPR or screen change moved the band without a window resize
@@ -414,10 +467,10 @@ void MainWindow::buildWidgets()
             layoutAll();
     });
     connect(Theme::notifier(), &Theme::Notifier::skinChanged, this, [this] { applySkin(); });
-    connect(&m_link, &MidiLink::statusChanged, this, [this](const QString &status) {
-        if (status.startsWith(QStringLiteral("Error")))
-            showMessage(status);
-        refreshConnection();
+    // The JU-06A skin follows the engine the app believes (FR-17), whichever device is current.
+    connect(m_router->ju06aTracker(), &EngineTracker::engineChanged, this, [this](int) {
+        if (currentDevice() == Model::JU06A)
+            Theme::setSkin(skinIdForCurrent());
     });
     connect(&m_library, &Library::saveFailed, this,
             [this](const QString &text) { showMessage(QStringLiteral("Library not saved: ") + text); });
@@ -450,15 +503,35 @@ void MainWindow::buildActions()
     make(QStringLiteral("actionNext"), QStringLiteral("Next patch"), [this] { step(1); })
         ->setAutoRepeat(false);
     make(QStringLiteral("actionGridEntry"), QStringLiteral("Enter bank and number"), [this] { beginGridEntry(); });
-    make(QStringLiteral("actionViewAll"), QStringLiteral("All"), [this] { m_viewAll->setChecked(true); });
-    make(QStringLiteral("actionViewFavourites"), QStringLiteral("Favourites"), [this] { m_viewFav->setChecked(true); });
-    make(QStringLiteral("actionViewRecents"), QStringLiteral("Recents"), [this] { m_viewRecent->setChecked(true); });
+    make(QStringLiteral("actionViewAll"), QStringLiteral("All"), [this] { if (d05Current()) m_viewAll->setChecked(true); });
+    make(QStringLiteral("actionViewFavourites"), QStringLiteral("Favourites"), [this] { if (d05Current()) m_viewFav->setChecked(true); });
+    make(QStringLiteral("actionViewRecents"), QStringLiteral("Recents"), [this] { if (d05Current()) m_viewRecent->setChecked(true); });
     make(QStringLiteral("actionToggleFavourite"), QStringLiteral("Toggle favourite"), [this] { toggleHighlightedFavorite(); })
         ->setAutoRepeat(false);
     make(QStringLiteral("actionRename"), QStringLiteral("Rename"), [this] { renameHighlighted(); })
         ->setAutoRepeat(false);
     make(QStringLiteral("actionAutoSend"), QStringLiteral("Auto-send"), [this] { setAutoSend(!m_autoSendOn); })
         ->setAutoRepeat(false);
+    // Device switching (FR-13, DESIGN-2.md 4.4, 13.2.1). Command+Tab belongs to the system on macOS,
+    // so there the keys are Control+Tab, which Qt calls Meta. Qt delivers Shift+Tab as Backtab.
+    // These are QShortcuts, not table actions: the shortcut table and its sheet get the DEVICE
+    // section with the rest of T8.3 (DESIGN-2.md 8.1).
+    {
+#ifdef Q_OS_MACOS
+        constexpr int mod = Qt::META;
+#else
+        constexpr int mod = Qt::CTRL;
+#endif
+        const auto device = [this](const QKeySequence &key, int direction) {
+            auto *sc = new QShortcut(key, this, nullptr, nullptr, Qt::WindowShortcut);
+            sc->setObjectName(direction > 0 ? QStringLiteral("shortcutNextDevice") : QStringLiteral("shortcutPreviousDevice"));
+            sc->setAutoRepeat(false);
+            connect(sc, &QShortcut::activated, this, [this, direction] { cycleDevice(direction); });
+        };
+        device(QKeySequence(mod | Qt::Key_Tab), 1);
+        device(QKeySequence(mod | Qt::SHIFT | Qt::Key_Tab), -1);
+        device(QKeySequence(mod | Qt::SHIFT | Qt::Key_Backtab), -1);
+    }
 
     // The system menu (DESIGN 8.2). The actions carry their shortcuts, so they are the
     // window's shortcuts for Settings, the sheet and Quit.
@@ -518,15 +591,61 @@ void MainWindow::applySkin()
     const bool led = skin.display == Theme::DisplayKind::Led;
     // The geometry first (it sizes and builds the LED display's atlas once, while it is still
     // hidden), then the visibility and the content.
-    m_groupBar->setVisible(skin.groupSlot == Theme::GroupSlot::GroupBar);
+    m_groupBar->setVisible(skin.groupSlot == Theme::GroupSlot::GroupBar && d05Current());
     m_search->setPlaceholderText(skin.searchPlaceholder);
     layoutAll();
     m_display->setVisible(!led);
     m_led->setVisible(led);
-    if (led)  // until the window drives it (T8.3): dashes and the idle context
-        m_led->setContent(QString(skin.ledCells, QLatin1Char('-')), QString(), skin.idleContext,
-                          LedDisplayWidget::Tone::Secondary);
+    if (led)  // until the window drives it (T8.3): dashes and the idle or connection line
+        updateLedDisplay();
     update();
+}
+
+// The skin of the current device (DESIGN-2.md 2.1): the model's, and for the JU-06A the engine the
+// app believes the unit is on.
+QString MainWindow::skinIdForCurrent() const
+{
+    return Theme::skinIdFor(modelInfo(currentDevice()).id, m_router->ju06aTracker()->engine());
+}
+
+// What the LED display shows while the window does not yet drive a patch for the device (T8.3): the
+// readout in dashes, no name, and the context line of DESIGN-2.md 4.2 that applies (1a, 1b, 6).
+// With the D-05 current, a skin changed on its own keeps the idle line it always showed.
+void MainWindow::updateLedDisplay()
+{
+    if (Theme::skin().display != Theme::DisplayKind::Led)
+        return;
+    const Theme::Skin &skin = Theme::skin();
+    QString context = skin.idleContext;
+    LedDisplayWidget::Tone tone = LedDisplayWidget::Tone::Secondary;
+    if (!d05Current()) {
+        const MidiLink *l = currentLink();
+        if (l->outputPortName().isEmpty()) {
+            context = QStringLiteral("OPEN SETTINGS: ") + Shortcuts::settingsHintKey();
+            tone = LedDisplayWidget::Tone::Primary;
+        } else if (!l->isConnected()) {
+            context = QStringLiteral("NO MIDI OUTPUT");
+            tone = LedDisplayWidget::Tone::Red;
+        }
+    }
+    m_led->setContent(QString(skin.ledCells, QLatin1Char('-')), QString(), context, tone);
+}
+
+// The D-05's catalogue, list, search, grid and PREV / NEXT are all the window can show until T8.3
+// makes them per model. While another device is current they are hidden, so nothing of the D-05 is
+// on screen under another skin; AUTO SEND and SYSTEM stay.
+void MainWindow::applyContentVisibility()
+{
+    const bool on = d05Current();
+    for (QWidget *w : std::initializer_list<QWidget *>{m_grid, m_prev, m_next, m_viewAll, m_viewFav, m_viewRecent,
+                                                       m_search, m_list}) {
+        if (w->isHidden() == on)
+            w->setVisible(on);
+    }
+    const bool bar = on && Theme::skin().groupSlot == Theme::GroupSlot::GroupBar;
+    if (m_groupBar->isHidden() == bar)
+        m_groupBar->setVisible(bar);
+    layoutAll();  // the panel labels above the hidden buttons go too
 }
 
 void MainWindow::layoutAll()
@@ -546,7 +665,9 @@ void MainWindow::layoutAll()
         m_display->setStep(step, W);
     const QSize ds = active->sizeHint();
     active->setGeometry(kMargin, 46, ds.width(), ds.height());
-    m_nameplate->setGeometry(kMargin, 10, qMin(Nameplate::SlotMaxWidth, W - 2 * kMargin), Nameplate::SlotHeight);
+    // The lone nameplate keeps its 360 px slot; the tabs of two or three devices need the row.
+    m_switcher->setGeometry(kMargin, 10, m_switcher->hasTabs() ? W - 2 * kMargin : qMin(Nameplate::SlotMaxWidth, W - 2 * kMargin),
+                            Nameplate::SlotHeight);
 
     const int B = 46 + ds.height() + 14;
     m_bandTop = B;
@@ -572,15 +693,22 @@ void MainWindow::layoutAll()
     auto *band = static_cast<Band *>(m_band);
     const QColor &primary = Theme::colors().labelPrimary;
     const QColor &commit = Theme::colors().labelCommit;
-    band->setLabels({
-        {QStringLiteral("ALL"), facesX[0] + 22, 15 + 9, primary},
-        {QStringLiteral("FAVOURITES"), facesX[1] + 22, 15 + 9, primary},
-        {QStringLiteral("RECENTS"), facesX[2] + 22, 15 + 9, primary},
-        {QStringLiteral("AUTO SEND"), facesX[3] + 22, 15 + 9, commit},
-        {QStringLiteral("SYSTEM"), facesX[4] + 22, 15 + 9, primary},
-        {QStringLiteral("PREV"), kMargin + 22, 218 + 9, primary},
-        {QStringLiteral("NEXT"), kMargin + 50 + 22, 218 + 9, primary},
-    });
+    if (d05Current()) {
+        band->setLabels({
+            {QStringLiteral("ALL"), facesX[0] + 22, 15 + 9, primary},
+            {QStringLiteral("FAVOURITES"), facesX[1] + 22, 15 + 9, primary},
+            {QStringLiteral("RECENTS"), facesX[2] + 22, 15 + 9, primary},
+            {QStringLiteral("AUTO SEND"), facesX[3] + 22, 15 + 9, commit},
+            {QStringLiteral("SYSTEM"), facesX[4] + 22, 15 + 9, primary},
+            {QStringLiteral("PREV"), kMargin + 22, 218 + 9, primary},
+            {QStringLiteral("NEXT"), kMargin + 50 + 22, 218 + 9, primary},
+        });
+    } else {
+        band->setLabels({
+            {QStringLiteral("AUTO SEND"), facesX[3] + 22, 15 + 9, commit},
+            {QStringLiteral("SYSTEM"), facesX[4] + 22, 15 + 9, primary},
+        });
+    }
     relayoutStatus();
 }
 
@@ -611,7 +739,7 @@ void MainWindow::showEvent(QShowEvent *event)
 bool MainWindow::event(QEvent *e)
 {
     if (e->type() == QEvent::WindowActivate)
-        m_link.checkConnection();  // FR-10: the only check while connected (no timer)
+        m_router->checkConnections();  // FR-10: the only check while connected (no timer)
     return QMainWindow::event(e);
 }
 
@@ -670,6 +798,8 @@ bool MainWindow::sendAddress(const PatchAddress &address)
 
 void MainWindow::sendHighlighted()
 {
+    if (!d05Current())
+        return;  // the other devices' lists are T8.3's
     const auto a = highlighted();
     if (a)
         sendAddress(*a);
@@ -677,11 +807,15 @@ void MainWindow::sendHighlighted()
 
 void MainWindow::step(int direction)
 {
+    if (!d05Current())
+        return;
     sendAddress(direction < 0 ? PatchCatalog::prev(m_current) : PatchCatalog::next(m_current));
 }
 
 void MainWindow::beginGridEntry()
 {
+    if (!d05Current())
+        return;
     m_grid->setFocus(Qt::ShortcutFocusReason);
     m_grid->beginEntry(m_current.group());
 }
@@ -694,7 +828,7 @@ void MainWindow::onSent(const PatchAddress &address)
         finishEditing();
         m_library.recordSend(address);
     }
-    m_resendBlocked = false;  // a send worked: resend-on-connect may try again
+    m_rt[int(Model::D05)].resendBlocked = false;  // a send worked: resend-on-connect may try again
     applyCurrent(address, !m_quietSend);
     m_display->flashSent();
 }
@@ -856,6 +990,8 @@ void MainWindow::toggleFavorite(const PatchAddress &address)
 
 void MainWindow::toggleHighlightedFavorite()
 {
+    if (!d05Current())
+        return;
     // An empty list (no favourites yet) toggles the last highlighted patch, else the current one.
     std::optional<PatchAddress> a = highlighted();
     if (!a)
@@ -865,6 +1001,8 @@ void MainWindow::toggleHighlightedFavorite()
 
 void MainWindow::renameHighlighted()
 {
+    if (!d05Current())
+        return;
     const QModelIndex i = m_list->currentIndex();
     if (!i.isValid())
         return;
@@ -993,6 +1131,8 @@ void MainWindow::openAbout()
 
 void MainWindow::focusSearch()
 {
+    if (!d05Current())
+        return;
     m_search->setFocus(Qt::ShortcutFocusReason);
     m_search->selectAll();
 }
@@ -1032,34 +1172,64 @@ void MainWindow::updateDisplayConnection()
     m_display->setFirstRunHint(m_link.outputPortName().isEmpty()
                                    ? QStringLiteral("OPEN SETTINGS: ") + Shortcuts::settingsHintKey()
                                    : QString());
+    updateLedDisplay();
 }
 
 void MainWindow::refreshConnection()
 {
     auto *s = static_cast<StatusStrip *>(m_statusStrip);
-    const bool connected = m_link.isConnected();
-    const QString out = connected ? m_link.connectedPortKey() : m_link.outputPortName();
+    const Model cur = currentDevice();
+    const MidiLink &link = *m_router->link(cur);
+    const QString &inputLabel = m_rt[int(cur)].inputLabel;
+    const bool connected = link.isConnected();
+    const QString out = connected ? link.connectedPortKey() : link.outputPortName();
     const QFontMetrics fm(Theme::font(Theme::Role::StatusValue));
     StatusStrip::setValue(s->port, out.isEmpty() ? QStringLiteral("None") : fm.elidedText(out, Qt::ElideMiddle, 280),
                           out.isEmpty());
     s->port->setToolTip(out);
     s->notFound->setVisible(!connected && !out.isEmpty());
-    s->chValue->setText(QString::number(m_link.channel()));
+    s->chValue->setText(QString::number(link.channel()));
     StatusStrip::setValue(s->inValue,
-                          m_inputLabel.isEmpty() ? QStringLiteral("None") : fm.elidedText(m_inputLabel, Qt::ElideMiddle, 280),
-                          m_inputLabel.isEmpty());
+                          inputLabel.isEmpty() ? QStringLiteral("None") : fm.elidedText(inputLabel, Qt::ElideMiddle, 280),
+                          inputLabel.isEmpty());
     // FOLLOW only while the input is really open; follow on with an input that is missing or
     // failed shows NOT FOUND after it, as the output does.
-    const bool wantsInput = m_link.followEnabled() && !m_inputLabel.isEmpty();
-    s->follow->setVisible(wantsInput && m_link.inputConnected());
-    s->inNotFound->setVisible(wantsInput && !m_link.inputConnected());
+    const bool wantsInput = link.followEnabled() && !inputLabel.isEmpty();
+    s->follow->setVisible(wantsInput && link.inputConnected());
+    s->inNotFound->setVisible(wantsInput && !link.inputConnected());
     updateDisplayConnection();
+    updateSwitcher();
     relayoutStatus();
+}
+
+// The switcher's tabs: which devices are enabled, the red of an output that is wanted but not open
+// (or has no port), and the tooltips (DESIGN-2.md 4.4). Repaints only on a change.
+void MainWindow::updateSwitcher()
+{
+    std::array<DeviceSwitcher::DeviceState, 3> st;
+    for (Model m : allModels()) {
+        DeviceSwitcher::DeviceState &d = st[int(m)];
+        const DeviceRouter::DeviceConfig cfg = m_router->config(m);
+        const MidiLink *l = m_router->link(m);
+        d.enabled = cfg.enabled;
+        d.red = cfg.enabled && (cfg.outputPort.isEmpty() || !l->isConnected());
+        const QString name = modelInfo(m).name;
+        if (cfg.outputPort.isEmpty())
+            d.tooltip = QStringLiteral("%1: no MIDI output (Ctrl+Tab)").arg(name);
+        else
+            d.tooltip = QStringLiteral("%1: %2, channel %3 (Ctrl+Tab)")
+                            .arg(name, l->isConnected() ? l->connectedPortKey() : MidiLink::portKey(cfg.outputPort))
+                            .arg(cfg.channel);
+    }
+    const bool hadTabs = m_switcher->hasTabs();
+    m_switcher->setState(st, currentDevice());
+    if (m_switcher->hasTabs() != hadTabs)
+        layoutAll();  // the row grows with the tabs
 }
 
 void MainWindow::setInputPortLabel(const QString &name)
 {
-    m_inputLabel = name;
+    m_rt[int(Model::D05)].inputLabel = name;
     refreshConnection();
 }
 
@@ -1081,53 +1251,118 @@ void MainWindow::onHighlightMovedByKey()
         sendHighlighted();
 }
 
-void MainWindow::onConnectedChanged(bool connected)
+// ---------------------------------------------------------------------------- devices
+
+void MainWindow::switchDevice(Model m)
+{
+    if (!m_router->isEnabled(m) || m == currentDevice())
+        return;
+    m_router->setCurrentDevice(m);  // a user switch: clears a JU-06A arm; comes back as onDeviceChanged
+}
+
+void MainWindow::cycleDevice(int direction)
+{
+    const Model cur = currentDevice();
+    for (int i = 1; i <= 3; ++i) {
+        const Model m = Model((int(cur) + direction * i + 3 * 3) % 3);
+        if (m_router->isEnabled(m)) {
+            switchDevice(m);
+            return;
+        }
+    }
+}
+
+// The window follows the router's current device, whoever caused the switch (the user or a
+// follow event, FR-20). It all happens in this one turn of the event loop, so the window paints
+// once: first the content that belongs to the old device goes, then the skin changes, then the
+// switcher and the status bar say what is current.
+void MainWindow::onDeviceChanged(Model model, bool)
+{
+    finishEditing();
+    if (m_grid->stage() != BankGrid::Stage::Idle)
+        m_grid->cancelEntry();
+    const bool toD05 = model == Model::D05;
+    // Focus in a part that is about to go hidden is dropped (Qt would hand it to AUTO SEND).
+    if (!toD05) {
+        QWidget *f = QApplication::focusWidget();
+        if (f && f->window() == this && f != m_autoSend && f != m_system)
+            f->clearFocus();
+    }
+    applyContentVisibility();
+    Theme::setSkin(skinIdForCurrent());  // the notifier runs applySkin(); a no-op on the same skin
+    refreshConnection();                 // status bar, display, switcher
+    if (toD05)
+        m_search->setFocus();
+    if (m_settings) {
+        m_settings->setCurrentDevice(model);
+        noteSettingsWrite();
+    }
+}
+
+// A current device that is not enabled (the user turned it off in Settings, or none was ever
+// turned on) gives way to the first enabled one; with none enabled the D-05 skin shows.
+void MainWindow::ensureCurrentDevice()
+{
+    if (m_router->isEnabled(currentDevice()))
+        return;
+    for (Model m : allModels()) {
+        if (m_router->isEnabled(m)) {
+            m_router->setCurrentDevice(m);
+            return;
+        }
+    }
+    if (currentDevice() != Model::D05)
+        m_router->setCurrentDevice(Model::D05);
+}
+
+void MainWindow::onConnectedChanged(Model model, bool connected)
 {
     updateDisplayConnection();
     refreshConnection();
     if (connected)
-        noteConnected();
+        noteConnected(model);
     else
-        ++m_connGeneration;
+        ++m_rt[int(model)].connGeneration;
 }
 
-void MainWindow::noteConnected()
+void MainWindow::noteConnected(Model model)
 {
-    ++m_connGeneration;
+    ++m_rt[int(model)].connGeneration;
     if (m_settingsOpen)
-        m_connectPending = true;  // decided when the dialog closes
-    else if (m_resendOnConnect)
-        resendCurrent();
-}
-
-// Opens `port` as the output. MidiLink only signals a change of connected state, but moving
-// from one open port to another is a connect too (resend-on-connect), so it is noted here.
-void MainWindow::setOutput(const QString &port)
-{
-    const bool was = m_link.isConnected();
-    const QString before = m_link.connectedPortName();
-    m_link.setOutputPort(port);
-    if (was && m_link.isConnected() && m_link.connectedPortName() != before)
-        noteConnected();
+        m_sess[int(model)].connectPending = true;  // decided when the dialog closes
+    else if (m_router->config(model).resendOnConnect)
+        resendCurrent(model);
 }
 
 // Resend-on-connect: the output (re)connected, so tell the synth what the app shows, once.
 // A failed resend is not retried on every poll reconnect: it stays blocked until a send works
 // or the settings change.
-void MainWindow::resendCurrent()
+void MainWindow::resendCurrent(Model model)
 {
-    if (m_resendBlocked)
+    DeviceRuntime &rt = m_rt[int(model)];
+    if (rt.resendBlocked)
         return;
-    if (!sendQuiet(m_current))
-        m_resendBlocked = true;
+    if (!sendQuiet(model))
+        rt.resendBlocked = true;
 }
 
-bool MainWindow::sendQuiet(const PatchAddress &address)
+// A send that is not a selection: no Recents entry. The D-05 resends the patch the window shows;
+// the other devices resend the patch their link last sent or followed (a JU-06A only when it is
+// for the engine the app believes, so a resend never arms a prompt). Nothing known is not a failure.
+bool MainWindow::sendQuiet(Model model)
 {
-    m_quietSend = true;
-    const bool ok = sendAddress(address);
-    m_quietSend = false;
-    return ok;
+    if (model == Model::D05) {
+        m_quietSend = true;
+        const bool ok = sendAddress(m_current);
+        m_quietSend = false;
+        return ok;
+    }
+    const std::optional<PatchAddress> cur = m_router->link(model)->current();
+    if (!cur)
+        return true;
+    if (model == Model::JU06A && cur->engine() != m_router->ju06aTracker()->engine())
+        return true;
+    return m_router->select(*cur);
 }
 
 void MainWindow::notAvailable(const QString &what)
@@ -1151,51 +1386,80 @@ void MainWindow::setServices(AppSettings *settings)
     m_settings = settings;
 }
 
+DeviceRouter::DeviceConfig MainWindow::configFor(const AppSettings::DeviceValues &v)
+{
+    DeviceRouter::DeviceConfig c;
+    c.enabled = v.enabled;
+    c.outputPort = v.outputPort;
+    c.inputPort = v.inputPort;
+    c.channel = v.channel;
+    c.follow = v.follow;
+    c.resendOnConnect = v.resendOnConnect;
+    return c;
+}
+
 AppSettings::Values MainWindow::currentSettings() const
 {
     AppSettings::Values v;
     // The key, or the full name when two ports share it (so Cancel restores the right device).
     v.outputPort = m_link.isConnected() ? MidiLink::portSpec(m_link.connectedPortName(), m_link.outputPortNames(nullptr))
                                         : m_link.outputPortName();
-    v.inputPort = m_inputLabel;
+    v.inputPort = m_rt[int(Model::D05)].inputLabel;
     v.channel = m_link.channel();
     v.autoSend = m_autoSendOn;
     v.follow = m_link.followEnabled();
-    v.resendOnConnect = m_resendOnConnect;
+    v.resendOnConnect = m_router->config(Model::D05).resendOnConnect;
     return v;
 }
 
-bool MainWindow::sameOutput(const QString &port) const
+// Applies a configuration through the router. Moving from one open port to another is a connect
+// (resend-on-connect) although the link only signals a change of connected state.
+bool MainWindow::configureDevice(Model m, const DeviceRouter::DeviceConfig &cfg)
 {
-    if (!m_link.isConnected() || port.isEmpty())
+    const MidiLink *l = m_router->link(m);
+    const bool was = l->isConnected();
+    const QString before = l->connectedPortName();
+    Model other = Model::D05;
+    if (!m_router->configure(m, cfg, &other)) {
+        showMessage(QStringLiteral("%1 not changed: channel %2 on that port is used by the %3")
+                        .arg(modelInfo(m).name).arg(cfg.channel).arg(modelInfo(other).name));
         return false;
-    // A full OS name (saved because its key is ambiguous) names one device exactly.
-    static const QRegularExpression idSuffix(QStringLiteral("\\s+\\d+:\\d+$"));
-    if (port.contains(idSuffix))
-        return m_link.connectedPortName() == port;
-    return MidiLink::portKey(m_link.connectedPortName()).compare(port, Qt::CaseInsensitive) == 0;
+    }
+    if (was && l->isConnected() && l->connectedPortName() != before)
+        noteConnected(m);
+    return true;
 }
 
-// Order matters for resend-on-connect: the flag and the channel are in place before the
-// output opens, so the connect that this call causes resends on the new channel.
+// Order matters for resend-on-connect: the router stores the configuration (the flag, the channel)
+// before it opens the output, so the connect that this call causes resends on the new channel.
+bool MainWindow::applyDevice(Model m, const AppSettings::DeviceValues &v)
+{
+    m_rt[int(m)].resendBlocked = false;  // the settings changed
+    const bool ok = configureDevice(m, configFor(v));
+    if (ok)
+        m_rt[int(m)].inputLabel = MidiLink::portKey(v.inputPort);
+    ensureCurrentDevice();
+    refreshConnection();
+    return ok;
+}
+
+void MainWindow::applyGlobal(bool autoSend, bool followSwitches)
+{
+    setAutoSend(autoSend, false);
+    m_router->setFollowSwitchesDevice(followSwitches);
+}
+
 void MainWindow::applySettings(const AppSettings::Values &v)
 {
-    m_resendOnConnect = v.resendOnConnect;
-    m_resendBlocked = false;  // the settings changed
     setAutoSend(v.autoSend, false);
-    if (v.channel != m_link.channel())
-        m_link.setChannel(v.channel);
-    m_inputLabel = MidiLink::portKey(v.inputPort);
-    // Reopen the input only when it actually changed.
-    if (v.inputPort != m_inputName) {
-        m_inputName = v.inputPort;
-        m_link.setInputPort(v.inputPort);
-    }
-    if (v.follow != m_link.followEnabled())
-        m_link.setFollowEnabled(v.follow);
-    if (!sameOutput(v.outputPort))
-        setOutput(v.outputPort);
-    refreshConnection();
+    AppSettings::DeviceValues d;
+    d.enabled = true;  // version 1: the D-05 is the device
+    d.outputPort = v.outputPort;
+    d.inputPort = v.inputPort;
+    d.channel = v.channel;
+    d.follow = v.follow;
+    d.resendOnConnect = v.resendOnConnect;
+    applyDevice(Model::D05, d);
 }
 
 void MainWindow::setAutoSend(bool on)
@@ -1229,14 +1493,22 @@ void MainWindow::openSettings()
         m_settingsDialog->activateWindow();
         return;
     }
-    m_snapshot = currentSettings();
     m_settingsOpen = true;
-    m_trialApplied = false;
-    m_connectPending = false;
-    m_testedTarget.clear();
     // The dialog starts from the saved values, never from the run's command-line overrides, so
-    // OK cannot persist an override by accident. The snapshot is the live state, for Cancel.
-    auto *dialog = new SettingsDialog(m_link, m_settings->values(), this);
+    // OK cannot persist an override by accident. Which devices are on is the live state (a device a
+    // command-line option turned on for this run is on). The snapshot is the live configuration,
+    // for Cancel.
+    SettingsDialog::State state;
+    for (Model m : allModels()) {
+        m_sess[int(m)] = SessionDevice();
+        m_sess[int(m)].snapshot = m_router->config(m);
+        AppSettings::DeviceValues saved = m_settings->device(m);
+        saved.enabled = m_router->isEnabled(m);
+        state.devices[int(m)] = saved;
+    }
+    state.autoSend = m_settings->autoSend();
+    state.followSwitches = m_settings->followSwitchesDevice();
+    auto *dialog = new SettingsDialog(*m_router, state, currentDevice(), this, m_systemLookup);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     connect(dialog, &SettingsDialog::testRequested, this, &MainWindow::onSettingsTest);
     connect(dialog, &QDialog::accepted, this, [this, dialog] { onSettingsAccepted(dialog); });
@@ -1245,64 +1517,135 @@ void MainWindow::openSettings()
     dialog->open();
 }
 
-// TEST sends the current patch with the dialog's pending port and channel. That needs the
-// link to use them, so the live port and channel change here; Cancel puts them back.
-void MainWindow::onSettingsTest(const AppSettings::Values &v)
+// TEST sends the device's current patch with the dialog's pending port and channel. That needs the
+// link to use them, so the live port and channel change here; Cancel puts them back. A device that
+// has no patch yet tests with the first one of its catalogue (the JU-06A on its believed engine).
+void MainWindow::onSettingsTest(Model model, const AppSettings::DeviceValues &v)
 {
-    m_trialApplied = true;
-    m_link.setChannel(v.channel);
-    if (!sameOutput(v.outputPort))
-        setOutput(v.outputPort);
-    m_testedTarget = m_link.connectedPortName() + QLatin1Char('/') + QString::number(v.channel);
-    m_testedGeneration = m_connGeneration;  // any disconnect or reconnect after this voids it
+    SessionDevice &sess = m_sess[int(model)];
+    DeviceRouter::DeviceConfig cfg = m_router->config(model);
+    cfg.enabled = true;
+    cfg.channel = v.channel;
+    cfg.outputPort = v.outputPort;
+    sess.trialApplied = true;
+    if (!configureDevice(model, cfg))
+        return;
+    const MidiLink *l = m_router->link(model);
+    sess.testedTarget = l->connectedPortName() + QLatin1Char('/') + QString::number(v.channel);
+    sess.testedGeneration = m_rt[int(model)].connGeneration;  // any disconnect or reconnect after this voids it
     refreshConnection();
-    sendQuiet(m_current);
+    if (model == Model::D05) {
+        sendQuiet(model);
+        return;
+    }
+    std::optional<PatchAddress> a = l->current();
+    if (model == Model::JU06A && a && a->engine() != m_router->ju06aTracker()->engine())
+        a.reset();  // the unit's other engine: not a patch TEST may arm a prompt for
+    if (!a)
+        a = PatchAddress::fromBankNumber(model, 1, 1, model == Model::JU06A ? m_router->ju06aTracker()->engine() : 0);
+    if (a && !m_router->select(*a))
+        showMessage(QStringLiteral("Not sent: ") + l->status());
 }
 
 void MainWindow::onSettingsAccepted(SettingsDialog *dialog)
 {
-    const AppSettings::Values v = dialog->values();
-    const bool tested = dialog->testPressed();
-    applySettings(v);  // the dialog is still counted as open: a connect it causes is only noted
-    AppSettings::Values toSave = v;
-    if (!m_persistPorts) {
-        toSave.outputPort = m_settings->outputPort();
-        toSave.inputPort = m_settings->inputPort();
+    const SettingsDialog::State st = dialog->state();
+    applyGlobal(st.autoSend, st.followSwitches);
+
+    // All three at once: a swap of channels between two devices is not refused for the moment in
+    // between. The dialog's OK is disabled while a conflict exists, so a refusal here is a race.
+    DeviceRouter::Configs cfgs;
+    for (Model m : allModels())
+        cfgs[int(m)] = configFor(st.devices[int(m)]);
+    std::array<bool, 3> was{};
+    std::array<QString, 3> before;
+    for (Model m : allModels()) {
+        was[int(m)] = m_router->link(m)->isConnected();
+        before[int(m)] = m_router->link(m)->connectedPortName();
     }
-    m_settings->setValues(toSave);
+    Model a = Model::D05, b = Model::D05;
+    if (m_router->configureAll(cfgs, &a, &b)) {
+        for (Model m : allModels()) {
+            m_rt[int(m)].resendBlocked = false;  // the settings changed
+            m_rt[int(m)].inputLabel = MidiLink::portKey(st.devices[int(m)].inputPort);
+            const MidiLink *l = m_router->link(m);
+            if (was[int(m)] && l->isConnected() && l->connectedPortName() != before[int(m)])
+                noteConnected(m);  // from one open port to another is a connect too
+        }
+    } else {
+        showMessage(QStringLiteral("Settings not applied: the %1 and the %2 share a port and a channel")
+                        .arg(modelInfo(a).name, modelInfo(b).name));
+    }
+
+    for (Model m : allModels()) {
+        AppSettings::DeviceValues toSave = st.devices[int(m)];
+        if (!m_persistPorts) {
+            const AppSettings::DeviceValues saved = m_settings->device(m);
+            toSave.outputPort = saved.outputPort;
+            toSave.inputPort = saved.inputPort;
+        }
+        m_settings->setDevice(m, toSave);
+    }
+    m_settings->setAutoSend(st.autoSend);
+    m_settings->setFollowSwitchesDevice(st.followSwitches);
     m_settingsOpen = false;
-    const QString target = m_link.connectedPortName() + QLatin1Char('/') + QString::number(v.channel);
-    // A TEST to this very port and channel has just put the patch on the synth.
-    const bool justTested = tested && target == m_testedTarget && m_connGeneration == m_testedGeneration;
-    if (m_connectPending && m_resendOnConnect && m_link.isConnected() && !justTested)
-        resendCurrent();
-    m_connectPending = false;
+    for (Model m : allModels()) {
+        SessionDevice &sess = m_sess[int(m)];
+        const MidiLink *l = m_router->link(m);
+        const QString target = l->connectedPortName() + QLatin1Char('/') + QString::number(st.devices[int(m)].channel);
+        // A TEST to this very port and channel has just put the patch on the synth.
+        const bool justTested = dialog->testPressed(m) && target == sess.testedTarget
+                                && m_rt[int(m)].connGeneration == sess.testedGeneration;
+        if (sess.connectPending && m_router->config(m).resendOnConnect && l->isConnected() && !justTested)
+            resendCurrent(m);
+        sess.connectPending = false;
+        sess.trialApplied = false;
+    }
+    ensureCurrentDevice();
+    refreshConnection();
     noteSettingsWrite();
 }
 
 void MainWindow::onSettingsRejected()
 {
-    if (m_trialApplied) {
-        m_link.setChannel(m_snapshot.channel);
-        if (!sameOutput(m_snapshot.outputPort))
-            setOutput(m_snapshot.outputPort);
-        refreshConnection();
+    for (Model m : allModels()) {
+        SessionDevice &sess = m_sess[int(m)];
+        if (sess.trialApplied)
+            configureDevice(m, sess.snapshot);
+        sess.trialApplied = false;
     }
-    m_trialApplied = false;
     m_settingsOpen = false;
+    refreshConnection();
     // A connect that happened while the dialog was open (or the restore itself) still counts,
     // under the resend setting that was in force when it opened.
-    if (m_connectPending && m_snapshot.resendOnConnect && m_link.isConnected())
-        resendCurrent();
-    m_connectPending = false;
+    for (Model m : allModels()) {
+        SessionDevice &sess = m_sess[int(m)];
+        if (sess.connectPending && sess.snapshot.resendOnConnect && m_router->link(m)->isConnected())
+            resendCurrent(m);
+        sess.connectPending = false;
+    }
 }
 
-// On quit: the geometry and the patch to come back to. Not written per send.
+// On quit: the geometry, the patch of each device to come back to and the JU-06A's engine state.
+// Not written per send.
 void MainWindow::saveStateNow()
 {
     if (!m_settings)
         return;
-    m_settings->setLastPatch(m_current);
+    m_settings->setLastPatch(Model::D05, m_current);
+    for (Model m : {Model::JP08, Model::JU06A}) {
+        if (m_router->isEnabled(m) && m_router->link(m)->current())
+            m_settings->setLastPatch(m, *m_router->link(m)->current());
+    }
+    if (m_router->isEnabled(Model::JU06A)) {
+        const EngineTracker *t = m_router->ju06aTracker();
+        m_settings->setEngine(t->engine());
+        for (int e : {60, 106}) {
+            const int r = t->remembered(e);
+            m_settings->setRemembered(e, r >= 0 ? std::optional<int>(r) : std::nullopt);
+        }
+    }
+    m_settings->setCurrentDevice(currentDevice());
     m_settings->setWindowGeometry(saveGeometry());
     noteSettingsWrite();
 }

@@ -1,7 +1,9 @@
 #pragma once
 
 #include "app/AppSettings.h"
+#include "core/Model.h"
 #include "core/PatchAddress.h"
+#include "midi/DeviceRouter.h"
 #include "ui/PatchListModel.h"
 #include "ui/SettingsDialog.h"
 
@@ -11,6 +13,8 @@
 #include <QPair>
 #include <QPointer>
 #include <QString>
+#include <array>
+#include <memory>
 #include <optional>
 
 class QAction;
@@ -24,6 +28,7 @@ class QButtonGroup;
 namespace d05 {
 
 class BankGrid;
+class DeviceSwitcher;
 class DisplayWidget;
 class GroupBar;
 class LedDisplayWidget;
@@ -34,23 +39,52 @@ class PanelButton;
 class PatchCatalog;
 class PatchDelegate;
 class PatchListView;
+class PortHub;
 
 // The one window (DESIGN.md 4 to 9, SPEC FR-2 to FR-5, FR-12 to FR-14): display, group
 // bar, bank/number grid, control row, search field, patch list, status bar, and every
 // keyboard shortcut of FR-13 that is in scope. It never sends on a mere highlight:
 // only Enter, a click, PREV/NEXT, PgUp/PgDn or a completed grid entry do.
 //
-// Settings (FR-9, FR-10, FR-11): setServices() hands the window the persistent settings and
-// the backend (for port listing in the dialog); applySettings() puts a set of values into
-// effect (start-up and the dialog's OK), and nothing is written to disk except by the
-// user's own actions (OK, the AUTO SEND toggle, the window geometry on close).
+// Devices (SPEC-2 3.4, FR-9, FR-10, FR-16, FR-20): the window talks to a DeviceRouter, which owns
+// the three device links. The router's current device decides the skin and what the switcher
+// marks; switching is synchronous (one event-loop turn, one repaint) and sends nothing. A switch
+// the user makes (the switcher, Ctrl+Tab, Settings) goes through DeviceRouter::setCurrentDevice;
+// one that follows a panel change (FR-20) arrives as currentDeviceChanged(model, true) and the
+// window updates the same way.
+//
+// What the list, grid and display show per model is T8.3's. Until then the D-05 is the only
+// device whose catalogue, list, grid, search and LCD the window drives: while another device is
+// current those widgets are hidden (so nothing of the D-05 is shown under another skin) and the
+// LED display shows the device's idle or connection line.
+//
+// Settings (FR-9, FR-10, FR-11): setServices() hands the window the persistent settings;
+// applyDevice() / applySettings() put a device's values into effect (start-up and the dialog's
+// OK), and nothing is written to disk except by the user's own actions (OK, the AUTO SEND
+// toggle, a device switch, the window geometry on close).
 // Auto-send sends when the keyboard moves the list highlight; follow, search, view
 // switches and start-up never send.
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
+    // The window on a router (the application's form). The router must outlive the window.
+    MainWindow(PatchCatalog &catalog, Library &library, DeviceRouter &router, QWidget *parent = nullptr);
+    // The version 1 form: a D-05 link on its own private hub. The window makes a router around it
+    // (the other two devices stay disabled) and enables the D-05, as version 1 always had it.
     MainWindow(PatchCatalog &catalog, Library &library, MidiLink &link, QWidget *parent = nullptr);
     ~MainWindow() override;
+
+    DeviceRouter *router() const { return m_router; }
+    // The window's current device (the router's).
+    Model currentDevice() const;
+    // A device switch made by the user: sets the router's current device, which clears a JU-06A arm.
+    // Only an enabled device can be switched to; anything else is ignored.
+    void switchDevice(Model m);
+    // Ctrl+Tab / Ctrl+Shift+Tab: the next (+1) or previous (-1) enabled device, wrapping.
+    void cycleDevice(int direction);
+    DeviceSwitcher *switcher() const { return m_switcher; }
+    // False skips the Linux USB-serial rule in Settings' detection (the fake backend, tests).
+    void setSystemLookup(bool on) { m_systemLookup = on; }
 
     // The current patch: restored without sending anything (startup, screenshots).
     void setCurrent(const PatchAddress &address);
@@ -58,9 +92,10 @@ public:
     // Right-aligned status bar message; stays until replaced.
     void showMessage(const QString &text);
     QString message() const;
-    // The input port label shown after IN (empty = None).
+    // The input port label shown after IN (empty = None) for the D-05.
     void setInputPortLabel(const QString &name);
-    // Re-reads port, channel and connection from the MidiLink into the status bar and display.
+    // Re-reads port, channel and connection of the current device into the status bar, the display
+    // and the switcher.
     void refreshConnection();
 
     // `settings` is where OK, the AUTO SEND toggle, the last patch (on quit) and the window
@@ -69,13 +104,19 @@ public:
     // False for a --fake-midi run without --config-dir: the fake ports must never reach the
     // real settings file, so OK keeps the saved output and input port (other values are saved).
     void setPersistPorts(bool persist) { m_persistPorts = persist; }
-    // Puts `values` into effect: channel, ports, follow, auto-send, resend-on-connect. Does not save.
+    // Puts one device's values into effect (enables or disables it in the router): channel, ports,
+    // follow, resend-on-connect. Does not save. A refused set (port and channel taken by an
+    // enabled device) changes nothing and says so in the status bar.
+    bool applyDevice(Model m, const AppSettings::DeviceValues &values);
+    // Auto-send and follow-switches-device, without saving.
+    void applyGlobal(bool autoSend, bool followSwitches);
+    // Version 1 form: the D-05 enabled with `values`, plus auto-send. Does not save.
     void applySettings(const AppSettings::Values &values);
-    // The values in effect now (the open output as its port key).
+    // The D-05's values in effect now (the open output as its port key) and the auto-send.
     AppSettings::Values currentSettings() const;
     void setAutoSend(bool on);  // persists when settings are attached
     bool autoSend() const { return m_autoSendOn; }
-    bool resendOnConnect() const { return m_resendOnConnect; }
+    bool resendOnConnect() const { return m_router->config(Model::D05).resendOnConnect; }
     // Opens the Settings dialog (window-modal, not blocking).
     void openSettings();
     // Null once the dialog is closed and deleted.
@@ -94,7 +135,7 @@ public:
     PanelButton *viewButton(PatchListModel::View view) const;
     PanelButton *autoSendButton() const { return m_autoSend; }
     PanelButton *systemButton() const { return m_system; }
-    Nameplate *nameplate() const { return m_nameplate; }
+    Nameplate *nameplate() const;
     QMenu *systemMenu() const { return m_systemMenu; }
     // An action by object name (e.g. "actionPrev"), or nullptr.
     QAction *action(const QString &name) const;
@@ -137,10 +178,22 @@ protected:
 private:
     enum class Restore { Keep, First, Highlight, BeforeSearch };
 
+    void init();
     void buildWidgets();
     void buildActions();
     void layoutAll();
     void applySkin();
+    // The device switch (user or follow): skin, hidden or shown content, switcher, connection.
+    void onDeviceChanged(Model model, bool byFollow);
+    void applyContentVisibility();
+    void updateSwitcher();
+    void updateLedDisplay();
+    bool d05Current() const { return currentDevice() == Model::D05; }
+    // A current device that is not enabled is replaced by the first enabled one (the D-05 when
+    // none is); the skin follows.
+    void ensureCurrentDevice();
+    const MidiLink *currentLink() const;
+    QString skinIdForCurrent() const;
     bool sendAddress(const PatchAddress &address);
     void onSent(const PatchAddress &address);
     // `moveHighlight` false for a quiet send (resend, TEST): the list stays where the user is.
@@ -162,18 +215,20 @@ private:
     void onNameCommitted(const PatchAddress &address, const QString &text);
     void refreshDisplayPatch();
     void onFollowed(const PatchAddress &address);
-    void onConnectedChanged(bool connected);
+    void onConnectedChanged(Model model, bool connected);
     void onHighlightMovedByKey();
-    void resendCurrent();
-    void noteConnected();
-    void setOutput(const QString &port);
-    void onSettingsTest(const AppSettings::Values &values);
+    void resendCurrent(Model model);
+    void noteConnected(Model model);
+    // Applies a configuration to one device through the router and treats a move from one open
+    // port to another as a connect (resend-on-connect). False when the router refused it.
+    bool configureDevice(Model m, const DeviceRouter::DeviceConfig &cfg);
+    static DeviceRouter::DeviceConfig configFor(const AppSettings::DeviceValues &v);
+    void onSettingsTest(Model model, const AppSettings::DeviceValues &values);
     void onSettingsAccepted(SettingsDialog *dialog);
     void onSettingsRejected();
-    bool sameOutput(const QString &port) const;
     void saveStateNow();
     void noteSettingsWrite();
-    bool sendQuiet(const PatchAddress &address);
+    bool sendQuiet(Model model);
     void setAutoSend(bool on, bool persist);
     // Stores and closes an open rename editor (before anything resets the list).
     void finishEditing();
@@ -181,42 +236,52 @@ private:
     void flushPendingRename();
     void saveAndQuit();
 
+    // The version 1 constructor's private hub and router; declared first so they die last.
+    std::unique_ptr<PortHub> m_ownedHub;
+    std::unique_ptr<DeviceRouter> m_ownedRouter;
     PatchCatalog &m_catalog;
     Library &m_library;
-    MidiLink &m_link;
-    PatchAddress m_current;
+    DeviceRouter *m_router = nullptr;
+    MidiLink &m_link;  // the D-05's link, the router's
+    PatchAddress m_current;  // the D-05's current patch
     int m_bandTop = 0;
     Restore m_restore = Restore::Keep;
     std::optional<PatchAddress> m_savedHighlight;
     std::optional<PatchAddress> m_preSearch;
     QString m_startupError;
-    QString m_inputLabel;
-    QString m_inputName;  // the input port as last applied (raw, for change detection)
     bool m_firstShow = true;
+    bool m_systemLookup = true;
     bool m_inLayout = false;  // layoutAll() is running (its own resize of the display must not recurse)
 
     AppSettings *m_settings = nullptr;
     bool m_persistPorts = true;
     bool m_autoSendOn = false;
-    bool m_resendOnConnect = false;
     int m_searchRepeatKey = 0;  // the Up/Down key whose auto-repeat moved the search field highlight
     std::optional<QPair<PatchAddress, QString>> m_pendingRename;
     bool m_quietSend = false;   // the send being made is not a user selection: no Recents entry
-    bool m_resendBlocked = false;  // the last resend failed: no more until a send works or settings change
-    int m_connGeneration = 0;      // bumped on every connect and disconnect
-    int m_testedGeneration = -1;   // m_connGeneration when TEST sent
-    // Settings dialog session.
+    // Per device, indexed by Model.
+    struct DeviceRuntime {
+        bool resendBlocked = false;  // the last resend failed: no more until a send works or settings change
+        int connGeneration = 0;      // bumped on every connect and disconnect
+        QString inputLabel;          // the input port as the user named it (a key), for the status bar
+    };
+    std::array<DeviceRuntime, 3> m_rt;
+    // Settings dialog session, per device.
+    struct SessionDevice {
+        DeviceRouter::DeviceConfig snapshot;  // the configuration in effect when the dialog opened
+        bool trialApplied = false;  // TEST changed the live port or channel; Cancel must undo it
+        bool connectPending = false;  // the output connected while the dialog was open
+        QString testedTarget;         // "<port key>/<channel>" of the last TEST
+        int testedGeneration = -1;    // connGeneration when TEST sent
+    };
+    std::array<SessionDevice, 3> m_sess;
     QPointer<SettingsDialog> m_settingsDialog;
     bool m_settingsOpen = false;
-    bool m_trialApplied = false;  // TEST changed the live port or channel; Cancel must undo it
     bool m_writeReported = false;  // the settings-not-saved message was shown
-    bool m_connectPending = false;  // the output connected while the dialog was open
-    QString m_testedTarget;         // "<port key>/<channel>" of the last TEST
-    AppSettings::Values m_snapshot;
 
     QWidget *m_central = nullptr;
     QFrame *m_band = nullptr;
-    Nameplate *m_nameplate = nullptr;
+    DeviceSwitcher *m_switcher = nullptr;
     DisplayWidget *m_display = nullptr;
     LedDisplayWidget *m_led = nullptr;
     GroupBar *m_groupBar = nullptr;

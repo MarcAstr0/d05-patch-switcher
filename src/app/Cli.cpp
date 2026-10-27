@@ -154,10 +154,8 @@ ParseStatus parse(const QStringList &args, CliOptions *opts, QString *message, i
         o.screenshotSize = QSize(w, h);
     }
     if (p.isSet(send)) {
-        // --list-ports and --identify win over --send (main.cpp): they need no channel.
-        if (o.device != Model::D05 && !p.isSet(channel) && !p.isSet(fake) && !o.listPorts && !o.identify)
-            return fail(QStringLiteral("--device %1 needs --channel with --send (no saved settings for it yet)")
-                            .arg(modelInfo(o.device).id));
+        // The channel may come from the saved settings: runSend() checks it (--list-ports and --identify
+        // win over --send in main.cpp and need none).
         o.hasSend = true;
         o.sendAddress = p.value(send);
     }
@@ -235,6 +233,57 @@ int runIdentify(MidiBackend &backend, QTextStream &out, QTextStream &err, bool s
     return Exit::Ok;
 }
 
+Startup startup(const AppSettings &saved, const CliOptions &opts)
+{
+    Startup st;
+    for (Model m : allModels())
+        st.devices[int(m)] = saved.device(m);
+    st.autoSend = saved.autoSend();
+    st.followSwitches = saved.followSwitchesDevice();
+    st.engine = opts.engine > 0 ? opts.engine : saved.engine();
+    st.remembered60 = saved.remembered(60).value_or(-1);
+    st.remembered106 = saved.remembered(106).value_or(-1);
+
+    const Model target = opts.hasDevice ? opts.device : saved.currentDevice().value_or(Model::D05);
+    AppSettings::DeviceValues &d = st.devices[int(target)];
+    bool touched = opts.hasDevice;
+    if (opts.channel > 0) {
+        d.channel = opts.channel;
+        touched = true;
+    }
+    if (!opts.port.isEmpty()) {
+        d.outputPort = opts.port;
+        touched = true;
+    } else if (opts.fakeMidi) {
+        d.outputPort = QStringLiteral("Fake D-05 In");
+        touched = true;
+    }
+    if (!opts.inPort.isEmpty()) {
+        d.inputPort = opts.inPort;
+        touched = true;
+    }
+    if (touched)
+        d.enabled = true;
+
+    if (opts.hasDevice) {
+        st.current = opts.device;
+    } else {
+        const Model want = saved.currentDevice().value_or(Model::D05);
+        st.current = Model::D05;
+        if (st.devices[int(want)].enabled) {
+            st.current = want;
+        } else {
+            for (Model m : allModels()) {
+                if (st.devices[int(m)].enabled) {
+                    st.current = m;
+                    break;
+                }
+            }
+        }
+    }
+    return st;
+}
+
 AppSettings::Values startupValues(const AppSettings &saved, const CliOptions &opts)
 {
     AppSettings::Values v = saved.values();
@@ -252,11 +301,14 @@ AppSettings::Values startupValues(const AppSettings &saved, const CliOptions &op
 int runSend(const CliOptions &opts, MidiBackend &backend, QTextStream &out, QTextStream &err,
             const AppSettings *saved)
 {
-    const Model model = opts.device;
+    const Model model = opts.hasDevice ? opts.device : (saved ? saved->currentDevice().value_or(Model::D05) : Model::D05);
     const bool isD05 = model == Model::D05;
+    const AppSettings::DeviceValues savedDevice = saved ? saved->device(model) : AppSettings::DeviceValues();
     std::optional<int> engine;
     if (opts.engine > 0)
         engine = opts.engine;
+    else if (saved && model == Model::JU06A && saved->hasEngine())
+        engine = saved->engine();  // the app's last known engine state
 
     std::optional<PatchAddress> address = isD05 ? PatchAddress::parse(opts.sendAddress)
                                                 : PatchAddress::parse(opts.sendAddress, model, engine);
@@ -273,7 +325,7 @@ int runSend(const CliOptions &opts, MidiBackend &backend, QTextStream &out, QTex
     }
     if (model == Model::JU06A) {
         if (!engine) {
-            // No saved engine state exists before M8 and the unit cannot be asked.
+            // No saved engine state either, and the unit cannot be asked.
             err << "The JU-06A engine is unknown; give --engine 60|106" << Qt::endl;
             return Exit::BadAddress;
         }
@@ -293,12 +345,21 @@ int runSend(const CliOptions &opts, MidiBackend &backend, QTextStream &out, QTex
     QString wanted = opts.port;
     if (wanted.isEmpty() && opts.fakeMidi && !names.isEmpty())
         wanted = names.first();
-    else if (wanted.isEmpty() && !opts.fakeMidi && saved && isD05)
-        wanted = saved->outputPort();
-    const int channel = opts.channel > 0 ? opts.channel : (saved && isD05 ? saved->channel() : 1);
+    else if (wanted.isEmpty() && !opts.fakeMidi && saved)
+        wanted = savedDevice.outputPort;
+    int channel = opts.channel;
+    if (channel <= 0) {
+        if (saved && saved->hasChannel(model))
+            channel = savedDevice.channel;
+        else if (isD05 || opts.fakeMidi)
+            channel = 1;
+        else {
+            err << "The " << modelInfo(model).name << " has no saved channel; give --channel 1-16" << Qt::endl;
+            return Exit::Usage;
+        }
+    }
     if (wanted.isEmpty()) {
-        err << "No output port given; use --port NAME (see --list-ports)"
-            << (isD05 ? " or choose one in Settings" : "") << Qt::endl;
+        err << "No output port given; use --port NAME (see --list-ports) or choose one in Settings" << Qt::endl;
         return Exit::PortNotFound;
     }
     const QString match = MidiLink::matchPort(names, wanted);

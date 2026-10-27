@@ -2,9 +2,11 @@
 
 #include "midi/PortHub.h"
 
+#include <QRegularExpression>
+
 namespace d05 {
 
-DeviceRouter::DeviceRouter(PortHub *hub, QObject *parent)
+DeviceRouter::DeviceRouter(PortHub *hub, QObject *parent, MidiLink *d05Link)
     : QObject(parent)
     , m_hub(hub)
     , m_tracker(new EngineTracker(this))
@@ -15,9 +17,20 @@ DeviceRouter::DeviceRouter(PortHub *hub, QObject *parent)
     connect(&m_timer, &QTimer::timeout, this, &DeviceRouter::pollNow);
 
     for (Model m : allModels()) {
-        auto *l = new MidiLink(m_hub, m, this);
-        l->setExternalPolling(true);
+        const bool adopted = m == Model::D05 && d05Link;
+        MidiLink *l = adopted ? d05Link : new MidiLink(m_hub, m, this);
+        if (!adopted)
+            l->setExternalPolling(true);
         m_dev[idx(m)].link = l;
+        m_dev[idx(m)].selfPolled = adopted;
+        if (adopted) {  // enabled, as the link is configured now
+            DeviceConfig &c = m_dev[idx(m)].cfg;
+            c.enabled = true;
+            c.outputPort = l->outputPortName();
+            c.inputPort = l->inputPortName();
+            c.channel = l->channel();
+            c.follow = l->followEnabled();
+        }
         connect(l, &MidiLink::pollNeededChanged, this, [this] { updatePolling(); });
         connect(l, &MidiLink::inputConnectedChanged, this, [this] { updateFlipDetectable(); });
     }
@@ -48,22 +61,70 @@ bool DeviceRouter::samePort(const QString &a, const QString &b)
     return MidiLink::portKey(a).compare(MidiLink::portKey(b), Qt::CaseInsensitive) == 0;
 }
 
-std::optional<Model> DeviceRouter::conflict(Model m, const DeviceConfig &cfg) const
+std::optional<DeviceRouter::Conflict> DeviceRouter::findConflict(const Configs &cfgs, Model m, bool earlierOnly)
 {
+    const DeviceConfig &cfg = cfgs[idx(m)];
     if (!cfg.enabled)
         return std::nullopt;
     for (Model o : allModels()) {
-        if (o == m)
+        if (o == m || (earlierOnly && idx(o) > idx(m)))
             continue;
-        const DeviceConfig &c = m_dev[idx(o)].cfg;
+        const DeviceConfig &c = cfgs[idx(o)];
         if (!c.enabled || c.channel != cfg.channel)
             continue;
         if (samePort(c.outputPort, cfg.outputPort))
-            return o;
+            return Conflict{o, false};
         if (c.follow && cfg.follow && samePort(c.inputPort, cfg.inputPort))
-            return o;
+            return Conflict{o, true};
     }
     return std::nullopt;
+}
+
+std::optional<Model> DeviceRouter::conflict(Model m, const DeviceConfig &cfg) const
+{
+    Configs set;
+    for (Model o : allModels())
+        set[idx(o)] = m_dev[idx(o)].cfg;
+    set[idx(m)] = cfg;
+    if (const auto c = findConflict(set, m))
+        return c->other;
+    return std::nullopt;
+}
+
+bool DeviceRouter::sameOutput(const MidiLink *l, const QString &port)
+{
+    if (!l->isConnected() || port.isEmpty())
+        return false;
+    // A full OS name (saved because its key is ambiguous) names one device exactly.
+    static const QRegularExpression idSuffix(QStringLiteral("\\s+\\d+:\\d+$"));
+    if (port.contains(idSuffix))
+        return l->connectedPortName() == port;
+    return MidiLink::portKey(l->connectedPortName()).compare(port, Qt::CaseInsensitive) == 0;
+}
+
+// Only what changed is touched: an unchanged input is not reopened, an output that is open on the
+// wanted port is not reopened (a port that is not open is tried again, as the poll would).
+void DeviceRouter::applyConfig(Model m, const DeviceConfig &cfg)
+{
+    Dev &d = m_dev[idx(m)];
+    const DeviceConfig old = d.cfg;
+    d.cfg = cfg;
+    MidiLink *l = d.link;
+    if (l->channel() != cfg.channel)
+        l->setChannel(cfg.channel);
+    if (cfg.enabled) {
+        const bool fresh = !old.enabled;
+        if (fresh || cfg.inputPort != old.inputPort)
+            l->setInputPort(cfg.inputPort);
+        if (fresh || cfg.follow != old.follow)
+            l->setFollowEnabled(cfg.follow);
+        if (fresh || !sameOutput(l, cfg.outputPort))
+            l->setOutputPort(cfg.outputPort);
+    } else {
+        l->setFollowEnabled(false);
+        l->setInputPort(QString());
+        l->setOutputPort(QString());
+    }
 }
 
 bool DeviceRouter::configure(Model m, const DeviceConfig &cfgIn, Model *conflicting)
@@ -75,19 +136,29 @@ bool DeviceRouter::configure(Model m, const DeviceConfig &cfgIn, Model *conflict
             *conflicting = *c;
         return false;
     }
-    Dev &d = m_dev[idx(m)];
-    d.cfg = cfg;
-    MidiLink *l = d.link;
-    l->setChannel(cfg.channel);
-    if (cfg.enabled) {
-        l->setInputPort(cfg.inputPort);
-        l->setFollowEnabled(cfg.follow);
-        l->setOutputPort(cfg.outputPort);
-    } else {
-        l->setFollowEnabled(false);
-        l->setInputPort(QString());
-        l->setOutputPort(QString());
+    applyConfig(m, cfg);
+    updateFlipDetectable();
+    updatePolling();
+    return true;
+}
+
+bool DeviceRouter::configureAll(const Configs &in, Model *a, Model *b)
+{
+    Configs cfgs = in;
+    for (DeviceConfig &c : cfgs)
+        c.channel = qBound(1, c.channel, 16);
+    for (Model m : allModels()) {
+        if (const auto c = findConflict(cfgs, m)) {
+            if (a)
+                *a = m;
+            if (b)
+                *b = c->other;
+            return false;
+        }
     }
+    for (Model m : allModels())
+        if (cfgs[idx(m)] != m_dev[idx(m)].cfg)
+            applyConfig(m, cfgs[idx(m)]);
     updateFlipDetectable();
     updatePolling();
     return true;
@@ -109,7 +180,7 @@ void DeviceRouter::updatePolling()
 {
     bool need = false;
     for (const Dev &d : m_dev)
-        need = need || (d.cfg.enabled && d.link->needsPoll());
+        need = need || (d.cfg.enabled && !d.selfPolled && d.link->needsPoll());
     if (need && !m_timer.isActive())
         m_timer.start();
     else if (!need && m_timer.isActive())
@@ -119,7 +190,7 @@ void DeviceRouter::updatePolling()
 void DeviceRouter::pollNow()
 {
     for (const Dev &d : m_dev) {
-        if (d.cfg.enabled && d.link->needsPoll())
+        if (d.cfg.enabled && !d.selfPolled && d.link->needsPoll())
             d.link->pollNow();
     }
     updatePolling();

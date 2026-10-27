@@ -6,8 +6,10 @@
 #include "app/Screenshot.h"
 #include "core/Library.h"
 #include "core/PatchCatalog.h"
+#include "midi/DeviceRouter.h"
 #include "midi/FakeMidiBackend.h"
 #include "midi/MidiLink.h"
+#include "midi/PortHub.h"
 #include "ui/DisplayWidget.h"
 #include "ui/MainWindow.h"
 #include "ui/PanelButton.h"
@@ -42,6 +44,9 @@ PatchAddress addr(const char *t)
 
 const QString kOut = QStringLiteral("Fake D-05 In");
 const QString kIn = QStringLiteral("Fake D-05 Out");
+// "Fake D-05 In" and "Boutique..." are ports the detection attributes to the D-05 (docs/IDENTIFY.md
+// rule 1), so the D-05 page shows them marked (DESIGN-2.md 7.3).
+const QString kDetected = QStringLiteral(" \u00B7 detected");
 
 AppSettings::Values values(const QString &out, int channel = 1)
 {
@@ -137,15 +142,17 @@ private slots:
         SettingsDialog *d = r.openDialog();
         QVERIFY(d);
         QCOMPARE(d->windowTitle(), QStringLiteral("Settings"));
-        QCOMPARE(d->size(), QSize(520, 436));
+        // DESIGN-2.md 7: 760 x 610, the page at content x 160 (parent coordinates of the page's own widgets).
+        QCOMPARE(d->size(), QSize(760, 610));
         QVERIFY(QTest::qWaitForWindowExposed(d));  // the style sheet is applied by now
-        QCOMPARE(d->outputCombo()->geometry(), QRect(132, 40, 260, 26));
-        QCOMPARE(d->refreshButton()->geometry(), QRect(400, 40, 100, 26));
-        QCOMPARE(d->channelSpin()->geometry(), QRect(132, 74, 72, 26));
-        QCOMPARE(d->inputCombo()->geometry(), QRect(132, 164, 260, 26));
-        QCOMPARE(d->testButton()->geometry(), QRect(20, 388, 100, 28));
-        QCOMPARE(d->okButton()->geometry(), QRect(400, 388, 100, 28));
-        QCOMPARE(d->cancelButton()->geometry(), QRect(292, 388, 100, 28));
+        QCOMPARE(d->currentPage()->pos(), QPoint(180, 20));
+        QCOMPARE(d->outputCombo()->geometry(), QRect(112, 20, 260, 26));
+        QCOMPARE(d->refreshButton()->geometry(), QRect(460, 20, 100, 26));
+        QCOMPARE(d->channelSpin()->geometry(), QRect(112, 54, 72, 26));
+        QCOMPARE(d->inputCombo()->geometry(), QRect(112, 144, 260, 26));
+        QCOMPARE(d->testButton()->geometry(), QRect(20, 562, 100, 28));
+        QCOMPARE(d->okButton()->geometry(), QRect(640, 562, 100, 28));
+        QCOMPARE(d->cancelButton()->geometry(), QRect(532, 562, 100, 28));
         QCOMPARE(d->channelSpin()->minimum(), 1);
         QCOMPARE(d->channelSpin()->maximum(), 16);
         QVERIFY(d->okButton()->isDefault());
@@ -342,7 +349,8 @@ private slots:
         r.backend.setOutputPorts({QStringLiteral("Aardvark"), kOut}, false);
         QTest::mouseClick(d->refreshButton(), Qt::LeftButton);
         QCOMPARE(d->outputCombo()->count(), 2);
-        QCOMPARE(d->outputCombo()->currentText(), kOut);
+        QCOMPARE(d->outputCombo()->currentData().toString(), kOut);
+        QCOMPARE(d->outputCombo()->currentText(), kOut + kDetected);
         d->reject();
     }
 
@@ -351,7 +359,7 @@ private slots:
         Rig r;
         r.backend.setOutputPorts({QStringLiteral("Boutique:Boutique MIDI 1 24:0"), kOut}, false);
         SettingsDialog *d = r.openDialog();
-        const int i = d->outputCombo()->findText(QStringLiteral("Boutique:Boutique MIDI 1"));
+        const int i = d->outputCombo()->findText(QStringLiteral("Boutique:Boutique MIDI 1") + kDetected);
         QVERIFY(i >= 0);
         d->outputCombo()->setCurrentIndex(i);
         QCOMPARE(d->values().outputPort, QStringLiteral("Boutique:Boutique MIDI 1"));
@@ -403,8 +411,8 @@ private slots:
         QVERIFY(d);
         QComboBox *c = d->outputCombo();
         QCOMPARE(c->count(), 3);
-        QCOMPARE(c->itemText(0), a);  // ambiguous: full names
-        QCOMPARE(c->itemText(1), b);
+        QCOMPARE(c->itemText(0), a + kDetected);  // ambiguous: full names
+        QCOMPARE(c->itemText(1), b + kDetected);
         QCOMPARE(c->itemText(2), QStringLiteral("Other:Port 1"));  // unique: stripped key
         c->setCurrentIndex(1);
         QCOMPARE(d->values().outputPort, b);
@@ -483,17 +491,17 @@ private slots:
         QImage img;
         QVERIFY(img.load(o.screenshotFile));
         const qreal dpr = qApp->devicePixelRatio();
-        QCOMPARE(img.width(), int(520 * dpr));
-        QCOMPARE(img.height(), int(436 * dpr));
+        QCOMPARE(img.width(), int(760 * dpr));
+        QCOMPARE(img.height(), int(610 * dpr));
         Paths::setOverride(QString());
     }
 
     void dialogButtonsUsePanelLabelFontAndRefreshIs26High()
     {
         FakeMidiBackend backend;
-        MidiLink link(&backend);
-        AppSettings::Values v;
-        SettingsDialog d(link, v);
+        PortHub hub(&backend);
+        DeviceRouter router(&hub);
+        SettingsDialog d(router, SettingsDialog::State(), Model::D05, nullptr, false);
         d.show();
         QApplication::processEvents();
         const QFont want = Theme::font(Theme::Role::PanelLabel);
@@ -504,7 +512,7 @@ private slots:
         const auto painted = [&](QPushButton *b) {
             const QImage img = d.grab().toImage();
             const qreal dpr = img.devicePixelRatio();
-            const QRect r = b->geometry();
+            const QRect r(b->mapTo(&d, QPoint()), b->size());  // the page's widgets are in page coordinates
             const int x = int((r.x() + r.width() / 2) * dpr);
             const QColor bg = img.pixelColor(x, int((r.y() - 6) * dpr));
             int first = -1, last = -1;

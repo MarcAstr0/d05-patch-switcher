@@ -3,6 +3,8 @@
 #include <QPixmap>
 #include <QWidget>
 
+class QPainter;
+
 namespace d05 {
 
 // The nameplate slot (DESIGN.md 4.5, SPEC FR-14): the owner's logo.png when the file
@@ -31,6 +33,12 @@ protected:
     void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     bool event(QEvent *event) override;
+
+    // The plate: the logo, or the wordmark and, when `withSub`, the divider and the skin's sub
+    // line. Returns the plate's right edge (the logo's width, or the wordmark's advance).
+    int paintPlate(QPainter &p, bool withSub);
+    // Where the plate ends in the current skin (the DeviceSwitcher's divider is 14 px after it).
+    int plateRight() const;
 
 private:
     void rescale();

@@ -113,22 +113,35 @@ bool Nameplate::event(QEvent *e)
     return r;
 }
 
-void Nameplate::paintEvent(QPaintEvent *)
+int Nameplate::plateRight() const
 {
-    QPainter p(this);
+    return hasLogo() ? logoSize().width() : m_wordmarkAdvance;
+}
+
+int Nameplate::paintPlate(QPainter &p, bool withSub)
+{
     if (hasLogo()) {
         const QSize s = logoSize();
         p.drawPixmap(QPoint(0, (SlotHeight - s.height()) / 2), m_scaled);
-        return;
+        return s.width();
     }
     p.setFont(m_wordFont);
     p.setPen(Theme::wordmarkColour());
     p.drawText(QPoint(0, 20), wordmarkText());
-    const int ruleX = m_wordmarkAdvance + 14;
-    p.fillRect(QRect(ruleX, 9, 1, 12), Theme::colors().ruleSecondary);
-    p.setFont(m_subFont);
-    p.setPen(Theme::colors().labelSecondary);
-    p.drawText(QPoint(ruleX + 15, 20), m_subText);
+    if (withSub) {
+        const int ruleX = m_wordmarkAdvance + 14;
+        p.fillRect(QRect(ruleX, 9, 1, 12), Theme::colors().ruleSecondary);
+        p.setFont(m_subFont);
+        p.setPen(Theme::colors().labelSecondary);
+        p.drawText(QPoint(ruleX + 15, 20), m_subText);
+    }
+    return m_wordmarkAdvance;
+}
+
+void Nameplate::paintEvent(QPaintEvent *)
+{
+    QPainter p(this);
+    paintPlate(p, true);
 }
 
 }  // namespace d05

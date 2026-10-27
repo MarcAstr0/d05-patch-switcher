@@ -561,6 +561,118 @@ private slots:
         a.follow = b.follow = true;
         QVERIFY(!r.router.conflict(Model::D05, Rig::cfg(3, true, n3.toLatin1().constData())).has_value());
     }
+
+    // ------------------------------------------------------------------ T8.2 additions
+
+    void findConflictOverAPendingSetReportsTheLaterDeviceOnly()
+    {
+        DeviceRouter::Configs set;
+        set[0] = Rig::cfg(3, false);  // D-05
+        set[1] = Rig::cfg(3, false);  // JP-08: same port and channel
+        set[2] = Rig::cfg(4, false);
+        const auto both = DeviceRouter::findConflict(set, Model::D05);
+        QVERIFY(both && both->other == Model::JP08 && !both->input);
+        // earlierOnly: the D-05 reports nothing, the JP-08 names the D-05.
+        QVERIFY(!DeviceRouter::findConflict(set, Model::D05, true));
+        const auto later = DeviceRouter::findConflict(set, Model::JP08, true);
+        QVERIFY(later && later->other == Model::D05 && !later->input);
+        QVERIFY(!DeviceRouter::findConflict(set, Model::JU06A, true));
+        // Inputs: only when both follow.
+        set[1] = Rig::cfg(3, true, "Other");
+        set[0] = Rig::cfg(3, true);
+        set[1].outputPort = S("Elsewhere");
+        set[1].inputPort = set[0].inputPort;
+        const auto input = DeviceRouter::findConflict(set, Model::JP08, true);
+        QVERIFY(input && input->other == Model::D05 && input->input);
+        set[1].follow = false;
+        QVERIFY(!DeviceRouter::findConflict(set, Model::JP08, true));
+        set[1].follow = true;
+        set[1].enabled = false;  // a disabled device never conflicts, either way
+        QVERIFY(!DeviceRouter::findConflict(set, Model::JP08, true));
+        QVERIFY(!DeviceRouter::findConflict(set, Model::D05));
+    }
+
+    void configureAllAppliesASwapAndRefusesAConflict()
+    {
+        Rig r;
+        r.configureAll(false);  // D-05 1, JP-08 3, JU-06A 5, one port
+        DeviceRouter::Configs swap;
+        for (Model m : allModels())
+            swap[int(m)] = r.router.config(m);
+        std::swap(swap[0].channel, swap[1].channel);  // D-05 3, JP-08 1: one at a time each would collide
+        Model a = Model::JU06A, b = Model::JU06A;
+        QVERIFY(!r.router.configure(Model::D05, swap[0], &a));  // (what configureAll avoids)
+        QVERIFY(r.router.configureAll(swap, &a, &b));
+        QCOMPARE(r.router.config(Model::D05).channel, 3);
+        QCOMPARE(r.router.config(Model::JP08).channel, 1);
+        QCOMPARE(r.router.link(Model::D05)->channel(), 3);
+        QCOMPARE(r.router.link(Model::JP08)->channel(), 1);
+        // A set with a conflict changes nothing and names the pair.
+        DeviceRouter::Configs bad = swap;
+        bad[2].channel = 3;  // the JU-06A on the D-05's channel and port
+        QVERIFY(!r.router.configureAll(bad, &a, &b));
+        QCOMPARE(a, Model::D05);
+        QCOMPARE(b, Model::JU06A);
+        QCOMPARE(r.router.config(Model::JU06A).channel, 5);
+        // Turning a device off in the set closes its ports.
+        DeviceRouter::Configs off = swap;
+        off[1].enabled = false;
+        QVERIFY(r.router.configureAll(off));
+        QVERIFY(!r.router.isEnabled(Model::JP08));
+        QVERIFY(!r.router.link(Model::JP08)->isConnected());
+        QVERIFY(r.router.link(Model::D05)->isConnected());  // untouched
+    }
+
+    void reapplyingAnUnchangedConfigurationReopensNothing()
+    {
+        Rig r;
+        r.configureAll(true);
+        FakeMidiBackend *f = r.fake();
+        const int in = r.hub.openInputCount(), out = r.hub.openOutputCount();
+        QSignalSpy status(r.router.link(Model::JP08), &MidiLink::statusChanged);
+        QSignalSpy inputStatus(r.router.link(Model::JP08), &MidiLink::inputStatusChanged);
+        DeviceRouter::Configs same;
+        for (Model m : allModels())
+            same[int(m)] = r.router.config(m);
+        QVERIFY(r.router.configureAll(same));
+        QVERIFY(r.router.configure(Model::JP08, same[1]));
+        QCOMPARE(r.hub.openInputCount(), in);
+        QCOMPARE(r.hub.openOutputCount(), out);
+        QCOMPARE(status.count(), 0);
+        QCOMPARE(inputStatus.count(), 0);
+        QVERIFY(r.router.link(Model::JP08)->isConnected() && r.router.link(Model::JP08)->inputConnected());
+        Q_UNUSED(f);
+        // A port that is not open is tried again, as the poll would.
+        Rig m;
+        auto missing = Rig::cfg(3, false, "Nowhere");
+        QVERIFY(m.router.configure(Model::JP08, missing));
+        QVERIFY(!m.router.link(Model::JP08)->isConnected());
+        m.outs << S("Nowhere");
+        for (FakeMidiBackend *b : m.fakes)
+            b->setOutputPorts(m.outs, false);
+        QVERIFY(m.router.configure(Model::JP08, missing));
+        QVERIFY(m.router.link(Model::JP08)->isConnected());
+    }
+
+    void anAdoptedD05LinkIsEnabledAndPollsItself()
+    {
+        FakeMidiBackend backend;
+        MidiLink link(&backend);
+        link.setChannel(7);
+        link.setOutputPort(S("Fake D-05 In"));
+        PortHub hub([]() -> MidiBackend * { return nullptr; });
+        DeviceRouter router(&hub, nullptr, &link);
+        QVERIFY(router.link(Model::D05) == &link);
+        QVERIFY(router.isEnabled(Model::D05));
+        QCOMPARE(router.config(Model::D05).channel, 7);
+        QCOMPARE(router.config(Model::D05).outputPort, S("Fake D-05 In"));
+        QVERIFY(!router.isEnabled(Model::JP08) && !router.isEnabled(Model::JU06A));
+        // A missing port: the link's own timer polls, the router starts no second one.
+        link.setOutputPort(S("Nowhere"));
+        QVERIFY(link.isPolling());
+        QVERIFY(!router.isPolling());
+        QVERIFY(!router.allConnected());
+    }
 };
 
 QTEST_MAIN(TestDeviceRouter)

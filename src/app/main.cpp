@@ -8,10 +8,12 @@
 #include "app/Screenshot.h"
 #include "core/Library.h"
 #include "core/PatchCatalog.h"
+#include "midi/DeviceRouter.h"
 #include "midi/FakeMidiBackend.h"
 #include "midi/MidiBackend.h"
 #include "midi/RtMidiBackend.h"
 #include "midi/MidiLink.h"
+#include "midi/PortHub.h"
 #include "ui/MainWindow.h"
 #include "ui/Theme.h"
 
@@ -160,15 +162,22 @@ int main(int argc, char *argv[])
         const int rc = d05::runScreenshot(opts);
         return rc != 0 ? rc : (themeOk ? 0 : 1);
     }
-    // Backend, link and library outlive the window (declared first, destroyed last);
-    // the library flushes pending changes in its destructor.
-    std::unique_ptr<d05::MidiBackend> backend;
-    if (opts.fakeMidi) {
-        auto fake = std::make_unique<d05::FakeMidiBackend>();
-        fake->setPrintSent(true);  // FR-15: bytes to stderr
-        backend = std::move(fake);
-    } else
-        backend = std::make_unique<d05::RtMidiBackend>();
+    // The hub, the router and the library outlive the window (declared first, destroyed last); the
+    // library flushes pending changes in its destructor. The hub makes one backend per OS port, as
+    // many as the enabled devices need (SPEC-2 section 7).
+    const bool fake = opts.fakeMidi;
+    d05::PortHub hub([fake]() -> d05::MidiBackend * {
+        try {
+            if (fake) {
+                auto *f = new d05::FakeMidiBackend;
+                f->setPrintSent(true);  // FR-15: bytes to stderr
+                return f;
+            }
+            return new d05::RtMidiBackend;
+        } catch (...) {
+            return nullptr;  // the hub reports it as a port error
+        }
+    });
     // First start after the rename: copy, never move. On failure this session uses a throwaway
     // directory so nothing blocks the retry on the next start.
     const bool migrationFailed =
@@ -178,19 +187,29 @@ int main(int argc, char *argv[])
     d05::PatchCatalog catalog;
     d05::Library library(catalog, d05::Paths::libraryPath());
     const d05::Library::LoadResult loaded = library.load();
-    d05::MidiLink link(backend.get());
+    d05::DeviceRouter router(&hub);
     d05::AppSettings settings;
-    // The window connects to the link first, so a port error at startup shows its text.
-    d05::MainWindow window(catalog, library, link);
-    window.setServices(&settings);
-    // The fake backend's ports are not the user's: keep them out of the real settings file.
+    d05::MainWindow window(catalog, library, router);
+    // The fake backend's ports are not the user's: keep them out of the real settings file, and its
+    // names are not ALSA clients for the detection to look up.
     window.setPersistPorts(!(opts.fakeMidi && opts.configDir.isEmpty()));
-    // The patch the app last showed comes back without sending anything, so resend-on-connect
-    // resends the right one. Then the saved settings take effect; --port, --in-port and
-    // --channel override them for this run only and are never written back.
+    window.setSystemLookup(!opts.fakeMidi);
+    // The patch each device last showed comes back without sending anything, so resend-on-connect
+    // resends the right one. Then the saved settings take effect; --device, --port, --in-port and
+    // --channel override them for this run only and are never written back. The window is not yet
+    // given the settings, so nothing of this is saved.
     if (const auto last = settings.lastPatch())
         window.setCurrent(*last);
-    window.applySettings(d05::Cli::startupValues(settings, opts));
+    for (const d05::Model m : {d05::Model::JP08, d05::Model::JU06A})
+        if (const auto last = settings.lastPatch(m))
+            router.link(m)->setCurrent(*last);
+    const d05::Cli::Startup start = d05::Cli::startup(settings, opts);
+    router.setJu06aState(start.engine, start.remembered60, start.remembered106);
+    window.applyGlobal(start.autoSend, start.followSwitches);
+    for (const d05::Model m : d05::allModels())
+        window.applyDevice(m, start.devices[int(m)]);
+    window.switchDevice(start.current);
+    window.setServices(&settings);
     window.restoreGeometry(settings.windowGeometry());
     if (loaded == d05::Library::LoadResult::Recovered)
         window.showMessage(QStringLiteral("Library file was damaged; started a fresh one"));

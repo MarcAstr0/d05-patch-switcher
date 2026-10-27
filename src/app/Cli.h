@@ -3,6 +3,8 @@
 #include "app/AppSettings.h"
 #include "core/Model.h"
 
+#include <array>
+
 #include <QSize>
 #include <QString>
 #include <QStringList>
@@ -18,7 +20,7 @@ struct CliOptions {
     bool fakeMidi = false;
     bool hasSend = false;
     bool identify = false;     // --identify
-    Model device = Model::D05;  // --device (default d05; the saved current device arrives with M8)
+    Model device = Model::D05;  // --device; when absent (hasDevice false) the saved current device, else d05
     bool hasDevice = false;
     int engine = 0;            // --engine 60|106 (JU-06A only); 0 = not given
     QString sendAddress;
@@ -66,7 +68,26 @@ int runListPorts(MidiBackend &backend, QTextStream &out, QTextStream &err);
 // (the fake backend's names are not ALSA clients). Exit::Ok or Exit::MidiError.
 int runIdentify(MidiBackend &backend, QTextStream &out, QTextStream &err, bool systemLookup = true);
 
-// The settings this run starts with (FR-15): the saved values, with --port, --in-port and
+// What a GUI run starts with (FR-15, SPEC-2 3.4): the saved devices, with --port, --in-port and
+// --channel overriding the device named by --device (default: the saved current device, else the
+// D-05) for this run only. An override, or --device itself, turns that device on for the run; with
+// --fake-midi and no --port its output is the fake backend's "Fake D-05 In". Nothing is written:
+// overrides are never persisted. `current` is the device the window shows first: --device, else the
+// saved current device when it is enabled, else the first enabled one, else the D-05.
+struct Startup {
+    std::array<AppSettings::DeviceValues, 3> devices;
+    Model current = Model::D05;
+    bool autoSend = false;
+    bool followSwitches = true;
+    // The JU-06A's believed engine (--engine, else the saved one) and its remembered programs
+    // (-1 = unknown).
+    int engine = 60;
+    int remembered60 = -1;
+    int remembered106 = -1;
+};
+Startup startup(const AppSettings &saved, const CliOptions &opts);
+
+// The settings this run starts with (FR-15), the D-05 only (version 1 form of startup()): the saved values, with --port, --in-port and
 // --channel overriding them for this run only. With --fake-midi and no --port the output
 // is the fake backend's "Fake D-05 In" (a saved real port cannot exist there). Nothing is
 // written: overrides are never persisted.
@@ -77,8 +98,10 @@ AppSettings::Values startupValues(const AppSettings &saved, const CliOptions &op
 // the three messages in hex on `out`. Returns an Exit code; diagnostics on `err`.
 // When --port / --channel are absent the saved port and channel (`saved`, may be null)
 // are used; the port falls back to the saved one except with --fake-midi. The saved values
-// are the D-05's: until per-device settings exist (M8), --device jp08 and ju06a need --port
-// (and --channel, checked by parse()), and a JU-06A needs --engine (exit 1 when it is missing).
+// are the device's own (--device, else the saved current device, else the D-05): its saved port,
+// channel and, for the JU-06A, engine. A device with no saved channel needs --channel (exit 64; the
+// D-05 and --fake-midi default to channel 1), and a JU-06A with no --engine and no saved engine
+// exits 1 with a message (the unit cannot be asked).
 // Address forms per model: P3-45 | 4-5 | 106:4-5 (bare 4-5 takes --engine). A JU-06A address of
 // the other engine than --engine sends nothing and returns Exit::EngineMismatch.
 int runSend(const CliOptions &opts, MidiBackend &backend, QTextStream &out, QTextStream &err,

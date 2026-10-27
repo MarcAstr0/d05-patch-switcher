@@ -4,8 +4,10 @@
 #include "core/Library.h"
 #include "core/PatchCatalog.h"
 #include "core/SearchQuery.h"
+#include "midi/DeviceRouter.h"
 #include "midi/FakeMidiBackend.h"
 #include "midi/MidiLink.h"
+#include "midi/PortHub.h"
 #include "ui/BankGrid.h"
 #include "ui/DisplayWidget.h"
 #include "ui/LedDisplayWidget.h"
@@ -143,19 +145,47 @@ int runScreenshot(const CliOptions &opts)
     }
 
     FakeMidiBackend backend;
-    MidiLink link(&backend);
-    link.setChannel(1);
+    PortHub hub(&backend);
+    DeviceRouter router(&hub);
     // "disconnected" asks for a port the fake does not have, as the mockup's "Hapax MIDI 1".
     const bool disconnected = state == QLatin1String("disconnected");
-    // "firstrun" has no port configured at all: line 2 shows the OPEN SETTINGS hint.
-    if (state != QLatin1String("firstrun"))
-        link.setOutputPort(disconnected ? QStringLiteral("Hapax MIDI 1") : QStringLiteral("Fake D-05 In"));
+    const bool devices = state == QLatin1String("devices");
+    const bool settingsDevices = state == QLatin1String("settings-devices");
+    if (settingsDevices)  // ports the detection knows (docs/IDENTIFY.md rule 1)
+        backend.setOutputPorts({QStringLiteral("JU-06A")});
+    if (settingsDevices)
+        backend.setInputPorts({QStringLiteral("JU-06A")});
 
     PatchAddress current = *PatchAddress::parse(QStringLiteral("P1-11"));
     if (state == QLatin1String("recents") && !library.recents().isEmpty())
         current = library.recents().first().address;
 
-    MainWindow window(catalog, library, link);
+    MainWindow window(catalog, library, router);
+    window.setSystemLookup(false);  // the fake backend's names are not ALSA clients
+    // The D-05 as version 1 had it: one device, on the fake port ("firstrun" has none configured at
+    // all: line 2 shows the OPEN SETTINGS hint; "disconnected" wants a port the fake does not have).
+    {
+        AppSettings::DeviceValues d05;
+        d05.enabled = true;
+        d05.channel = 1;
+        if (state != QLatin1String("firstrun"))
+            d05.outputPort = disconnected ? QStringLiteral("Hapax MIDI 1") : QStringLiteral("Fake D-05 In");
+        window.applyDevice(Model::D05, d05);
+    }
+    if (devices) {
+        // DESIGN-2.md 10, mockup-devices.png: the D-05 current, the JP-08 connected on the same port
+        // (a forwarder: another channel), the JU-06A's port missing (red).
+        AppSettings::DeviceValues jp08;
+        jp08.enabled = true;
+        jp08.channel = 5;
+        jp08.outputPort = QStringLiteral("Fake D-05 In");
+        window.applyDevice(Model::JP08, jp08);
+        AppSettings::DeviceValues ju;
+        ju.enabled = true;
+        ju.channel = 4;
+        ju.outputPort = QStringLiteral("Hapax MIDI 1");
+        window.applyDevice(Model::JU06A, ju);
+    }
     window.setCurrent(current);
     if (state == QLatin1String("search")) {
         window.searchField()->setText(QStringLiteral("brass"));
@@ -169,19 +199,38 @@ int runScreenshot(const CliOptions &opts)
         window.list()->setFocus();  // the mockup's second frame has the list focused
     }
 
-    if (state == QLatin1String("settings") || state == QLatin1String("settings-error")
-        || state == QLatin1String("settings-devices")) {
-        // The dialog alone, as in docs/design/mockup-settings.png: the fake output open, no
-        // input, channel 1, resend-on-connect on. The error variant asks for a port the fake
-        // does not have: "Port not found", TEST disabled. settings-devices is, until T8.2 adds
-        // the device list and pages (DESIGN-2.md 7), this same version 1 dialog in the JU-06A
-        // JUNO-106 skin; `devices` below is likewise the plain D-05 window until the switcher
-        // (DESIGN-2.md 4.4) exists.
-        AppSettings::Values values;
-        values.outputPort = state == QLatin1String("settings-error") ? QStringLiteral("Hapax MIDI 1")
-                                                                     : QStringLiteral("Fake D-05 In");
-        values.resendOnConnect = true;
-        SettingsDialog dialog(link, values);
+    if (state == QLatin1String("settings") || state == QLatin1String("settings-error") || settingsDevices) {
+        // The dialog alone, as in docs/design/mockup-settings.png (the D-05 page: the fake output
+        // open, no input, channel 1, resend-on-connect on; the error variant asks for a port the
+        // fake does not have: "Port not found", TEST disabled) and docs/design/mockup-settings-devices.png
+        // (the JU-06A page in the JUNO-106 skin: detected ports, engine information, the JP-08 off).
+        SettingsDialog::State st;
+        Model shown = Model::D05;
+        if (settingsDevices) {
+            shown = Model::JU06A;
+            AppSettings::DeviceValues d05;
+            d05.enabled = true;
+            d05.channel = 3;
+            d05.outputPort = QStringLiteral("JU-06A");
+            AppSettings::DeviceValues ju;
+            ju.enabled = true;
+            ju.channel = 4;
+            ju.outputPort = QStringLiteral("JU-06A");
+            ju.inputPort = QStringLiteral("JU-06A");
+            ju.follow = true;
+            st.devices[int(Model::D05)] = d05;
+            st.devices[int(Model::JU06A)] = ju;
+            st.followSwitches = true;
+            router.setJu06aState(106, 28, 0);  // 60: 4-5, 106: 1-1
+        } else {
+            AppSettings::DeviceValues d05;
+            d05.enabled = true;
+            d05.outputPort = state == QLatin1String("settings-error") ? QStringLiteral("Hapax MIDI 1")
+                                                                      : QStringLiteral("Fake D-05 In");
+            d05.resendOnConnect = true;
+            st.devices[int(Model::D05)] = d05;
+        }
+        SettingsDialog dialog(router, st, shown, nullptr, false);
         dialog.show();
         dialog.activateWindow();
         QApplication::processEvents();

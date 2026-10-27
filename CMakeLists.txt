@@ -73,11 +73,14 @@ qt_add_library(d05ui STATIC
     src/ui/PanelButton.h    src/ui/PanelButton.cpp
     src/ui/PanelButtonField.h src/ui/PanelButtonField.cpp
     src/ui/Nameplate.h      src/ui/Nameplate.cpp
+    src/ui/DeviceSwitcher.h src/ui/DeviceSwitcher.cpp
     src/ui/GroupBar.h       src/ui/GroupBar.cpp
     src/ui/BankGrid.h       src/ui/BankGrid.cpp
     src/ui/PatchListModel.h src/ui/PatchListModel.cpp
     src/ui/PatchDelegate.h  src/ui/PatchDelegate.cpp
     src/ui/PatchListView.h  src/ui/PatchListView.cpp
+    src/ui/DeviceListWidget.h src/ui/DeviceListWidget.cpp
+    src/ui/DevicePage.h     src/ui/DevicePage.cpp
     src/ui/SettingsDialog.h src/ui/SettingsDialog.cpp
     src/ui/Shortcuts.h      src/ui/Shortcuts.cpp
     src/ui/ShortcutsDialog.h src/ui/ShortcutsDialog.cpp

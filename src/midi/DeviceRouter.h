@@ -33,10 +33,23 @@ public:
         int channel = 1;
         bool follow = false;
         bool resendOnConnect = false;  // kept for the UI; the router does not act on it
-    };
 
-    // `hub` must outlive the router. All three devices start disabled, D-05 current.
-    explicit DeviceRouter(PortHub *hub, QObject *parent = nullptr);
+        bool operator==(const DeviceConfig &o) const
+        {
+            return enabled == o.enabled && outputPort == o.outputPort && inputPort == o.inputPort
+                   && channel == o.channel && follow == o.follow && resendOnConnect == o.resendOnConnect;
+        }
+        bool operator!=(const DeviceConfig &o) const { return !(*this == o); }
+    };
+    using Configs = std::array<DeviceConfig, 3>;  // in Model order: D-05, JP-08, JU-06A
+
+    // `hub` must outlive the router. All three devices start disabled, D-05 current. `d05Link`
+    // (not owned, must outlive the router) is the version 1 form of the D-05 link on its own
+    // private hub; the router then uses it instead of making one on `hub`, treats the D-05 as
+    // enabled with the link's current port, channel and follow settings, and leaves the polling of
+    // that link to the link itself (its own 2 s timer). For code that already holds such a link
+    // (the tests of the single-device window).
+    explicit DeviceRouter(PortHub *hub, QObject *parent = nullptr, MidiLink *d05Link = nullptr);
 
     MidiLink *link(Model m) { return m_dev[idx(m)].link; }
     const MidiLink *link(Model m) const { return m_dev[idx(m)].link; }
@@ -47,10 +60,24 @@ public:
     // The enabled device that would collide with `cfg` for `m` (same output port and channel, or
     // same input port and channel with follow on in both), if any. Disabled configs never conflict.
     std::optional<Model> conflict(Model m, const DeviceConfig &cfg) const;
+    // The same rule over a whole set of pending configurations (the Settings dialog): what device
+    // `m` collides with, and whether it is the output or the input that collides. With
+    // `earlierOnly` only devices before `m` in Model order count, so that of two devices exactly
+    // one (the later one) reports the conflict.
+    struct Conflict {
+        Model other = Model::D05;
+        bool input = false;  // false: same output port and channel; true: same input port and channel
+    };
+    static std::optional<Conflict> findConflict(const Configs &cfgs, Model m, bool earlierOnly = false);
     // Applies `cfg` to device `m`: refused (false, nothing changed, *conflicting set) on a conflict.
     // A disabled device has its ports closed. Opens ports immediately; failures show in the link's
     // status and start the poll.
     bool configure(Model m, const DeviceConfig &cfg, Model *conflicting = nullptr);
+    // Applies a whole set at once: refused (false, nothing changed, *a and *b the colliding pair)
+    // when the set has a conflict, otherwise every device whose configuration changed is applied.
+    // Unlike configure() one by one, a swap of channels between two devices is not refused for the
+    // moment in between.
+    bool configureAll(const Configs &cfgs, Model *a = nullptr, Model *b = nullptr);
     DeviceConfig config(Model m) const { return m_dev[idx(m)].cfg; }
     bool isEnabled(Model m) const { return m_dev[idx(m)].cfg.enabled; }
     // JU-06A persisted state (SPEC-2 section 6): loads the tracker and the link's engine.
@@ -95,9 +122,12 @@ private:
     struct Dev {
         MidiLink *link = nullptr;
         DeviceConfig cfg;
+        bool selfPolled = false;  // an adopted link: it polls itself, the router's timer skips it
     };
     static constexpr int idx(Model m) { return int(m); }
     static bool samePort(const QString &a, const QString &b);
+    void applyConfig(Model m, const DeviceConfig &cfg);
+    static bool sameOutput(const MidiLink *l, const QString &port);
     void updatePolling();
     void updateFlipDetectable();
     void onFollowEvent(Model m);

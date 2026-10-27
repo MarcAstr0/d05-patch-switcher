@@ -219,6 +219,11 @@ private slots:
         QCOMPARE(Cli::parse(argv({"--device", "JP08", "--channel", "5", "--send", "4-5"}), &o, &msg, &code),
                  Cli::ParseStatus::Run);
         QCOMPARE(o.device, Model::JP08);
+        // The channel (and the port) may come from the saved settings: parse() no longer insists on --channel.
+        QCOMPARE(Cli::parse(argv({"--device", "jp08", "--send", "4-5"}), &o, &msg, &code), Cli::ParseStatus::Run);
+        QVERIFY(o.hasDevice && o.channel == 0);
+        QCOMPARE(Cli::parse(argv({"--send", "P1-11"}), &o, &msg, &code), Cli::ParseStatus::Run);
+        QVERIFY(!o.hasDevice);  // no --device: the saved current device, else the D-05
         QCOMPARE(Cli::parse(argv({"--identify"}), &o, &msg, &code), Cli::ParseStatus::Run);
         QVERIFY(o.identify && o.headless());
         QCOMPARE(Cli::parse(argv({"--send", "P1-11"}), &o, &msg, &code), Cli::ParseStatus::Run);
@@ -233,7 +238,6 @@ private slots:
         QTest::newRow("engine with d05") << argv({"--device", "d05", "--engine", "60"});
         QTest::newRow("engine with jp08") << argv({"--device", "jp08", "--engine", "60"});
         QTest::newRow("engine 61") << argv({"--device", "ju06a", "--engine", "61"});
-        QTest::newRow("jp08 send needs channel") << argv({"--device", "jp08", "--port", "x", "--send", "4-5"});
         QTest::newRow("identify with screenshot") << argv({"--identify", "--screenshot", "a.png"});
     }
     void deviceUsageErrors()
