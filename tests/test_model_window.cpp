@@ -23,6 +23,7 @@
 #include "ui/PatchDelegate.h"
 #include "ui/PatchListModel.h"
 #include "ui/PatchListView.h"
+#include "ui/SettingsDialog.h"
 #include "ui/Shortcuts.h"
 #include "ui/Theme.h"
 
@@ -174,7 +175,11 @@ struct Rig {
 class TestModelWindow : public QObject {
     Q_OBJECT
 private slots:
-    void initTestCase() { Theme::install(*qobject_cast<QApplication *>(qApp)); }
+    void initTestCase()
+    {
+        QApplication::setCursorFlashTime(0);  // as main() does: the caret timer is not a paint
+        Theme::install(*qobject_cast<QApplication *>(qApp));
+    }
     void init() { Theme::setSkin(QStringLiteral("d05")); }
     void cleanup() { Theme::setSkin(QStringLiteral("d05")); }
 
@@ -793,6 +798,205 @@ private slots:
         r.w->close();
         QCOMPARE(AppSettings(r.iniPath).lastPatch(Model::JP08).value(), jp("6-4"));
         QCOMPARE(AppSettings(r.iniPath).currentDevice().value_or(Model::D05), Model::JP08);
+    }
+
+
+    // ------------------------------------------------------------------ review fixes (T8.3)
+
+    // One paint per widget per device switch, over a long varied sequence; hidden widgets paint 0.
+    void aDeviceSwitchPaintsEachWidgetOnceInAnyOrder()
+    {
+        Rig r(true, true, true);
+        QVERIFY(r.show());
+        QTest::qWait(80);
+        const Model seq[] = {Model::JP08, Model::JU06A, Model::D05,   Model::JU06A, Model::JP08, Model::D05,
+                             Model::JP08, Model::JU06A, Model::JP08,  Model::D05,   Model::JU06A, Model::D05};
+        for (const Model to : seq) {
+            PaintCounter win, list, prev, plate, leds, lcd, grid;
+            QWidget *w = r.w.get();
+            w->installEventFilter(&win);
+            r.w->list()->viewport()->installEventFilter(&list);
+            r.w->prevButton()->installEventFilter(&prev);
+            r.w->nameplate()->installEventFilter(&plate);
+            r.w->ledDisplay()->installEventFilter(&leds);
+            r.w->display()->installEventFilter(&lcd);
+            r.w->bankGrid()->installEventFilter(&grid);
+            r.w->switchDevice(to);
+            QTest::qWait(60);
+            const bool led = to != Model::D05;
+            const QString what = QString::number(int(to));
+            QVERIFY2(win.paints == 1, qPrintable(S("window ") + what + S(": ") + QString::number(win.paints)));
+            QVERIFY2(list.paints == 1, qPrintable(S("list ") + what + S(": ") + QString::number(list.paints)));
+            QVERIFY2(prev.paints == 1, qPrintable(S("prev ") + what + S(": ") + QString::number(prev.paints)));
+            QVERIFY2(plate.paints == 1, qPrintable(S("plate ") + what + S(": ") + QString::number(plate.paints)));
+            QVERIFY2(grid.paints == 1, qPrintable(S("grid ") + what + S(": ") + QString::number(grid.paints)));
+            QVERIFY2((led ? leds.paints : lcd.paints) == 1, qPrintable(S("display ") + what));
+            QVERIFY2((led ? lcd.paints : leds.paints) == 0, qPrintable(S("hidden display ") + what));
+            w->removeEventFilter(&win);
+            r.w->list()->viewport()->removeEventFilter(&list);
+            r.w->prevButton()->removeEventFilter(&prev);
+            r.w->nameplate()->removeEventFilter(&plate);
+            r.w->ledDisplay()->removeEventFilter(&leds);
+            r.w->display()->removeEventFilter(&lcd);
+            r.w->bankGrid()->removeEventFilter(&grid);
+        }
+    }
+
+    void autoSendOnSendsNothingOnADeviceSwitch()
+    {
+        Rig r(true, true, true);
+        QVERIFY(r.show());
+        r.w->setAutoSend(true);
+        r.clearSent();
+        r.w->switchDevice(Model::JP08);
+        r.w->switchDevice(Model::JU06A);
+        r.w->switchDevice(Model::D05);
+        QVERIFY(r.sent().isEmpty());
+    }
+
+    void renamingAJp08SlotLeavesTheSameIndexOfTheOtherModelsAlone()
+    {
+        Rig r(true, true, true);
+        QVERIFY(r.show());
+        r.w->switchDevice(Model::JP08);
+        r.w->list()->setFocus();
+        r.w->list()->setCurrentIndex(r.w->model()->indexOf(jp("3-4")));  // catalogue index 20
+        QTest::keyClick(r.w.get(), Qt::Key_F2);
+        auto *editor = r.w->list()->findChild<QLineEdit *>(S("nameEditor"));
+        QVERIFY(editor);
+        QTest::keyClicks(editor, S("CN Only Jp"));
+        QTest::keyClick(editor, Qt::Key_Return);
+        QTRY_COMPARE(r.library->catalog(Model::JP08).userName(jp("3-4")), S("CN Only Jp"));
+        const int idx = jp("3-4").catalogueIndex();
+        const auto untouched = [idx](Library &lib, const PatchCatalog &d05) {
+            QVERIFY(d05.userName(*PatchAddress::fromCatalogueIndex(idx)).isEmpty());
+            const PatchCatalog &ju = lib.catalog(Model::JU06A);
+            QVERIFY(ju.userName(*PatchAddress::fromCatalogueIndex(Model::JU06A, idx)).isEmpty());
+            QVERIFY(ju.userName(*PatchAddress::fromCatalogueIndex(Model::JU06A, idx % 64)).isEmpty());
+            QVERIFY(ju.userName(*PatchAddress::fromCatalogueIndex(Model::JU06A, 64 + idx % 64)).isEmpty());
+        };
+        untouched(*r.library, r.catalog);
+        // Saved and reloaded, through the Library.
+        QVERIFY(r.library->flush());
+        PatchCatalog cat2;
+        Library lib2(cat2, r.dir.filePath(QStringLiteral("library.json")));
+        lib2.load();
+        QCOMPARE(lib2.catalog(Model::JP08).userName(jp("3-4")), S("CN Only Jp"));
+        untouched(lib2, cat2);
+    }
+
+    void ctrlEDuringAGridEntryEndsTheEntryProperly()
+    {
+        Rig r;
+        r.router->setJu06aState(60, 28, 48);
+        QVERIFY(r.show());
+        r.w->bankGrid()->pressBank(2);
+        QVERIFY(r.w->bankGrid()->stage() != BankGrid::Stage::Idle);
+        QSignalSpy spy(r.w->bankGrid(), &BankGrid::entryChanged);
+        QTest::keyClick(r.w.get(), Qt::Key_E, Qt::ControlModifier);
+        QCOMPARE(r.tracker()->engine(), 106);
+        QVERIFY(r.w->bankGrid()->stage() == BankGrid::Stage::Idle);
+        QVERIFY(spy.count() >= 1);
+        QVERIFY(r.w->bankGrid()->entryText().isEmpty());
+    }
+
+    // The JU-06A's link keeps only what was sent; the tracker also follows the panel. A resend
+    // (reconnect) and TEST use the tracker's patch.
+    void ju06aResendOnConnectUsesTheFollowedPatch()
+    {
+        Rig r(false, false, false, true);
+        AppSettings::DeviceValues v = dev(5, "Hapax", true);
+        v.resendOnConnect = true;
+        r.router->setJu06aState(60, 0, -1);
+        r.put(Model::JU06A, v);
+        QVERIFY(r.show());
+        r.clearSent();
+        r.inject({0xC4, 28});  // the panel selects 4-5; the app followed
+        QCOMPARE(r.tracker()->current().value(), ju("60:4-5"));
+        r.clearSent();
+        for (FakeMidiBackend *f : r.fakes)
+            f->setOutputPorts(QStringList{}, true);  // unplugged
+        QCoreApplication::processEvents();
+        QVERIFY(!r.router->link(Model::JU06A)->isConnected());
+        r.router->pollNow();
+        r.outs = QStringList{S("Hapax Out")};
+        for (FakeMidiBackend *f : r.fakes)
+            f->setOutputPorts(r.outs, false);
+        r.router->pollNow();
+        QCOMPARE(r.sent(), (QList<QByteArray>{QByteArray::fromHex("c41c")}));
+    }
+
+    void settingsTestOnTheJu06aUsesTheTrackersPatch()
+    {
+        const auto press = [](Rig &r) {
+            r.w->openSettings();
+            SettingsDialog *d = r.w->settingsDialog();
+            d->setShown(Model::JU06A);
+            QVERIFY(d->testButton()->isEnabled());
+            r.clearSent();
+            QTest::mouseClick(d->testButton(), Qt::LeftButton);
+            d->reject();
+            QTRY_VERIFY(!r.w->settingsDialog());
+        };
+        // A followed panel press.
+        {
+            Rig r;
+            r.router->setJu06aState(60, 0, 48);
+            QVERIFY(r.show());
+            r.inject({0xC4, 28});
+            QCOMPARE(r.tracker()->current().value(), ju("60:4-5"));
+            press(r);
+            QVERIFY(r.sent().contains(QByteArray::fromHex("c41c")));
+            QVERIFY(!r.sent().contains(QByteArray::fromHex("c400")));
+        }
+        // Ctrl+E into a remembered patch of the other engine: that patch is now the believed engine's.
+        {
+            Rig r;
+            r.router->setJu06aState(60, 28, 48);
+            QVERIFY(r.show());
+            QTest::keyClick(r.w.get(), Qt::Key_E, Qt::ControlModifier);
+            QCOMPARE(r.tracker()->current().value(), ju("106:7-1"));  // 48 = 6*8+0
+            press(r);
+            QCOMPARE(r.sent(), (QList<QByteArray>{QByteArray::fromHex("c430")}));
+        }
+        // No patch on the believed engine: TEST sends 1-1 of it (the TEST rule), and a resend nothing.
+        {
+            Rig r;
+            r.router->setJu06aState(60, 28, -1);
+            QVERIFY(r.show());
+            QTest::keyClick(r.w.get(), Qt::Key_E, Qt::ControlModifier);
+            QVERIFY(!r.tracker()->current());
+            press(r);
+            QCOMPARE(r.sent(), (QList<QByteArray>{QByteArray::fromHex("c400")}));
+        }
+    }
+
+    // ------------------------------------------------------------------ first run: no ports named
+
+    void aDisabledDeviceHasNoPortsInTheStatusBarAndNoOpenInput()
+    {
+        Rig r(false, false, false);  // all three have ports saved and follow on, none is enabled
+        QVERIFY(r.show());
+        for (const FakeMidiBackend *f : r.fakes) {
+            QVERIFY(!f->isInputOpen());
+            QVERIFY(!f->isOutputOpen());
+        }
+        QString all;
+        for (const QLabel *l : r.w->statusBar()->findChildren<QLabel *>())
+            if (l->isVisible())
+                all += l->text() + QLatin1Char('|');
+        QVERIFY2(!all.contains(S("Hapax")), qPrintable(all));
+        QVERIFY2(all.contains(S("None")), qPrintable(all));
+        // Turning the current device off again leaves the same.
+        r.put(Model::D05, dev(1, "Hapax Out", true, true));
+        r.put(Model::D05, dev(1, "Hapax Out", true, false));
+        all.clear();
+        for (const QLabel *l : r.w->statusBar()->findChildren<QLabel *>())
+            if (l->isVisible())
+                all += l->text() + QLatin1Char('|');
+        QVERIFY2(!all.contains(S("Hapax")), qPrintable(all));
+        for (const FakeMidiBackend *f : r.fakes)
+            QVERIFY(!f->isInputOpen());
     }
 
     // ------------------------------------------------------------------ keys

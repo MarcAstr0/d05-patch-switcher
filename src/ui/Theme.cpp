@@ -250,6 +250,8 @@ bool apply(int i)
     return haveQss;
 }
 
+}  // namespace
+
 // SPEC-2 section 5: a skin switch repaints each window once. Qt's repaint manager paints a top-level
 // window twice (once as a dirty widget, once as the dirty region) when the window itself is the first
 // widget marked dirty after a paint. A style sheet change sends StyleChange to every widget in the
@@ -271,8 +273,6 @@ void markChildFirst()
         }
     }
 }
-
-}  // namespace
 
 const Palette &colors()
 {

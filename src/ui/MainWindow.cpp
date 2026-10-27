@@ -1399,15 +1399,18 @@ void MainWindow::refreshConnection()
         refreshDetection();
     const Model cur = currentDevice();
     const MidiLink &link = *m_router->link(cur);
-    const QString &inputLabel = m_rt[int(cur)].inputLabel;
+    // A device that is not enabled has no ports (DESIGN-2 13.2.3): OUT None, CH 1, IN None, whatever
+    // is saved for it.
+    const bool enabled = m_router->isEnabled(cur);
+    const QString inputLabel = enabled ? m_rt[int(cur)].inputLabel : QString();
     const bool connected = link.isConnected();
-    const QString out = connected ? link.connectedPortKey() : link.outputPortName();
+    const QString out = !enabled ? QString() : connected ? link.connectedPortKey() : link.outputPortName();
     const QFontMetrics fm(Theme::font(Theme::Role::StatusValue));
     StatusStrip::setValue(s->port, out.isEmpty() ? QStringLiteral("None") : fm.elidedText(out, Qt::ElideMiddle, 280),
                           out.isEmpty());
     s->port->setToolTip(out);
     s->notFound->setVisible(!connected && !out.isEmpty());
-    s->chValue->setText(QString::number(link.channel()));
+    s->chValue->setText(QString::number(enabled ? link.channel() : 1));
     StatusStrip::setValue(s->inValue,
                           inputLabel.isEmpty() ? QStringLiteral("None") : fm.elidedText(inputLabel, Qt::ElideMiddle, 280),
                           inputLabel.isEmpty());
@@ -1497,6 +1500,7 @@ void MainWindow::cycleDevice(int direction)
 // then the switcher and the status bar say what is current.
 void MainWindow::onDeviceChanged(Model model, bool)
 {
+    Theme::markChildFirst();  // before any content changes: the window must not be the first dirty widget
     finishEditing();
     if (m_grid->stage() != BankGrid::Stage::Idle)
         m_grid->cancelEntry();
@@ -1581,7 +1585,13 @@ void MainWindow::onEngineChanged(int engine)
 {
     if (m_settings)
         m_engineChanged = true;  // after startup: the user's action or a confirmed flip
+    if (m_shown == Model::JU06A || currentDevice() == Model::JU06A)
+        Theme::markChildFirst();  // before any content changes (see onDeviceChanged)
     if (m_shown == Model::JU06A) {
+        // setDevice() would drop a half-typed entry silently; end it properly so that the display,
+        // the group bar and the event filter hear about it.
+        if (m_grid->stage() != BankGrid::Stage::Idle)
+            m_grid->cancelEntry();
         m_grid->setDevice(Model::JU06A, engine);
         m_model->setBelievedEngine(engine);
     }
@@ -1652,8 +1662,9 @@ void MainWindow::resendCurrent(Model model)
 }
 
 // A send that is not a selection: no Recents entry. The D-05 resends the patch the window shows;
-// the other devices resend the patch their link last sent or followed (a JU-06A only when it is
-// for the engine the app believes, so a resend never arms a prompt). Nothing known is not a failure.
+// the JP-08 resends the patch its link last sent or followed; the JU-06A the tracker's current patch
+// (its link keeps only what was sent, the tracker also follows the panel), and only when it is for the
+// engine the app believes, so a resend never arms a prompt. Nothing known is not a failure.
 bool MainWindow::sendQuiet(Model model)
 {
     if (model == Model::D05) {
@@ -1662,7 +1673,8 @@ bool MainWindow::sendQuiet(Model model)
         m_quietSend = false;
         return ok;
     }
-    const std::optional<PatchAddress> cur = m_router->link(model)->current();
+    const std::optional<PatchAddress> cur =
+        model == Model::JU06A ? m_router->ju06aTracker()->current() : m_router->link(model)->current();
     if (!cur)
         return true;
     if (model == Model::JU06A && cur->engine() != m_router->ju06aTracker()->engine())
@@ -1851,7 +1863,7 @@ void MainWindow::onSettingsTest(Model model, const AppSettings::DeviceValues &v)
         sendQuiet(model);
         return;
     }
-    std::optional<PatchAddress> a = l->current();
+    std::optional<PatchAddress> a = model == Model::JU06A ? m_router->ju06aTracker()->current() : l->current();
     if (model == Model::JU06A && a && a->engine() != m_router->ju06aTracker()->engine())
         a.reset();  // the unit's other engine: not a patch TEST may arm a prompt for
     if (!a)

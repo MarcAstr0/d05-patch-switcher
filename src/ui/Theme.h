@@ -88,6 +88,12 @@ Notifier *notifier();
 // No animation, no timer.
 bool setSkin(const QString &id);
 
+// Marks one visible child of each visible window dirty first. Qt 6.4's repaint manager paints a
+// window twice when the window itself is the first widget marked dirty after a paint. setSkin()
+// calls this; a state change that swaps content before it switches the skin (device switch, engine
+// toggle) calls it first, before any content changes, so that the window paints once.
+void markChildFirst();
+
 // 3.2 Type roles (and DESIGN-2.md 3 for the last eight).
 enum class Role {
     PanelLabel,
