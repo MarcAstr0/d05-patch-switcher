@@ -6,6 +6,7 @@
 #include <QFontInfo>
 #include <QPalette>
 #include <QPushButton>
+#include <QWidget>
 #include <QtDebug>
 
 #include <cstring>
@@ -249,6 +250,28 @@ bool apply(int i)
     return haveQss;
 }
 
+// SPEC-2 section 5: a skin switch repaints each window once. Qt's repaint manager paints a top-level
+// window twice (once as a dirty widget, once as the dirty region) when the window itself is the first
+// widget marked dirty after a paint. A style sheet change sends StyleChange to every widget in the
+// order of a hash of widget pointers, so the window is first in about one switch in 25 (measured with
+// gdb on addDirtyWidget: every double paint had the window first, no single paint did). Marking one
+// visible child of each window first, which every switch repaints anyway, makes the order fixed.
+void markChildFirst()
+{
+    const QWidgetList windows = QApplication::topLevelWidgets();
+    for (QWidget *w : windows) {
+        if (!w->isVisible())
+            continue;
+        const QList<QWidget *> kids = w->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
+        for (QWidget *c : kids) {
+            if (c->isVisible()) {
+                c->update();
+                break;
+            }
+        }
+    }
+}
+
 }  // namespace
 
 const Palette &colors()
@@ -304,6 +327,7 @@ bool setSkin(const QString &id)
         return true;
     if (!loadQss(i))  // the style sheet cannot be read: keep the previous skin untouched
         return false;
+    markChildFirst();
     apply(i);
     emit notifier()->skinChanged();
     return true;
