@@ -1,14 +1,17 @@
 #pragma once
 
 #include "app/AppSettings.h"
+#include "core/Identify.h"
 #include "core/Model.h"
 #include "core/PatchAddress.h"
 #include "midi/DeviceRouter.h"
+#include "ui/LedDisplayWidget.h"
 #include "ui/PatchListModel.h"
 #include "ui/SettingsDialog.h"
 
 #include <QMainWindow>
 #include <QDialog>
+#include <QList>
 #include <QModelIndex>
 #include <QPair>
 #include <QPointer>
@@ -30,6 +33,7 @@ namespace d05 {
 class BankGrid;
 class DeviceSwitcher;
 class DisplayWidget;
+class EngineControl;
 class GroupBar;
 class LedDisplayWidget;
 class Library;
@@ -53,11 +57,14 @@ class PortHub;
 // one that follows a panel change (FR-20) arrives as currentDeviceChanged(model, true) and the
 // window updates the same way.
 //
-// What the list, grid and display show per model is T8.3's. Until then the D-05 is the only
-// device whose catalogue, list, grid, search and LCD the window drives: while another device is
-// current those widgets are hidden (so nothing of the D-05 is shown under another skin) and the
-// LED display shows the device's idle or connection line.
+// What the window shows per model (SPEC-2 FR-1 to FR-8, FR-12, FR-19; DESIGN-2.md 4 to 6): the current
+// device's catalogue in the list (search per the model's grammar, both names searched; All, Favourites
+// and Recents per device), its grid (bank and number, and the D-05's group bar), its display (the LCD
+// for the D-05, the LED readout for the others) and the status bar. The JU-06A's engine control takes
+// the group bar's slot; a selection of the other engine arms (no send) until Ctrl+E, the engine
+// buttons or the unit's own flip fulfils it. All of it switches together with the device.
 //
+
 // Settings (FR-9, FR-10, FR-11): setServices() hands the window the persistent settings;
 // applyDevice() / applySettings() put a device's values into effect (start-up and the dialog's
 // OK), and nothing is written to disk except by the user's own actions (OK, the AUTO SEND
@@ -83,12 +90,26 @@ public:
     // Ctrl+Tab / Ctrl+Shift+Tab: the next (+1) or previous (-1) enabled device, wrapping.
     void cycleDevice(int direction);
     DeviceSwitcher *switcher() const { return m_switcher; }
-    // False skips the Linux USB-serial rule in Settings' detection (the fake backend, tests).
-    void setSystemLookup(bool on) { m_systemLookup = on; }
+    // False skips the Linux USB-serial rule in Settings' detection and in the first-run hint's (the
+    // fake backend, tests).
+    void setSystemLookup(bool on);
+    // The first-run line (DESIGN-2.md 13.2.3) with no device enabled: `FOUND <MODEL> ON USB: OPEN
+    // SETTINGS`, `FOUND <n> UNITS ON USB: OPEN SETTINGS`, else `OPEN SETTINGS: CTRL+,`. Detection ran
+    // when the port list was last read (start, window activation, a change of settings); never on a timer.
+    QString firstRunHint() const;
+    // The models detected on the computer's own ports at that last read (empty once a device is enabled).
+    QList<Model> detectedModels() const { return m_detected; }
 
-    // The current patch: restored without sending anything (startup, screenshots).
+    // The current patch of the address's model: restored without sending anything (startup,
+    // screenshots). The JU-06A's current patch belongs to its engine tracker (setState), so for it this
+    // only informs the link.
     void setCurrent(const PatchAddress &address);
+    // The D-05's current patch.
     PatchAddress current() const { return m_current; }
+    // The current device's patch, none for a JU-06A with no patch on its engine.
+    std::optional<PatchAddress> currentPatch() const { return currentOf(currentDevice()); }
+    // Ctrl+E on the JU-06A (nothing on another device): toggles the believed engine (SPEC-2 6).
+    void toggleEngine();
     // Right-aligned status bar message; stays until replaced.
     void showMessage(const QString &text);
     QString message() const;
@@ -133,6 +154,7 @@ public:
     QLineEdit *searchField() const { return m_search; }
     BankGrid *bankGrid() const { return m_grid; }
     GroupBar *groupBar() const { return m_groupBar; }
+    EngineControl *engineControl() const { return m_engine; }
     PanelButton *prevButton() const { return m_prev; }
     PanelButton *nextButton() const { return m_next; }
     PanelButton *viewButton(PatchListModel::View view) const;
@@ -150,7 +172,8 @@ public:
     // Library actions; none of them sends MIDI.
     void toggleFavorite(const PatchAddress &address);
     void toggleHighlightedFavorite();
-    // F2: opens the inline editor on the highlighted user slot; a preset says so in the status bar.
+    // F2: opens the inline editor on the highlighted slot: a D-05 user slot, or any JP-08 / JU-06A slot;
+    // a D-05 preset says so in the status bar.
     void renameHighlighted();
     // Opens the DESIGN 10.5 confirmation (window-modal, not blocking); CLEAR empties the recents.
     void confirmClearRecents();
@@ -179,19 +202,37 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
-    enum class Restore { Keep, First, Highlight, BeforeSearch };
+    enum class Restore { Keep, First, Highlight, BeforeSearch, Device };
 
     void init();
     void buildWidgets();
     void buildActions();
     void layoutAll();
     void applySkin();
-    // The device switch (user or follow): skin, hidden or shown content, switcher, connection.
+    // The device switch (user or follow): the content of the new device, the skin, switcher, connection.
     void onDeviceChanged(Model model, bool byFollow);
-    void applyContentVisibility();
+    // Points the list, grid, search field and views at `model`'s state; the old device's search text,
+    // view and highlight are kept in m_ui. One list reset.
+    void enterDevice(Model model);
+    // The current device's current patch into the list, grid, group bar and displays.
+    void showCurrentPatch(bool moveHighlight);
+    // The JU-06A's engine, arm, hint and remembered patches into the list markers and the engine control.
+    void syncEngineState();
+    void onEngineChanged(int engine);
+    void onEngineRequested(int engine);
     void updateSwitcher();
     void updateLedDisplay();
+    // The context line of the LED display (DESIGN-2.md 4.2): text and tone.
+    QString contextLine(LedDisplayWidget::Tone *tone) const;
+    // True when the LED skin on screen is not the current device's (a skin set on its own, as the tests
+    // and tools do): the LED display then shows dashes and the skin's idle line.
+    bool ledIsPlaceholder() const;
+    std::optional<PatchAddress> currentOf(Model m) const;
     bool d05Current() const { return currentDevice() == Model::D05; }
+    // Re-reads the OS port lists and asks Identify which models they hold (only when no device is
+    // enabled); never opens or sends anything.
+    void refreshDetection();
+    bool anyDeviceEnabled() const;
     // A current device that is not enabled is replaced by the first enabled one (the D-05 when
     // none is); the skin follows.
     void ensureCurrentDevice();
@@ -247,6 +288,20 @@ private:
     DeviceRouter *m_router = nullptr;
     MidiLink &m_link;  // the D-05's link, the router's
     PatchAddress m_current;  // the D-05's current patch
+    PatchAddress m_jpCurrent;  // the JP-08's (the JU-06A's lives in its engine tracker)
+    std::array<PatchCatalog *, 3> m_catalogs{};  // the library's, per model
+    // What each device's list showed when the window left it (SPEC-2 FR-4: views are per device).
+    struct DeviceUi {
+        QString query;
+        PatchListModel::View view = PatchListModel::View::All;
+        std::optional<PatchAddress> highlight;
+    };
+    std::array<DeviceUi, 3> m_ui;
+    Model m_shown = Model::D05;  // the device whose catalogue the list holds
+    Model m_sentOn = Model::D05;  // the device of the last send (SENT is shown on its display)
+    bool m_sendFlash = false;     // a JP-08 / JU-06A send was made less than 400 ms ago
+    QList<Model> m_detected;
+    bool m_detectionDone = false;
     int m_bandTop = 0;
     Restore m_restore = Restore::Keep;
     std::optional<PatchAddress> m_savedHighlight;
@@ -290,6 +345,7 @@ private:
     DisplayWidget *m_display = nullptr;
     LedDisplayWidget *m_led = nullptr;
     GroupBar *m_groupBar = nullptr;
+    EngineControl *m_engine = nullptr;
     BankGrid *m_grid = nullptr;
     PanelButton *m_prev = nullptr;
     PanelButton *m_next = nullptr;

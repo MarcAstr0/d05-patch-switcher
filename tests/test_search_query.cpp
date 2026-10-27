@@ -273,11 +273,11 @@ private slots:
         QVERIFY(e.matches(P("106:4-5", Model::JU06A), QString()));
         QVERIFY(!e.matches(P("60:4-5", Model::JU06A), QString()));
         QVERIFY(SearchQuery(QStringLiteral("45"), Model::JU06A).matches(P("60:4-5", Model::JU06A), QString()));
-        // alternate (factory) name is searched; ranges only for the primary name
+        // alternate (factory) name is searched; its ranges say they index it (T8.3: they used to be dropped)
         const SearchQuery t(QStringLiteral("takeoff zebra"), Model::JU06A);
         QVector<Range> r;
         QVERIFY(t.matches(P("106:8-8", Model::JU06A), QStringLiteral("Zebra Lead"), &r, QStringLiteral("Takeoff")));
-        QCOMPARE(r, (QVector<Range>{{0, 5}}));
+        QCOMPARE(r, (QVector<Range>{{0, 5}, {0, 7, SearchQuery::NameIndex::Alternate}}));
         QVERIFY(!t.matches(P("106:8-8", Model::JU06A), QStringLiteral("Zebra Lead"), &r));
         // typographic apostrophe folds to ' on both sides (JP-08 / JU-06A only)
         const QString louis = QString::fromUtf8("Louis\xe2\x80\x99 Weapon");

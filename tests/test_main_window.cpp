@@ -839,6 +839,36 @@ private slots:
         QVERIFY2(elided1000 <= ranges * 10 + 50, qPrintable(QStringLiteral("%1 vs %2").arg(elided1000).arg(ranges)));
     }
 
+    // T8.3: the JU-06A's rows (three address cells, engine tag, armed and remembered LED markers, a user
+    // name beside its factory name with highlights under either) add nothing to a paint either.
+    void ju06aRowPaintAllocationsDoNotGrow()
+    {
+#ifdef Q_OS_WIN
+        QSKIP("allocation counting needs the replaced operator new, not used on Windows");
+#endif
+        Rig r;
+        r.w->resize(800, 480);
+        QVERIFY(r.show());
+        r.w->router()->setCurrentDevice(Model::JU06A);
+        r.w->router()->setJu06aState(60, 28, 48);
+        const PatchAddress junoa = *PatchAddress::parse(QStringLiteral("106:5-2"), Model::JU06A);
+        QVERIFY(r.library->setUserName(junoa, QStringLiteral("CN Sub Drone")));
+        // A plain 60 row: the baseline.
+        r.w->searchField()->setText(QStringLiteral("60:1-1"));
+        const long plain = allocsPerPaints(r, 0, 100);
+        // The renamed 106 slot, matched in both names (user name and factory name highlights), armed, with the
+        // other engine's remembered marker on another row.
+        r.w->searchField()->setText(QStringLiteral("sub junoa"));
+        QCOMPARE(r.w->model()->rowCount(), 1);
+        QCOMPARE(r.w->model()->row(0).ranges.size(), 2);
+        QVERIFY(r.w->router()->select(junoa));  // arms: the other engine
+        QCOMPARE(r.w->model()->armed().value(), junoa);
+        const long renamed = allocsPerPaints(r, 0, 100);
+        const long renamed1000 = allocsPerPaints(r, 0, 1000);
+        QVERIFY2(renamed <= plain + 100, qPrintable(QStringLiteral("%1 vs %2").arg(renamed).arg(plain)));
+        QVERIFY2(renamed1000 <= renamed * 10 + 50, qPrintable(QStringLiteral("%1 vs %2").arg(renamed1000).arg(renamed)));
+    }
+
     void elidedRowHighlightStopsAtTheVisibleText()
     {
         Rig r;

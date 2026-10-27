@@ -24,8 +24,11 @@ public:
     bool hasLogo() const { return !m_sourceSize.isEmpty(); }
     // Logical size the logo is drawn at (empty without a logo).
     QSize logoSize() const;
-    // Width of the wordmark as drawn in the current skin (tests, About box).
-    static int wordmarkWidth();
+    // Width of the wordmark as drawn in the current skin (tests, About box): the plate, the divider and
+    // the sub line, which is `sub` when given, else the skin's.
+    static int wordmarkWidth(const QString &sub = QString());
+    // Replaces the skin's sub line (the About box names the three models); empty = the skin's.
+    void setSubText(const QString &sub);
 
     QSize sizeHint() const override { return {SlotMaxWidth, SlotHeight}; }
 
@@ -53,6 +56,7 @@ private:
     QFont m_subFont;
     int m_wordmarkAdvance = 0;
     QString m_subText;
+    QString m_subOverride;
 };
 
 }  // namespace d05

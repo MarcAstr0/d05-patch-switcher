@@ -13,8 +13,8 @@ namespace d05 {
 QString AboutDialog::trademarkNotice()
 {
     return QStringLiteral(
-        "Roland, Boutique, D-05 and D-50 are trademarks of Roland Corporation. This app is not "
-        "affiliated with or endorsed by Roland.");
+        "Roland, Boutique, D-05, D-50, JP-08, JUPITER-8, JU-06A, JUNO-60 and JUNO-106 are trademarks of "
+        "Roland Corporation. This app is not affiliated with or endorsed by Roland.");
 }
 
 QString AboutDialog::projectUrl()
@@ -34,9 +34,12 @@ AboutDialog::AboutDialog(const QString &version, QWidget *parent)
     column->setSpacing(8);
 
     // The wordmark, never the owner's logo: this is the app's own identity.
+    // Its sub line names the three models (DESIGN-2.md 8.2), not the skin's "FOR ROLAND <model>".
+    const QString sub = QStringLiteral("D-05 \u00B7 JP-08 \u00B7 JU-06A");
     auto *mark = new Nameplate(QString(), this);
     mark->setObjectName(QStringLiteral("aboutWordmark"));
-    mark->setFixedSize(Nameplate::wordmarkWidth(), Nameplate::SlotHeight);
+    mark->setSubText(sub);
+    mark->setFixedSize(Nameplate::wordmarkWidth(sub), Nameplate::SlotHeight);
     column->addWidget(mark, 0, Qt::AlignLeft);
     column->addSpacing(8);  // 8 + the 8 spacing on each side = 16 px gap
 
@@ -53,7 +56,7 @@ AboutDialog::AboutDialog(const QString &version, QWidget *parent)
         return l;
     };
     paragraph(QStringLiteral("Version %1").arg(version), "body");
-    paragraph(QStringLiteral("Selects patches on a Roland Boutique D-05 over MIDI."), "body");
+    paragraph(QStringLiteral("Selects patches on Roland Boutique D-05, JP-08 and JU-06A synths over MIDI."), "body");
     // The link: accent colour, no underline, mouse only so OK keeps the only focus (DESIGN 10.4).
     m_link = paragraph(QStringLiteral("<a href=\"%1\" style=\"color:%2; text-decoration:none\">github.com/MarcAstr0/d05-patch-switcher</a>")
                            .arg(projectUrl(), Theme::colors().labelAccent.name()),
@@ -63,7 +66,7 @@ AboutDialog::AboutDialog(const QString &version, QWidget *parent)
     m_link->setTextInteractionFlags(Qt::LinksAccessibleByMouse);
     paragraph(QStringLiteral("MIT licence. Copyright 2026 Mario Castro Squella."), "note");
     paragraph(trademarkNotice(), "note");
-    paragraph(QStringLiteral("Inter typeface, SIL Open Font License 1.1."), "note");
+    paragraph(QStringLiteral("Inter and Archivo typefaces, SIL Open Font License 1.1."), "note");
     paragraph(QStringLiteral("Uses Qt (LGPLv3) and RtMidi. See THIRD-PARTY-NOTICES."), "note");
 
     column->addSpacing(12);  // 20 px with the spacing

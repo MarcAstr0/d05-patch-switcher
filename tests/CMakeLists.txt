@@ -77,3 +77,8 @@ target_compile_definitions(test_shared_vectors PRIVATE D05_VECTORS_FILE="${CMAKE
 # T8.2: the device switcher, switching, and the Settings dialog's device list and pages.
 d05_add_test(test_devices_ui test_devices_ui.cpp)
 target_link_libraries(test_devices_ui PRIVATE d05ui Qt6::Widgets)
+
+# T8.3: the main window per model (JP-08 and JU-06A catalogues, the engine control and flip logic,
+# F2, per-device state, the first-run hint with detection).
+d05_add_test(test_model_window test_model_window.cpp)
+target_link_libraries(test_model_window PRIVATE d05ui Qt6::Widgets)

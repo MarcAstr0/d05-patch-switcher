@@ -256,32 +256,39 @@ bool SearchQuery::matches(const PatchAddress &a, const QString &name, QVector<Ra
         return true;
     };
 
-    QVector<Range> found;
+    QVector<Range> found[2];  // Primary, Alternate
     for (const Token &t : m_tokens) {
         if (t.kind != Kind::Text)
             continue;
         int start = 0, length = 0;
         if (find(fname, t, &start, &length)) {
             if (ranges)
-                found.append({start, length});
-        } else if (altName.isEmpty() || !find(falt, t, &start, &length)) {
+                found[0].append({start, length, NameIndex::Primary});
+        } else if (!altName.isEmpty() && find(falt, t, &start, &length)) {
+            if (ranges)
+                found[1].append({start, length, NameIndex::Alternate});
+        } else {
             return false;
         }
     }
 
-    if (ranges && !found.isEmpty()) {
-        std::sort(found.begin(), found.end(), [](const Range &x, const Range &y) { return x.start < y.start; });
-        Range cur = found.first();
-        for (int i = 1; i < found.size(); ++i) {
-            const Range &r = found.at(i);
-            if (r.start <= cur.start + cur.length)
-                cur.length = std::max(cur.length, r.start + r.length - cur.start);
-            else {
-                ranges->append(cur);
-                cur = r;
+    if (ranges) {
+        for (QVector<Range> &group : found) {
+            if (group.isEmpty())
+                continue;
+            std::sort(group.begin(), group.end(), [](const Range &x, const Range &y) { return x.start < y.start; });
+            Range cur = group.first();
+            for (int i = 1; i < group.size(); ++i) {
+                const Range &r = group.at(i);
+                if (r.start <= cur.start + cur.length)
+                    cur.length = std::max(cur.length, r.start + r.length - cur.start);
+                else {
+                    ranges->append(cur);
+                    cur = r;
+                }
             }
+            ranges->append(cur);
         }
-        ranges->append(cur);
     }
     return true;
 }

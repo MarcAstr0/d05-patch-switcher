@@ -150,10 +150,11 @@ void PatchListView::mouseDoubleClickEvent(QMouseEvent *event)
     // reorder) into a press of its own, which would overwrite m_pressAddress.
     const std::optional<PatchAddress> pressed = m_pressAddress;
     QListView::mouseDoubleClickEvent(event);
-    // Double-click renames a user row (preset rows refuse: edit() checks the item flags).
+    // Double-click renames a user row, or any JP-08 / JU-06A row (preset rows refuse: edit() checks the
+    // item flags).
     // The first click already sent, and in the Recents view that moved the row: edit the
     // address that was pressed, wherever it is now, never whatever is under the cursor.
-    if (pressed && pressed->isUser()) {
+    if (pressed && PatchListModel::canRename(*pressed)) {
         const QModelIndex target = list->indexOf(*pressed);
         if (target.isValid() && (list->flags(target) & Qt::ItemIsEditable)) {
             setCurrentIndex(target);

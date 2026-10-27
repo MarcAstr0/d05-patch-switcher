@@ -31,12 +31,35 @@ BankGrid::BankGrid(QWidget *parent)
     m_current = *PatchAddress::fromParts(8, 1, 1);
 }
 
+void BankGrid::setDevice(Model model, int engine)
+{
+    const bool changed = model != m_model || engine != m_engine || m_hasCurrent || m_stage != Stage::Idle;
+    m_model = model;
+    m_engine = engine;
+    m_stage = Stage::Idle;
+    m_hasCurrent = false;
+    if (changed)
+        update();
+}
+
 void BankGrid::setCurrent(const PatchAddress &current)
 {
-    const bool changed = !(current == m_current) || m_stage != Stage::Idle;
+    const bool changed = !(current == m_current) || m_stage != Stage::Idle || !m_hasCurrent;
     m_current = current;
+    m_hasCurrent = true;
     m_stage = Stage::Idle;
     setCursor(bankSlot(current.bank()));
+    if (changed)
+        update();
+    emit entryChanged();
+}
+
+void BankGrid::clearCurrent()
+{
+    const bool changed = m_hasCurrent || m_stage != Stage::Idle;
+    m_hasCurrent = false;
+    m_stage = Stage::Idle;
+    setCursor(bankSlot(1));
     if (changed)
         update();
     emit entryChanged();
@@ -45,9 +68,9 @@ void BankGrid::setCurrent(const PatchAddress &current)
 void BankGrid::beginEntry(int group)
 {
     m_stage = Stage::AwaitBank;
-    m_entryGroup = qBound(0, group, PatchAddress::GroupCount - 1);
+    m_entryGroup = m_model == Model::D05 ? qBound(0, group, PatchAddress::GroupCount - 1) : 0;
     m_entryBank = 0;
-    setCursor(bankSlot(m_current.bank()));
+    setCursor(bankSlot(currentBank()));
     update();
     emit entryChanged();
 }
@@ -65,6 +88,10 @@ QString BankGrid::entryText() const
 {
     if (m_stage == Stage::Idle)
         return QString();
+    if (m_model != Model::D05) {
+        const QString bank = m_stage == Stage::AwaitNumber ? QString::number(m_entryBank) : QStringLiteral("_");
+        return m_model == Model::JP08 ? bank + QStringLiteral("_") : bank + QStringLiteral("-_");
+    }
     const QString g = PatchAddress::fromParts(m_entryGroup, 1, 1)->groupLabel();
     return g + QStringLiteral("-") + (m_stage == Stage::AwaitNumber ? QString::number(m_entryBank) : QStringLiteral("_"))
            + QStringLiteral("_");
@@ -75,7 +102,7 @@ void BankGrid::pressBank(int bank)
     if (bank < 1 || bank > 8)
         return;
     if (m_stage == Stage::Idle)
-        m_entryGroup = m_current.group();
+        m_entryGroup = m_model == Model::D05 ? m_current.group() : 0;
     m_stage = Stage::AwaitNumber;
     m_entryBank = bank;
     setCursor(bankSlot(bank));
@@ -88,8 +115,9 @@ void BankGrid::pressNumber(int number)
     if (number < 1 || number > 8 || m_stage == Stage::AwaitBank)
         return;
     const int group = m_stage == Stage::Idle ? m_current.group() : m_entryGroup;
-    const int bank = m_stage == Stage::Idle ? m_current.bank() : m_entryBank;
-    const auto address = PatchAddress::fromParts(group, bank, number);
+    const int bank = m_stage == Stage::Idle ? currentBank() : m_entryBank;
+    const auto address = m_model == Model::D05 ? PatchAddress::fromParts(group, bank, number)
+                                               : PatchAddress::fromBankNumber(m_model, bank, number, m_engine);
     if (!address)
         return;
     m_stage = Stage::Idle;
@@ -102,7 +130,7 @@ void BankGrid::pressNumber(int number)
 void BankGrid::handleDigit(int digit)
 {
     if (m_stage == Stage::Idle)
-        beginEntry(m_current.group());
+        beginEntry(m_current.group());  // the group is ignored on the 64-patch models
     if (m_stage == Stage::AwaitBank)
         pressBank(digit);
     else
@@ -116,10 +144,10 @@ PanelButton::Look BankGrid::lookFor(int slot) const
     look.faces = slot < 8 ? PanelButton::FaceSet::Bank : PanelButton::FaceSet::Button;
     if (slot < 8) {
         const int bank = slot + 1;
-        look.lit = m_stage == Stage::Idle ? bank == m_current.bank()
+        look.lit = m_stage == Stage::Idle ? (m_hasCurrent && bank == m_current.bank())
                                           : (m_stage == Stage::AwaitNumber && bank == m_entryBank);
     } else {
-        look.lit = m_stage == Stage::Idle && slot - 8 + 1 == m_current.number();
+        look.lit = m_stage == Stage::Idle && m_hasCurrent && slot - 8 + 1 == m_current.number();
     }
     return look;
 }

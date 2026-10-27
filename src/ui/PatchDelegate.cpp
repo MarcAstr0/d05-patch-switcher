@@ -130,6 +130,8 @@ PatchDelegate::PatchDelegate(QObject *parent)
     m_modeText[0] = QStringLiteral("W");
     m_modeText[1] = QStringLiteral("D");
     m_modeText[2] = QStringLiteral("S");
+    m_engineText[0] = QStringLiteral("60");
+    m_engineText[1] = QStringLiteral("106");
 
     const double pi = 3.14159265358979323846;
     for (int k = 0; k < 10; ++k) {
@@ -159,6 +161,7 @@ void PatchDelegate::refreshColours()
     m_barIdle = QBrush(Theme::colors().selectionBarIdle);
     m_hover = QBrush(Theme::colors().rowHover);
     m_ledOn = QBrush(Theme::colors().ledOn);
+    m_ledOff = QBrush(Theme::colors().ledOff);
     m_ledCore = QBrush(Theme::colors().ledCore);
     m_match = QBrush(Theme::colors().matchBack);
     m_tag = QBrush(Theme::colors().tagBorder);
@@ -175,17 +178,43 @@ void PatchDelegate::layoutRow(const PatchListModel::Row &row, int width, RowLayo
     const int nameW = width - 100 - kNameX;
     out->elided.clear();
     out->highlights.clear();
+    out->factoryText.clear();
+    out->factoryHighlights.clear();
+    out->factoryX = 0;
     out->visibleW = nameW;
-    if (m_nameMetrics.horizontalAdvance(row.shown) > nameW) {
+    const int fullW = m_nameMetrics.horizontalAdvance(row.shown);
+    if (fullW > nameW) {
         out->elided = m_nameMetrics.elidedText(row.shown, Qt::ElideRight, nameW);
         // The ellipsis is the last character; highlights stop where the real text does.
         out->visibleW = m_nameMetrics.horizontalAdvance(row.shown, qMax(0, out->elided.size() - 1));
     }
+    int factoryVisibleW = 0;
+    // A renamed slot: the factory name follows after 12 px, from the same width budget. If the user
+    // name alone does not fit, the factory name is not drawn (DESIGN-2.md 6.4).
+    if (!row.factory.isEmpty() && fullW <= nameW) {
+        const int avail = nameW - fullW - 12;
+        if (avail > 0) {
+            out->factoryX = fullW + 12;
+            const int factoryW = m_nameMetrics.horizontalAdvance(row.factory);
+            factoryVisibleW = factoryW;
+            if (factoryW > avail) {
+                out->factoryText = m_nameMetrics.elidedText(row.factory, Qt::ElideRight, avail);
+                factoryVisibleW = m_nameMetrics.horizontalAdvance(row.factory, qMax(0, out->factoryText.size() - 1));
+            } else {
+                out->factoryText = row.factory;
+            }
+        }
+    }
     for (const SearchQuery::Range &rg : row.ranges) {
-        const int x0 = m_nameMetrics.horizontalAdvance(row.name, rg.start);
-        const int x1 = qMin(m_nameMetrics.horizontalAdvance(row.name, rg.start + rg.length), out->visibleW);
+        const bool alt = rg.which == SearchQuery::NameIndex::Alternate;
+        if (alt && out->factoryText.isEmpty())
+            continue;  // that name is not drawn: nothing to highlight
+        const QString &text = alt ? row.factory : row.name;
+        const int limit = alt ? factoryVisibleW : out->visibleW;
+        const int x0 = m_nameMetrics.horizontalAdvance(text, rg.start);
+        const int x1 = qMin(m_nameMetrics.horizontalAdvance(text, rg.start + rg.length), limit);
         if (x1 > x0)
-            out->highlights.append({x0, x1 - x0});
+            (alt ? out->factoryHighlights : out->highlights).append({x0, x1 - x0});
     }
 }
 
@@ -227,7 +256,10 @@ void PatchDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const
     const bool selected = option.state & QStyle::State_Selected;
     const bool hover = option.state & QStyle::State_MouseOver;
     const bool listFocused = option.widget && option.widget->hasFocus();
-    const bool isCurrent = row.address == model->current();
+    const bool isCurrent = model->hasCurrent() && row.address == model->current();
+    const PatchAddress &a = row.address;
+    const bool d05Row = a.model() == Model::D05;
+    const std::optional<PatchAddress> &armed = model->armed();
 
     p->save();
     p->translate(r.topLeft());
@@ -239,18 +271,30 @@ void PatchDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const
         p->fillRect(QRect(0, 0, Wl, RowHeight), m_hover);
     }
 
-    if (isCurrent) {
+    // The LED column (DESIGN-2.md 6.2), first that applies: the armed selection (an empty lit outline),
+    // the current patch (lit), the other engine's remembered patch (a dark slot).
+    if (armed && *armed == a) {
+        frame1(p, QRect(9, 11, 12, 6), m_ledOn);
+        p->fillRect(QRect(10, 12, 10, 4), m_ledOff);
+    } else if (isCurrent) {
         p->fillRect(QRect(10, 12, 10, 4), m_ledOn);
         p->fillRect(QRect(12, 13, 6, 2), m_ledCore);
+    } else if (!d05Row && model->otherRemembered() && *model->otherRemembered() == a) {
+        p->fillRect(QRect(10, 12, 10, 4), m_ledOff);
     }
 
-    // Address: five characters, each centred in a 9 px cell.
-    const PatchAddress &a = row.address;
-    const int cells[5] = {a.isUser() ? 10 : 11, a.groupNumber(), 12, a.bank(), a.number()};
+    // Address: five characters (D-05) or three (JP-08, JU-06A), each centred in a 9 px cell.
     p->setFont(m_addressFont);
     p->setPen(isCurrent ? m_addrPrimary : m_addrSecondary);
-    for (int i = 0; i < 5; ++i)
-        p->drawStaticText(QPointF(kAddressX + kCharCell * i + m_charX[cells[i]], m_charY), m_chars[cells[i]]);
+    if (d05Row) {
+        const int cells[5] = {a.isUser() ? 10 : 11, a.groupNumber(), 12, a.bank(), a.number()};
+        for (int i = 0; i < 5; ++i)
+            p->drawStaticText(QPointF(kAddressX + kCharCell * i + m_charX[cells[i]], m_charY), m_chars[cells[i]]);
+    } else {
+        const int cells[3] = {a.bank(), 12, a.number()};
+        for (int i = 0; i < 3; ++i)
+            p->drawStaticText(QPointF(kAddressX + kCharCell * i + m_charX[cells[i]], m_charY), m_chars[cells[i]]);
+    }
 
     // Name, with the search ranges drawn first (all measured in prepare()).
     RowLayout local;
@@ -261,13 +305,21 @@ void PatchDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const
         layoutRow(row, Wl, &local);  // stale cache: same values, computed here
         rl = &local;
     }
+    const bool editingRow = m_editing && *m_editing == row.address;
     for (const QPair<int, int> &h : rl->highlights)
         p->fillRect(QRect(kNameX + h.first, 4, h.second, 20), m_match);
     p->setFont(m_nameFont);
     p->setPen(row.name.isEmpty() ? m_nameDim : m_namePrimary);
     p->drawText(QPoint(kNameX, kBaseline), rl->elided.isEmpty() ? row.shown : rl->elided);
+    if (!rl->factoryText.isEmpty() && !editingRow) {  // while editing, the factory name is not drawn
+        const int fx = kNameX + rl->factoryX;
+        for (const QPair<int, int> &h : rl->factoryHighlights)
+            p->fillRect(QRect(fx + h.first, 4, h.second, 20), m_match);
+        p->setPen(m_nameDim);
+        p->drawText(QPoint(fx, kBaseline), rl->factoryText);
+    }
 
-    if (m_editing && *m_editing == row.address) {
+    if (editingRow) {
         // The editor is open on this row: n/18 in place of the count.
         p->setFont(m_metaFont);
         p->setPen(m_editLength >= MaxNameLength ? m_metaRed : m_meta);
@@ -278,13 +330,25 @@ void PatchDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const
         p->drawText(QRect(Wl - 100, 0, 40, RowHeight), Qt::AlignRight | Qt::AlignVCenter, row.countText);
     }
 
-    if (!row.mode.isNull()) {
-        const QRect box(Wl - 52, 6, 16, 16);
-        frame1(p, box, m_tag);
-        const int mi = row.mode == QLatin1Char('W') ? 0 : row.mode == QLatin1Char('D') ? 1 : 2;
+    if (d05Row) {
+        if (!row.mode.isNull()) {
+            const QRect box(Wl - 52, 6, 16, 16);
+            frame1(p, box, m_tag);
+            const int mi = row.mode == QLatin1Char('W') ? 0 : row.mode == QLatin1Char('D') ? 1 : 2;
+            p->setFont(m_metaFont);
+            p->setPen(m_meta);
+            p->drawText(box, Qt::AlignCenter, m_modeText[mi]);
+        }
+    } else if (a.model() == Model::JU06A) {
+        // The engine tag (DESIGN-2.md 6.3): framed for the believed engine's rows, only the dim number
+        // for the other engine's. The row itself is not dimmed.
+        const QRect box(Wl - 58, 6, 28, 16);
+        const bool believed = a.engine() == model->believedEngine();
+        if (believed)
+            frame1(p, box, m_tag);
         p->setFont(m_metaFont);
-        p->setPen(m_meta);
-        p->drawText(box, Qt::AlignCenter, m_modeText[mi]);
+        p->setPen(believed ? m_meta : m_nameDim);
+        p->drawText(box, Qt::AlignCenter, m_engineText[a.engine() == 106 ? 1 : 0]);
     }
 
     // Star (the only antialiased element of a row).
@@ -306,11 +370,17 @@ void PatchDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const
 QWidget *PatchDelegate::createEditor(QWidget *parent, const QStyleOptionViewItem &, const QModelIndex &index) const
 {
     const auto *model = qobject_cast<const PatchListModel *>(index.model());
-    if (!model || !model->addressAt(index).isUser())
+    if (!model || !PatchListModel::canRename(model->addressAt(index)))
         return nullptr;
     auto *e = new NameEditor(parent);
     e->setObjectName(QStringLiteral("nameEditor"));
     e->setFont(m_nameFont);
+    {
+        // The placeholder is the factory name (DESIGN-2.md 6.5); committing an empty text removes the user name.
+        const PatchListModel::Row &r = model->row(index.row());
+        if (r.address.model() != Model::D05)
+            e->setPlaceholderText(r.userName.isEmpty() ? r.name : r.factory);
+    }
     // The 18 limit lives in the validator, not setMaxLength: it must drop characters that
     // are not printable ASCII before counting, so a paste fills the 18 with usable text.
     e->setValidator(new NameValidator(e));
@@ -348,7 +418,7 @@ void PatchDelegate::setEditorData(QWidget *editor, const QModelIndex &index) con
     if (e->property("d05Initialised").toBool())
         return;
     e->setProperty("d05Initialised", true);
-    e->setText(model->row(index.row()).name);
+    e->setText(model->row(index.row()).userName);
     e->selectAll();
     m_editLength = qMin(int(e->text().size()), int(MaxNameLength));
 }

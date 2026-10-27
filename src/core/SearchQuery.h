@@ -16,12 +16,21 @@ namespace d05 {
 // p3-9, P1-19), are text.
 class SearchQuery {
 public:
-    // Match range inside the name string passed to matches(). Both values are in
-    // UTF-16 code units (QString indices), so they can be fed straight to the UI.
+    // Which of the two names of a row a range indexes: the `name` passed to matches() (the shown
+    // name: the user name when the slot has one) or the `altName` (the factory name of a renamed
+    // JP-08 / JU-06A slot). D-05 queries only ever produce Primary ranges.
+    enum class NameIndex { Primary, Alternate };
+
+    // Match range inside the name string passed to matches() (or inside altName, see `which`).
+    // Both values are in UTF-16 code units (QString indices), so they can be fed straight to the UI.
     struct Range {
         int start = 0;
         int length = 0;
-        bool operator==(const Range &o) const { return start == o.start && length == o.length; }
+        NameIndex which = NameIndex::Primary;
+        bool operator==(const Range &o) const
+        {
+            return start == o.start && length == o.length && which == o.which;
+        }
     };
 
     SearchQuery() = default;
@@ -48,7 +57,9 @@ public:
     bool matches(const PatchAddress &address, const QString &name, QVector<Range> *ranges,
                  const QString &altName = QString()) const;
     // altName (JP-08 / JU-06A: the factory name of a slot that has a user name in `name`) is
-    // searched too; a text token found only there matches but produces no range.
+    // searched too. A text token is looked for in `name` first; found there its range is Primary,
+    // found only in altName its range is Alternate (an index into altName). The ranges come out
+    // Primary first, then Alternate, each group sorted and merged.
 
 private:
     enum class Kind { Group, GroupBank, Exact, Text, Engine, Bank64, Exact64 };

@@ -7,8 +7,9 @@
 // Text rasterisation is per platform (FreeType here, CoreText and DirectWrite elsewhere), so the
 // comparison runs on Linux only. The states the later version 2 tasks change on purpose
 // (DESIGN-2.md 13.1: the Settings dialog, the Shortcuts sheet's DEVICE section, the About box) stay in
-// the set until T8.2 and T8.3 change them; whoever does that replaces those references in the same
-// commit, with the designer's acceptance of the listed deviation.
+// the set; T8.2 replaced the two Settings references and T8.3 the Shortcuts and About ones, each in the
+// same commit as the change, with the designer's acceptance of the listed deviation. Every main-window
+// state is still the v1.0.0 render.
 #include <QImage>
 #include <QProcess>
 #include <QTemporaryDir>

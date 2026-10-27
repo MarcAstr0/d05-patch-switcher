@@ -3,6 +3,16 @@
 namespace d05 {
 namespace Shortcuts {
 
+namespace {
+// Command+Tab belongs to the system on macOS, so the device keys are Control+Tab there, which Qt
+// calls Meta (DESIGN-2.md 13.2.1). Ctrl+E is Command+E on macOS like every other shortcut.
+#ifdef Q_OS_MACOS
+constexpr int kDeviceModifier = Qt::META;
+#else
+constexpr int kDeviceModifier = Qt::CTRL;
+#endif
+}  // namespace
+
 const QList<Binding> &bindings()
 {
     static const QList<Binding> list = {
@@ -17,6 +27,9 @@ const QList<Binding> &bindings()
         {QStringLiteral("actionViewRecents"), QKeySequence(Qt::CTRL | Qt::Key_3)},
         {QStringLiteral("actionToggleFavourite"), QKeySequence(Qt::CTRL | Qt::Key_D)},
         {QStringLiteral("actionRename"), QKeySequence(Qt::Key_F2)},
+        {QStringLiteral("actionNextDevice"), QKeySequence(kDeviceModifier | Qt::Key_Tab)},
+        {QStringLiteral("actionPreviousDevice"), QKeySequence(kDeviceModifier | Qt::SHIFT | Qt::Key_Tab)},
+        {QStringLiteral("actionToggleEngine"), QKeySequence(Qt::CTRL | Qt::Key_E)},
         {QStringLiteral("actionAutoSend"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A)},
         {QStringLiteral("actionSettings"), QKeySequence(Qt::CTRL | Qt::Key_Comma)},
         {QStringLiteral("actionShortcuts"), QKeySequence(Qt::Key_F1)},
@@ -65,6 +78,9 @@ const QList<Section> &sections()
           row({lit("Enter")}, "Send highlighted patch"),
           row({lit("Space"), word("or"), bound("actionToggleFavourite")}, "Toggle favourite"),
           row({bound("actionRename")}, "Rename a user slot")}},
+        {QStringLiteral("DEVICE"), 0,
+         {row({lit("Ctrl+Tab")}, "Next device"), row({lit("Ctrl+Shift+Tab")}, "Previous device"),
+          row({bound("actionToggleEngine")}, "Toggle JU-06A engine")}},
         {QStringLiteral("PLAY"), 1,
          {row({bound("actionPrev")}, "Previous patch"), row({bound("actionNext")}, "Next patch"),
           row({bound("actionGridEntry"), word("then"), lit("1-8"), lit("1-8")}, "Enter bank and number"),

@@ -9,6 +9,7 @@
 #include <QTimer>
 #include <QVector>
 #include <array>
+#include <memory>
 
 namespace d05 {
 
@@ -55,6 +56,10 @@ public:
 
     // Registers the catalog of another model (its model() decides which). Call before load().
     void attachCatalog(PatchCatalog &catalog);
+    // The catalog of `model`: the attached one, else a catalog the library makes, owns and attaches
+    // (the model's embedded table). Names the library read for that model before it had one move in.
+    // Lives as long as the library, so a window can hold the reference.
+    PatchCatalog &catalog(Model model);
 
     // Reads the file and replaces all in-memory state; calling load() again discards
     // any pending (unflushed) edits, so flush() first if you want to keep them.
@@ -118,6 +123,7 @@ private:
     void fail(const QString &message);
 
     std::array<PatchCatalog *, 3> m_catalogs{};
+    std::array<std::unique_ptr<PatchCatalog>, 3> m_owned;  // catalogs made by catalog(); destroyed after the final flush
     QString m_path;
     QString m_brokenPath;
     std::array<Device, 3> m_dev;

@@ -70,6 +70,15 @@ void Library::attachCatalog(PatchCatalog &catalog)
     }
 }
 
+PatchCatalog &Library::catalog(Model model)
+{
+    if (!m_catalogs[idx(model)]) {
+        m_owned[idx(model)] = std::make_unique<PatchCatalog>(model);
+        attachCatalog(*m_owned[idx(model)]);
+    }
+    return *m_catalogs[idx(model)];
+}
+
 bool Library::copyLegacyFile()
 {
     const QString copy = legacyCopyPath();

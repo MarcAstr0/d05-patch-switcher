@@ -9,14 +9,31 @@ namespace d05 {
 
 PatchListModel::PatchListModel(const PatchCatalog &catalog, const Library &library, QObject *parent)
     : QAbstractListModel(parent)
-    , m_catalog(catalog)
+    , m_catalog(&catalog)
     , m_library(library)
-    , m_rowOf(PatchAddress::CatalogueSize, -1)
+    , m_modelId(catalog.model())
+    , m_rowOf(modelInfo(catalog.model()).catalogueSize, -1)
 {
     connect(&m_library, &Library::favoritesChanged, this, &PatchListModel::onFavoritesChanged);
     connect(&m_library, &Library::recentsChanged, this, &PatchListModel::onRecentsChanged);
     connect(&m_library, &Library::userNamesChanged, this, &PatchListModel::onUserNamesChanged);
     rebuild();
+}
+
+void PatchListModel::setDevice(const PatchCatalog &catalog, const QString &queryText, View view)
+{
+    beginResetModel();
+    m_catalog = &catalog;
+    m_modelId = catalog.model();
+    m_rowOf.fill(-1, modelInfo(m_modelId).catalogueSize);
+    m_queryText = queryText;
+    m_query = SearchQuery(queryText, m_modelId);
+    m_view = view;
+    m_hasCurrent = false;
+    m_armed.reset();
+    m_otherRemembered.reset();
+    fillRows();
+    endResetModel();
 }
 
 int PatchListModel::rowCount(const QModelIndex &parent) const
@@ -32,6 +49,10 @@ QVariant PatchListModel::data(const QModelIndex &index, int role) const
     switch (role) {
     case Qt::DisplayRole: return r.shown;
     case AddressRole: return r.address.toString();
+    case Qt::ToolTipRole:
+        if (!r.factory.isEmpty())
+            return QStringLiteral("Factory name: ") + r.factory;
+        return {};
     default: return {};
     }
 }
@@ -41,7 +62,7 @@ Qt::ItemFlags PatchListModel::flags(const QModelIndex &index) const
     if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size())
         return Qt::NoItemFlags;
     Qt::ItemFlags f = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
-    if (m_rows[index.row()].address.isUser())
+    if (canRename(m_rows[index.row()].address))
         f |= Qt::ItemIsEditable;
     return f;
 }
@@ -59,21 +80,70 @@ void PatchListModel::setQuery(const QString &text)
     if (text == m_queryText)
         return;
     m_queryText = text;
-    m_query = SearchQuery(text);
+    m_query = SearchQuery(text, m_modelId);
     rebuild();
 }
 
 void PatchListModel::setCurrent(const PatchAddress &address)
 {
-    if (address == m_current)
+    if (address == m_current && m_hasCurrent)
         return;
-    const int before = rowOf(m_current);
+    const int before = m_hasCurrent ? rowOf(m_current) : -1;
     const int after = rowOf(address);
     m_current = address;
+    m_hasCurrent = true;
     for (int r : {before, after}) {
         if (r >= 0)
             emit dataChanged(index(r), index(r));
     }
+}
+
+void PatchListModel::clearCurrent()
+{
+    if (!m_hasCurrent)
+        return;
+    const int before = rowOf(m_current);
+    m_hasCurrent = false;
+    if (before >= 0)
+        emit dataChanged(index(before), index(before));
+}
+
+void PatchListModel::emitRow(const std::optional<PatchAddress> &a)
+{
+    if (!a)
+        return;
+    const int r = rowOf(*a);
+    if (r >= 0)
+        emit dataChanged(index(r), index(r));
+}
+
+void PatchListModel::setBelievedEngine(int engine)
+{
+    if (engine == m_engine)
+        return;
+    m_engine = engine;
+    if (m_modelId == Model::JU06A && !m_rows.isEmpty())
+        emit dataChanged(index(0), index(m_rows.size() - 1));  // every engine tag changes style
+}
+
+void PatchListModel::setArmed(const std::optional<PatchAddress> &a)
+{
+    if (a == m_armed)
+        return;
+    const std::optional<PatchAddress> before = m_armed;
+    m_armed = a;
+    emitRow(before);
+    emitRow(a);
+}
+
+void PatchListModel::setOtherRemembered(const std::optional<PatchAddress> &a)
+{
+    if (a == m_otherRemembered)
+        return;
+    const std::optional<PatchAddress> before = m_otherRemembered;
+    m_otherRemembered = a;
+    emitRow(before);
+    emitRow(a);
 }
 
 PatchAddress PatchListModel::addressAt(const QModelIndex &index) const
@@ -85,6 +155,8 @@ PatchAddress PatchListModel::addressAt(const QModelIndex &index) const
 
 int PatchListModel::rowOf(const PatchAddress &address) const
 {
+    if (address.model() != m_modelId)
+        return -1;
     return m_rowOf[address.catalogueIndex()];
 }
 
@@ -127,12 +199,12 @@ QString PatchListModel::emptyNote() const
 // While the Recents view is shown a send must not reorder the rows: with auto-send the
 // highlight would chase the row it just sent. Counts update in place; the order refreshes
 // when the view is entered again. Rows that left the library (cleared, capped) rebuild.
-void PatchListModel::onRecentsChanged()
+void PatchListModel::onRecentsChanged(Model model)
 {
-    if (m_view != View::Recents)
+    if (model != m_modelId || m_view != View::Recents)
         return;
-    QVector<int> counts(PatchAddress::CatalogueSize, 0);
-    for (const Library::Recent &r : m_library.recents())
+    QVector<int> counts(m_rowOf.size(), 0);
+    for (const Library::Recent &r : m_library.recents(m_modelId))
         counts[r.address.catalogueIndex()] = r.count;
     for (const Row &row : std::as_const(m_rows)) {
         if (counts[row.address.catalogueIndex()] == 0) {
@@ -151,7 +223,7 @@ void PatchListModel::onRecentsChanged()
     // An address sent for the first time while the view is shown joins at the top; the
     // existing rows keep their order. Recents are newest first, so insert oldest first.
     QVector<Library::Recent> missing;
-    for (const Library::Recent &r : m_library.recents())
+    for (const Library::Recent &r : m_library.recents(m_modelId))
         if (m_rowOf[r.address.catalogueIndex()] < 0)
             missing.append(r);
     for (int i = missing.size() - 1; i >= 0; --i) {
@@ -172,11 +244,15 @@ bool PatchListModel::buildRow(const PatchAddress &a, int count, Row *out) const
 {
     Row row;
     row.address = a;
-    row.name = m_catalog.name(a);
-    if (!m_query.matches(a, row.name, &row.ranges))
+    row.name = m_catalog->name(a);
+    row.userName = m_catalog->userName(a);
+    // A renamed JP-08 / JU-06A slot shows both names (DESIGN-2.md 6.4); a D-05 user slot has no factory name.
+    if (!row.userName.isEmpty())
+        row.factory = m_catalog->factoryName(a);
+    if (!m_query.matches(a, row.name, &row.ranges, row.factory))
         return false;
     row.shown = row.name.isEmpty() ? a.toString() : row.name;
-    row.mode = m_catalog.mode(a);
+    row.mode = m_catalog->mode(a);
     row.favorite = m_library.isFavorite(a);
     if (count > 0)
         row.countText = QStringLiteral("×") + QString::number(count);
@@ -184,8 +260,10 @@ bool PatchListModel::buildRow(const PatchAddress &a, int count, Row *out) const
     return true;
 }
 
-void PatchListModel::onFavoritesChanged()
+void PatchListModel::onFavoritesChanged(Model model)
 {
+    if (model != m_modelId)
+        return;
     if (m_view == View::Favourites) {
         rebuild();
         return;
@@ -201,20 +279,25 @@ void PatchListModel::onFavoritesChanged()
 
 // A rename. With no search the visible set cannot change, so only the renamed rows
 // repaint; with a search the name may start or stop matching, so rebuild.
-void PatchListModel::onUserNamesChanged()
+void PatchListModel::onUserNamesChanged(Model model)
 {
+    if (model != m_modelId)
+        return;
     if (searchActive()) {
         rebuild();
         return;
     }
     for (int r = 0; r < m_rows.size(); ++r) {
         Row &row = m_rows[r];
-        if (!row.address.isUser())
+        if (!canRename(row.address))
             continue;
-        const QString name = m_catalog.name(row.address);
-        if (name == row.name)
+        const QString name = m_catalog->name(row.address);
+        const QString user = m_catalog->userName(row.address);
+        if (name == row.name && user == row.userName)
             continue;
         row.name = name;
+        row.userName = user;
+        row.factory = user.isEmpty() ? QString() : m_catalog->factoryName(row.address);
         row.shown = name.isEmpty() ? row.address.toString() : name;
         emit dataChanged(index(r), index(r));
     }
@@ -223,6 +306,12 @@ void PatchListModel::onUserNamesChanged()
 void PatchListModel::rebuild()
 {
     beginResetModel();
+    fillRows();
+    endResetModel();
+}
+
+void PatchListModel::fillRows()
+{
     m_rows.clear();
     m_rowOf.fill(-1);
 
@@ -236,19 +325,20 @@ void PatchListModel::rebuild()
 
     switch (m_view) {
     case View::All:
-        for (int i = 0; i < PatchAddress::CatalogueSize; ++i)
-            add(*PatchAddress::fromCatalogueIndex(i), 0);
+        for (int i = 0; i < m_rowOf.size(); ++i)
+            add(m_modelId == Model::D05 ? *PatchAddress::fromCatalogueIndex(i)
+                                        : *PatchAddress::fromCatalogueIndex(m_modelId, i),
+                0);
         break;
     case View::Favourites:
-        for (const PatchAddress &a : m_library.favorites())
+        for (const PatchAddress &a : m_library.favorites(m_modelId))
             add(a, 0);
         break;
     case View::Recents:
-        for (const Library::Recent &r : m_library.recents())
+        for (const Library::Recent &r : m_library.recents(m_modelId))
             add(r.address, r.count);
         break;
     }
-    endResetModel();
 }
 
 }  // namespace d05

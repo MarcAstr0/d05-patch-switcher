@@ -52,15 +52,21 @@ void Nameplate::refreshSkin()
 {
     m_wordFont = Theme::font(Theme::Role::Wordmark);
     m_subFont = Theme::font(Theme::Role::WordmarkSub);
-    m_subText = subText();
+    m_subText = m_subOverride.isEmpty() ? subText() : m_subOverride;
     m_wordmarkAdvance = advanceOf(Theme::Role::Wordmark, wordmarkText());
     update();
 }
 
-int Nameplate::wordmarkWidth()
+int Nameplate::wordmarkWidth(const QString &sub)
 {
     return advanceOf(Theme::Role::Wordmark, wordmarkText()) + 14 + 1 + 15
-           + advanceOf(Theme::Role::WordmarkSub, subText());
+           + advanceOf(Theme::Role::WordmarkSub, sub.isEmpty() ? subText() : sub);
+}
+
+void Nameplate::setSubText(const QString &sub)
+{
+    m_subOverride = sub;
+    refreshSkin();
 }
 
 QSize Nameplate::logoSize() const

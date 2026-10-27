@@ -75,6 +75,7 @@ qt_add_library(d05ui STATIC
     src/ui/Nameplate.h      src/ui/Nameplate.cpp
     src/ui/DeviceSwitcher.h src/ui/DeviceSwitcher.cpp
     src/ui/GroupBar.h       src/ui/GroupBar.cpp
+    src/ui/EngineControl.h  src/ui/EngineControl.cpp
     src/ui/BankGrid.h       src/ui/BankGrid.cpp
     src/ui/PatchListModel.h src/ui/PatchListModel.cpp
     src/ui/PatchDelegate.h  src/ui/PatchDelegate.cpp

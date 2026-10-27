@@ -79,6 +79,7 @@ private slots:
     void strayTempIsNotTheKeptCopy();
     void failedLegacyCopyThenWrite();
     void userNameEqualToFactoryName();
+    void catalogIsMadeAndOwnedOnRequest();
 };
 
 void TestLibraryV2::roundTripThreeDevices()
@@ -624,6 +625,44 @@ void TestLibraryV2::userNameEqualToFactoryName()
     Three c(path);
     QCOMPARE(c.lib.load(), Library::LoadResult::Loaded);
     QVERIFY(!c.jp.hasUserName(J("1-1")));
+}
+
+// T8.3: the window asks the library for the catalogues of the other models; the library makes, attaches
+// and owns them, so names read before they existed move in and the final flush never sees a dead pointer.
+void TestLibraryV2::catalogIsMadeAndOwnedOnRequest()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("library.json"));
+    {
+        Three t(path);
+        t.lib.setFavorite(J("3-8"), true);
+        QVERIFY(t.lib.setUserName(J("3-4"), QStringLiteral("CN Strings Lift")));
+        QVERIFY(t.lib.setUserName(U("106:5-2"), QStringLiteral("CN Sub Drone")));
+        QVERIFY(t.lib.flush());
+    }
+    PatchCatalog d05;
+    {
+        Library lib(d05, path);
+        QCOMPARE(lib.load(), Library::LoadResult::Loaded);  // no catalogue for the other models yet
+        QSignalSpy names(&lib, &Library::userNamesChanged);
+        PatchCatalog &jp = lib.catalog(Model::JP08);
+        QCOMPARE(jp.model(), Model::JP08);
+        QCOMPARE(&lib.catalog(Model::JP08), &jp);  // made once
+        QCOMPARE(jp.userName(J("3-4")), QStringLiteral("CN Strings Lift"));  // carried names moved in
+        QCOMPARE(jp.factoryName(J("3-4")), QStringLiteral("Mellow Strings"));
+        QVERIFY(names.count() >= 1);
+        QCOMPARE(lib.catalog(Model::JU06A).userName(U("106:5-2")), QStringLiteral("CN Sub Drone"));
+        QCOMPARE(&lib.catalog(Model::D05), &d05);  // the one it was given
+        QVERIFY(lib.isFavorite(J("3-8")));
+        // Edits through the library reach the owned catalogue and the file at destruction.
+        QVERIFY(lib.setUserName(J("1-1"), QStringLiteral("First")));
+        QCOMPARE(jp.userName(J("1-1")), QStringLiteral("First"));
+    }  // the library flushes with its owned catalogues still alive
+    Library again(d05, path);
+    PatchCatalog &jp2 = again.catalog(Model::JP08);
+    QCOMPARE(again.load(), Library::LoadResult::Loaded);
+    QCOMPARE(jp2.userName(J("1-1")), QStringLiteral("First"));
+    QCOMPARE(jp2.userName(J("3-4")), QStringLiteral("CN Strings Lift"));
 }
 
 QTEST_GUILESS_MAIN(TestLibraryV2)

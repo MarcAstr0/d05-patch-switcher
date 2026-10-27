@@ -19,9 +19,19 @@ public:
 
     explicit BankGrid(QWidget *parent = nullptr);
 
+    // Which device's patches the grid addresses (SPEC-2 FR-4): the D-05's group, bank and number, or
+    // the 64-patch models' bank and number (the JU-06A's on `engine`, its believed one). Ends any
+    // entry and lights nothing until setCurrent(); the D-05 is the default.
+    void setDevice(Model model, int engine = 0);
+    Model deviceModel() const { return m_model; }
+    int deviceEngine() const { return m_engine; }
+
     // The current patch: lights its bank and number, ends any entry.
     void setCurrent(const PatchAddress &current);
     PatchAddress current() const { return m_current; }
+    // The JU-06A with no patch on its engine: nothing lit, the bank to enter in is 1.
+    void clearCurrent();
+    bool hasCurrent() const { return m_hasCurrent; }
 
     // Starts an entry in `group`, awaiting the bank. Lights nothing in the grid.
     void beginEntry(int group);
@@ -29,7 +39,8 @@ public:
     Stage stage() const { return m_stage; }
     int entryGroup() const { return m_entryGroup; }
     int entryBank() const { return m_entryBank; }
-    // "P3-__" or "P3-4_" while an entry is pending, empty otherwise.
+    // "P3-__" or "P3-4_" while an entry is pending, empty otherwise. The 64-patch models: "__" or
+    // "4_" (JP-08), "_-_" or "4-_" (JU-06A).
     QString entryText() const;
 
     // A bank (1..8) or number (1..8) button pressed by click, Enter or Space, or a digit.
@@ -65,7 +76,12 @@ private:
     void handleDigit(int digit);
     void paintNumerals(QPainter *p, int y, bool bright);
 
+    int currentBank() const { return m_hasCurrent ? m_current.bank() : 1; }
+
     PatchAddress m_current;
+    bool m_hasCurrent = true;
+    Model m_model = Model::D05;
+    int m_engine = 0;
     Stage m_stage = Stage::Idle;
     int m_entryGroup = 0;
     int m_entryBank = 0;

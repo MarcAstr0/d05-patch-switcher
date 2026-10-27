@@ -21,6 +21,7 @@
 
 #include <QApplication>
 #include <QLineEdit>
+#include <QScrollBar>
 #include <QDialog>
 #include <QPainter>
 #include <QPixmap>
@@ -46,6 +47,17 @@ void fillCannedLibrary(Library &lib)
     for (const char *t : recents)
         lib.recordSend(addr(t), base.addSecs(60 * i++));
     lib.recordSend(addr("P1-11"), base.addSecs(60 * i++));
+    // The other two devices (DESIGN-2.md 10): a favourite and a renamed slot each. The library makes
+    // their catalogues when asked.
+    lib.catalog(Model::JP08);
+    lib.catalog(Model::JU06A);
+    const auto jp = [](const char *t) { return *PatchAddress::parse(QString::fromLatin1(t), Model::JP08); };
+    const auto ju = [](const char *t) { return *PatchAddress::parse(QString::fromLatin1(t), Model::JU06A); };
+    lib.setFavorite(jp("3-8"), true);
+    lib.setUserName(jp("3-4"), QStringLiteral("CN Strings Lift"));  // factory: Mellow Strings
+    lib.setFavorite(ju("106:5-6"), true);
+    lib.setFavorite(ju("106:7-3"), true);
+    lib.setUserName(ju("106:5-2"), QStringLiteral("CN Sub Drone"));  // factory: Junoa Bass
     lib.flush();
 }
 
@@ -67,52 +79,11 @@ struct SkinGuard {
     ~SkinGuard() { Theme::setSkin(QStringLiteral("d05")); }
 };
 
-// The skin a state renders with (DESIGN-2.md 12); every other state is the D-05.
+// The skin a dialog state renders with (the dialogs take the skin that is current when they open);
+// the main window picks its own from its device, like the application. Every other state is the D-05.
 QString skinForState(const QString &state)
 {
-    if (state == QLatin1String("jp08"))
-        return QStringLiteral("jp08");
-    if (state == QLatin1String("ju06a-60") || state == QLatin1String("flip-hint"))
-        return QStringLiteral("ju06a-60");
-    if (state == QLatin1String("ju06a-106") || state == QLatin1String("flip-prompt")
-        || state == QLatin1String("settings-devices"))
-        return QStringLiteral("ju06a-106");
-    return QStringLiteral("d05");
-}
-
-// What the LED display shows in a skin state. The window still drives the D-05 only (the router
-// reaches the UI in T8.2 and T8.3), so these scenes are set directly: the contents of the
-// mockups in docs/design (DESIGN-2.md 10) and the context strings of DESIGN-2.md 4.2.
-struct LedScene {
-    QString readout;
-    QString name;
-    QString context;
-    LedDisplayWidget::Tone tone = LedDisplayWidget::Tone::Secondary;
-};
-
-LedScene sceneForState(const QString &state)
-{
-#ifdef Q_OS_MACOS
-    const QString key = QStringLiteral("CMD");
-#else
-    const QString key = QStringLiteral("CTRL");
-#endif
-    if (state == QLatin1String("jp08"))
-        return {QStringLiteral("35"), QStringLiteral("Lo Brass"), Theme::skin().idleContext,
-                LedDisplayWidget::Tone::Secondary};
-    if (state == QLatin1String("ju06a-60"))
-        return {QStringLiteral("4-5"), QStringLiteral("LD Silo Lead"), Theme::skin().idleContext,
-                LedDisplayWidget::Tone::Secondary};
-    if (state == QLatin1String("ju06a-106"))
-        return {QStringLiteral("1-1"), QStringLiteral("Brass"), Theme::skin().idleContext,
-                LedDisplayWidget::Tone::Secondary};
-    if (state == QLatin1String("flip-prompt"))  // armed for the 60 engine while believing 106
-        return {QStringLiteral("1-1"), QStringLiteral("Brass"), QStringLiteral("FLIP SWITCH TO 60"),
-                LedDisplayWidget::Tone::Lit};
-    if (state == QLatin1String("flip-hint"))  // hint for the 106 engine while believing 60
-        return {QStringLiteral("4-5"), QStringLiteral("LD Silo Lead"),
-                QStringLiteral("FLIPPED TO 106? %1+E").arg(key), LedDisplayWidget::Tone::Primary};
-    return {};
+    return state == QLatin1String("settings-devices") ? QStringLiteral("ju06a-106") : QStringLiteral("d05");
 }
 
 }  // namespace
@@ -122,7 +93,8 @@ int runScreenshot(const CliOptions &opts)
     QTextStream err(stderr);
     const QString &state = opts.screenshotState;
 
-    // The skin first, before any widget exists: they are built in it.
+    // The skin first, before any widget exists: they are built in it. The main window changes it with
+    // its device, as in the application.
     const SkinGuard skinGuard;
     Theme::setSkin(skinForState(state));
 
@@ -151,10 +123,19 @@ int runScreenshot(const CliOptions &opts)
     const bool disconnected = state == QLatin1String("disconnected");
     const bool devices = state == QLatin1String("devices");
     const bool settingsDevices = state == QLatin1String("settings-devices");
-    if (settingsDevices)  // ports the detection knows (docs/IDENTIFY.md rule 1)
+    // The JP-08 and JU-06A scenes (DESIGN-2.md 10, mockup-jp08.png and mockup-ju06a-*.png): one device
+    // enabled, its output and input open on a fake port, everything driven through the router.
+    const bool jp08 = state == QLatin1String("jp08");
+    const bool ju06a = state == QLatin1String("ju06a-60") || state == QLatin1String("ju06a-106")
+                       || state == QLatin1String("flip-prompt") || state == QLatin1String("flip-hint");
+    if (settingsDevices || ju06a) {  // ports the detection knows (docs/IDENTIFY.md rule 1)
         backend.setOutputPorts({QStringLiteral("JU-06A")});
-    if (settingsDevices)
         backend.setInputPorts({QStringLiteral("JU-06A")});
+    }
+    if (jp08) {
+        backend.setOutputPorts({QStringLiteral("Hapax MIDI 1")});
+        backend.setInputPorts({QStringLiteral("Hapax MIDI 1")});
+    }
 
     PatchAddress current = *PatchAddress::parse(QStringLiteral("P1-11"));
     if (state == QLatin1String("recents") && !library.recents().isEmpty())
@@ -164,13 +145,35 @@ int runScreenshot(const CliOptions &opts)
     window.setSystemLookup(false);  // the fake backend's names are not ALSA clients
     // The D-05 as version 1 had it: one device, on the fake port ("firstrun" has none configured at
     // all: line 2 shows the OPEN SETTINGS hint; "disconnected" wants a port the fake does not have).
-    {
+    if (!jp08 && !ju06a) {
         AppSettings::DeviceValues d05;
         d05.enabled = true;
         d05.channel = 1;
         if (state != QLatin1String("firstrun"))
             d05.outputPort = disconnected ? QStringLiteral("Hapax MIDI 1") : QStringLiteral("Fake D-05 In");
         window.applyDevice(Model::D05, d05);
+    }
+    // The 64-patch scenes enable their device (it becomes the current one, and the window re-skins
+    // itself) and put the app in the state the mockup shows.
+    AppSettings::DeviceValues scene;
+    scene.enabled = true;
+    scene.follow = true;
+    if (jp08) {
+        scene.channel = 5;
+        scene.outputPort = scene.inputPort = QStringLiteral("Hapax MIDI 1");
+        window.applyDevice(Model::JP08, scene);
+        window.setCurrent(*PatchAddress::parse(QStringLiteral("3-5"), Model::JP08));
+    } else if (ju06a) {
+        scene.channel = 4;
+        scene.outputPort = scene.inputPort = QStringLiteral("JU-06A");
+        // 60 remembers 4-5, 106 remembers 7-1 (ju06a-60), or the other way round for the 106 scenes.
+        if (state == QLatin1String("ju06a-60"))
+            router.setJu06aState(60, 28, 48);
+        else if (state == QLatin1String("flip-hint"))
+            router.setJu06aState(60, 0, 28);  // 60: 1-1, 106: 4-5
+        else
+            router.setJu06aState(106, 28, 0);  // 60: 4-5, 106: 1-1
+        window.applyDevice(Model::JU06A, scene);
     }
     if (devices) {
         // DESIGN-2.md 10, mockup-devices.png: the D-05 current, the JP-08 connected on the same port
@@ -186,7 +189,8 @@ int runScreenshot(const CliOptions &opts)
         ju.outputPort = QStringLiteral("Hapax MIDI 1");
         window.applyDevice(Model::JU06A, ju);
     }
-    window.setCurrent(current);
+    if (!jp08 && !ju06a)
+        window.setCurrent(current);
     if (state == QLatin1String("search")) {
         window.searchField()->setText(QStringLiteral("brass"));
     } else if (state == QLatin1String("nomatch")) {
@@ -262,13 +266,40 @@ int runScreenshot(const CliOptions &opts)
         return Exit::Ok;
     }
 
-    if (Theme::skin().display == Theme::DisplayKind::Led) {  // the readout, name and context of the state
-        const LedScene scene = sceneForState(state);
-        window.ledDisplay()->setContent(scene.readout, scene.name, scene.context, scene.tone);
-    }
     window.resize(opts.screenshotSize);
     window.show();
     window.activateWindow();
+    QApplication::processEvents();
+    // What the 64-patch scenes still need is the user's own doing: a search, the armed selection, the
+    // highlight and the focus, and the panel's own flip (a Program Change on the input).
+    const auto highlight = [&](const char *text, Model m, bool nearTop) {
+        const QModelIndex i = window.model()->indexOf(*PatchAddress::parse(QString::fromLatin1(text), m));
+        if (!i.isValid())
+            return;
+        window.list()->setCurrentIndex(i);
+        window.list()->scrollTo(i, nearTop ? QAbstractItemView::PositionAtTop : QAbstractItemView::EnsureVisible);
+    };
+    if (jp08) {
+        window.list()->setFocus();
+        highlight("3-4", Model::JP08, true);  // the renamed slot, above the current 3-5
+        window.list()->verticalScrollBar()->setValue(window.list()->verticalScrollBar()->value() - 5);  // per item
+    } else if (state == QLatin1String("ju06a-60")) {
+        window.searchField()->setText(QStringLiteral("pad"));
+        window.searchField()->setFocus();
+    } else if (state == QLatin1String("ju06a-106") || state == QLatin1String("flip-prompt")) {
+        // On 106, armed for 60:3-6 (BS Ouch Bass): the prompt, the armed row and the 60 button's ring.
+        router.select(*PatchAddress::parse(QStringLiteral("60:3-6"), Model::JU06A));
+        if (state == QLatin1String("ju06a-106"))
+            window.searchField()->setText(QStringLiteral("bass"));
+        window.list()->setFocus();
+        QApplication::processEvents();
+        highlight("60:3-6", Model::JU06A, false);
+    } else if (state == QLatin1String("flip-hint")) {
+        // Believing 60 with 106 remembering 4-5: the unit's own flip re-sends 4-5, which the app
+        // takes as a panel press on 60 and hints that the switch may now be on 106.
+        backend.injectReceived(QByteArray::fromHex("c31c"));  // Program Change 28 on channel 4
+        QApplication::processEvents();
+    }
     QApplication::processEvents();
     if (state == QLatin1String("entry")) {
         // A pending grid entry "P3-4_": group P3, bank 4 pressed, awaiting the number.

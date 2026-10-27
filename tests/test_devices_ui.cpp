@@ -15,6 +15,7 @@
 #include "ui/DevicePage.h"
 #include "ui/DeviceSwitcher.h"
 #include "ui/DisplayWidget.h"
+#include "ui/EngineControl.h"
 #include "ui/GroupBar.h"
 #include "ui/LedDisplayWidget.h"
 #include "ui/MainWindow.h"
@@ -294,33 +295,48 @@ private slots:
         QCOMPARE(spy.count(), 0);
     }
 
-    void aSwitchHidesTheOldDevicesContentAndShowsItBack()
+    // T8.3 replaces T8.2's "a switch hides the old device's content": the content is now the new device's
+    // (list, search, grid, PREV / NEXT, group bar only on the D-05), and nothing of the old device stays.
+    void aSwitchSwapsTheContentAndNothingOfTheOldDeviceStays()
     {
         Rig r;
         QVERIFY(r.show());
         QVERIFY(r.w->list()->isVisible());
         QVERIFY(r.w->bankGrid()->isVisible());
         QVERIFY(r.w->searchField()->isVisible());
+        QCOMPARE(r.w->model()->rowCount(), 896);
         r.clickTab(Model::JP08);
-        // Nothing of the D-05's catalogue is on screen under the JP-08 skin (T8.3 fills it per model).
-        for (QWidget *w : std::initializer_list<QWidget *>{r.w->list(), r.w->bankGrid(), r.w->searchField(), r.w->groupBar(),
+        // The JP-08's catalogue, grid and search are on screen; the D-05's group bar and the JU-06A's engine
+        // control are not (the group slot is empty on this skin).
+        for (QWidget *w : std::initializer_list<QWidget *>{r.w->list(), r.w->bankGrid(), r.w->searchField(),
                                                            r.w->prevButton(), r.w->nextButton()})
-            QVERIFY2(!w->isVisible(), w->metaObject()->className());
+            QVERIFY2(w->isVisible(), w->metaObject()->className());
+        QVERIFY(!r.w->groupBar()->isVisible());
+        QVERIFY(!r.w->engineControl()->isVisible());
+        QCOMPARE(r.w->model()->rowCount(), 64);
+        QCOMPARE(r.w->model()->deviceModel(), Model::JP08);
         QVERIFY(r.w->autoSendButton()->isVisible());
         QVERIFY(r.w->systemButton()->isVisible());
-        // The LED display says what it knows: dashes and the idle line.
-        QCOMPARE(r.w->ledDisplay()->readout(), QStringLiteral("--"));
+        // The LED display says what the JP-08 shows: two digits, the name and the idle line.
+        QCOMPARE(r.w->ledDisplay()->readout().size(), 2);
         QCOMPARE(r.w->ledDisplay()->context(), Theme::skin().idleContext);
-        // The keys that would act on the hidden list do nothing.
+        // The keys act on this device's list: Enter sends the JP-08's highlighted patch (one Program Change).
         r.fake()->clearSent();
+        r.w->list()->setFocus();
         QTest::keyClick(r.w.get(), Qt::Key_PageDown);
-        QTest::keyClick(r.w.get(), Qt::Key_Return);
-        QVERIFY(r.fake()->sentMessages().isEmpty());
+        QCOMPARE(r.fake()->sentMessages().size(), 1);
+        QCOMPARE(r.fake()->sentMessages().first().size(), 2);  // C<n> <program>, no Bank Select
+        r.clickTab(Model::JU06A);
+        QVERIFY(r.w->engineControl()->isVisible());
+        QVERIFY(!r.w->groupBar()->isVisible());
+        QCOMPARE(r.w->model()->rowCount(), 128);
         r.clickTab(Model::D05);
         QVERIFY(r.w->list()->isVisible());
         QVERIFY(r.w->bankGrid()->isVisible());
         QVERIFY(r.w->searchField()->isVisible());
         QVERIFY(r.w->groupBar()->isVisible());
+        QVERIFY(!r.w->engineControl()->isVisible());
+        QCOMPARE(r.w->model()->rowCount(), 896);
     }
 
     void theLedDisplayShowsTheDevicesConnectionLine()

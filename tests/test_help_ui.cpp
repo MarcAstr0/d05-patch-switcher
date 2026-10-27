@@ -98,7 +98,7 @@ private slots:
             QVERIFY2(a, qPrintable(b.action));
             QCOMPARE(a->shortcut(), b.key);
         }
-        QCOMPARE(tabled.size(), 15);
+        QCOMPARE(tabled.size(), 18);  // T8.3: + next device, previous device, toggle engine
         const auto actions = r.w->findChildren<QAction *>();
         for (const QAction *a : actions)
             if (!a->shortcut().isEmpty())
@@ -110,7 +110,9 @@ private slots:
         // FR-13, as portable text, in the order the sheet shows it.
         const char *literal[] = {"Up", "Down", "Home", "End", "Enter", "Space", "1-8", "1-8"};
         const char *keys[] = {"/", "Ctrl+F", "Esc", "Esc", "Ctrl+D", "F2", "Ctrl+1", "Ctrl+2", "Ctrl+3", "PgUp", "PgDown",
-                              "Ctrl+G", "Ctrl+Shift+A", "Ctrl+,", "F1", "Ctrl+Q"};
+                              "Ctrl+G", "Ctrl+Shift+A", "Ctrl+,", "F1", "Ctrl+Q",
+                              // T8.3, the DEVICE section (DESIGN-2.md 8.1); on macOS the device caps read Ctrl literally
+                              "Ctrl+Tab", "Ctrl+Shift+Tab", "Ctrl+E"};
         Rig r;
         ShortcutsDialog d;
         QStringList expected;
@@ -133,7 +135,7 @@ private slots:
         for (const Shortcuts::Binding &b : Shortcuts::bindings())
             QVERIFY2(caps.contains(Shortcuts::capText(b.key)), qPrintable(b.action));
         QCOMPARE(d.windowTitle(), QStringLiteral("Keyboard Shortcuts"));
-        QCOMPARE(d.size(), QSize(680, 412));
+        QCOMPARE(d.size(), QSize(680, 438));  // DESIGN-2.md 8.1: 680 x 438 with the DEVICE section
     }
 
     void f1OpensAndEscCloses()
@@ -170,9 +172,13 @@ private slots:
         const QStringList p = about->paragraphs();
         QCOMPARE(p.size(), 7);
         QCOMPARE(p[0], QStringLiteral("Version 9.8.7"));
+        QCOMPARE(p[1], QStringLiteral("Selects patches on Roland Boutique D-05, JP-08 and JU-06A synths over MIDI."));
         QVERIFY(p[3].contains(QStringLiteral("MIT licence")));
         QCOMPARE(p[4], AboutDialog::trademarkNotice());
         QVERIFY(p[4].contains(QStringLiteral("not affiliated with or endorsed by Roland")));
+        for (const char *name : {"D-05", "D-50", "JP-08", "JUPITER-8", "JU-06A", "JUNO-60", "JUNO-106"})  // SPEC-2 9
+            QVERIFY2(p[4].contains(QString::fromLatin1(name)), name);
+        QCOMPARE(p[5], QStringLiteral("Inter and Archivo typefaces, SIL Open Font License 1.1."));
         QCOMPARE(p[6], QStringLiteral("Uses Qt (LGPLv3) and RtMidi. See THIRD-PARTY-NOTICES."));
         QCOMPARE(box->width(), 440);
         QCOMPARE(box->windowTitle(), QStringLiteral("About"));
@@ -188,7 +194,7 @@ private slots:
     {
         ShortcutsDialog d;
         const auto labels = d.findChildren<QLabel *>(QStringLiteral("rowText"));
-        QCOMPARE(labels.size(), 18);
+        QCOMPARE(labels.size(), 21);
         for (const QLabel *l : labels) {
             QCOMPARE(l->width(), 154);
             QVERIFY2(!l->wordWrap(), qPrintable(l->text()));

@@ -11,6 +11,7 @@
 #include "ui/BankGrid.h"
 #include "ui/DeviceSwitcher.h"
 #include "ui/DisplayWidget.h"
+#include "ui/EngineControl.h"
 #include "ui/GroupBar.h"
 #include "ui/LedDisplayWidget.h"
 #include "ui/Nameplate.h"
@@ -270,6 +271,16 @@ void MainWindow::init()
         m_current = *m_link.current();
     else
         m_current = *PatchAddress::fromParts(8, 1, 1);  // P1-11
+    if (const MidiLink *jp = m_router->link(Model::JP08); jp->current())
+        m_jpCurrent = *jp->current();
+    else
+        m_jpCurrent = *PatchAddress::fromBankNumber(Model::JP08, 1, 1);  // 1-1
+    // The library makes (and keeps) the catalogues of the other two models, so that user names of
+    // every device are saved with it.
+    m_catalogs[int(Model::D05)] = &m_catalog;
+    m_catalogs[int(Model::JP08)] = &m_library.catalog(Model::JP08);
+    m_catalogs[int(Model::JU06A)] = &m_library.catalog(Model::JU06A);
+    m_shown = currentDevice();
     for (Model m : allModels())  // the status bar's IN label of a device the router already configured
         m_rt[int(m)].inputLabel = MidiLink::portKey(m_router->config(m).inputPort);
 
@@ -278,7 +289,11 @@ void MainWindow::init()
     resize(960, 560);
     applySkin();  // also lays out
 
-    applyCurrent(m_current);
+    // The D-05's LCD and group bar are kept current whether or not they are on screen.
+    m_display->setPatch(m_current, m_catalog.name(m_current), m_catalog.mode(m_current));
+    m_groupBar->setLitGroup(m_current.group());
+    showCurrentPatch(false);
+    syncEngineState();
     updateDisplayConnection();
     refreshConnection();
     if (!m_startupError.isEmpty())
@@ -286,6 +301,18 @@ void MainWindow::init()
     onModelReset();
     highlightCurrent(true);
     m_search->setFocus();
+}
+
+// What the app believes each device shows now: the D-05's and JP-08's patch lives here (fed by the
+// links), the JU-06A's in its engine tracker (SPEC-2 6); none is "no patch" on that engine.
+std::optional<PatchAddress> MainWindow::currentOf(Model m) const
+{
+    switch (m) {
+    case Model::D05: return m_current;
+    case Model::JP08: return m_jpCurrent;
+    case Model::JU06A: return m_router->ju06aTracker()->current();
+    }
+    return std::nullopt;
 }
 
 Model MainWindow::currentDevice() const
@@ -321,6 +348,8 @@ void MainWindow::buildWidgets()
     m_led = new LedDisplayWidget(m_central);
     m_led->hide();  // shown instead of the LCD on the JP-08 and JU-06A skins (applySkin)
     m_groupBar = new GroupBar(m_central);
+    m_engine = new EngineControl(m_central);
+    m_engine->hide();  // the JU-06A skins' group slot (applySkin)
     m_grid = new BankGrid(m_central);
 
     m_prev = new PanelButton(PanelButton::Kind::WedgeLeft, m_central);
@@ -362,7 +391,7 @@ void MainWindow::buildWidgets()
     m_search->setAttribute(Qt::WA_MacShowFocusRect, false);
     m_search->installEventFilter(this);
 
-    m_model = new PatchListModel(m_catalog, m_library, this);
+    m_model = new PatchListModel(*m_catalogs[int(m_shown)], m_library, this);
     m_list = new PatchListView(m_central);
     m_delegate = new PatchDelegate(m_list);
     m_list->setItemDelegate(m_delegate);  // before the model: the list measures rows for it
@@ -391,7 +420,7 @@ void MainWindow::buildWidgets()
 
     // Tab order (DESIGN 9).
     QWidget *order[] = {m_search, m_list, m_viewAll, m_viewFav, m_viewRecent, m_autoSend,
-                        m_system, m_groupBar, m_grid, m_prev, m_next};
+                        m_system, m_groupBar, m_engine, m_grid, m_prev, m_next};
     for (size_t i = 0; i + 1 < sizeof(order) / sizeof(order[0]); ++i)
         setTabOrder(order[i], order[i + 1]);
 
@@ -409,7 +438,7 @@ void MainWindow::buildWidgets()
                     toggleHighlightedFavorite();
             });
     connect(m_delegate, &PatchDelegate::nameCommitted, this, &MainWindow::onNameCommitted);
-    connect(&m_library, &Library::userNamesChanged, this, &MainWindow::refreshDisplayPatch);
+    connect(&m_library, &Library::userNamesChanged, this, [this](Model) { refreshDisplayPatch(); });
     connect(m_list, &PatchListView::rowClicked, this, [this](const QModelIndex &index) {
         sendAddress(m_model->addressAt(index));
     });
@@ -417,8 +446,10 @@ void MainWindow::buildWidgets()
     connect(m_model, &QAbstractItemModel::modelReset, this, &MainWindow::onModelReset);
     // A first send in the Recents view inserts a row (possibly into an empty list).
     connect(m_model, &QAbstractItemModel::rowsInserted, this, [this] {
-        m_display->setSearch(m_model->searchActive(), m_model->rowCount());
+        if (m_shown == Model::D05)
+            m_display->setSearch(m_model->searchActive(), m_model->rowCount());
         m_list->setEmptyText(m_model->emptyTitle(), m_model->emptyNote());
+        updateLedDisplay();
     });
 
     connect(m_prev, &QAbstractButton::clicked, this, [this] { step(-1); });
@@ -437,9 +468,19 @@ void MainWindow::buildWidgets()
     });
     connect(m_grid, &BankGrid::patchChosen, this, [this](const PatchAddress &a) { sendAddress(a); });
     connect(m_grid, &BankGrid::entryChanged, this, &MainWindow::onEntryChanged);
+    connect(m_engine, &EngineControl::engineRequested, this, &MainWindow::onEngineRequested);
 
-    connect(&m_link, &MidiLink::sent, this, &MainWindow::onSent);
+    // Every link: what it sent (a selection, a flip confirmation, a resend or TEST), and, for the two
+    // devices that follow with a full address, a panel change. The JU-06A's follow is the tracker's.
+    for (Model m : allModels())
+        connect(m_router->link(m), &MidiLink::sent, this, &MainWindow::onSent);
     connect(&m_link, &MidiLink::currentChanged, this, &MainWindow::onFollowed);
+    connect(m_router->link(Model::JP08), &MidiLink::currentChanged, this, &MainWindow::onFollowed);
+    connect(m_router->link(Model::JU06A), &MidiLink::programReceived, this, [this](int) {
+        m_sendFlash = false;
+        m_display->flashActivity();
+        updateLedDisplay();
+    });
     // Every device's link: connection changes and errors (an error is told in the status bar only
     // for the device the window shows).
     for (Model m : allModels()) {
@@ -467,17 +508,26 @@ void MainWindow::buildWidgets()
             layoutAll();
     });
     connect(Theme::notifier(), &Theme::Notifier::skinChanged, this, [this] { applySkin(); });
-    // The JU-06A skin follows the engine the app believes (FR-17), whichever device is current.
-    connect(m_router->ju06aTracker(), &EngineTracker::engineChanged, this, [this](int) {
-        if (m_settings)
-            m_engineChanged = true;  // after startup: the user's action or a confirmed flip
-        if (currentDevice() == Model::JU06A)
-            Theme::setSkin(skinIdForCurrent());
-    });
+    // The JU-06A skin follows the engine the app believes (FR-17), whichever device is current; the
+    // engine control, the list markers, the display and the grid follow its arm, hint and patches.
+    {
+        const EngineTracker *t = m_router->ju06aTracker();
+        connect(t, &EngineTracker::engineChanged, this, &MainWindow::onEngineChanged);
+        connect(t, &EngineTracker::armedChanged, this, [this] { syncEngineState(); });
+        connect(t, &EngineTracker::hintChanged, this, [this](int) { syncEngineState(); });
+        connect(t, &EngineTracker::rememberedChanged, this, [this] { syncEngineState(); });
+        connect(t, &EngineTracker::currentChanged, this, [this] {
+            if (currentDevice() == Model::JU06A)
+                showCurrentPatch(true);
+        });
+    }
     connect(&m_library, &Library::saveFailed, this,
             [this](const QString &text) { showMessage(QStringLiteral("Library not saved: ") + text); });
     connect(m_display, &DisplayWidget::sentChanged, this, [this](bool on) {
         static_cast<StatusStrip *>(m_statusStrip)->led->setLit(on);
+        if (!on)
+            m_sendFlash = false;
+        updateLedDisplay();  // SENT is on the LED display's context line for as long as the flash
     });
 }
 
@@ -505,35 +555,35 @@ void MainWindow::buildActions()
     make(QStringLiteral("actionNext"), QStringLiteral("Next patch"), [this] { step(1); })
         ->setAutoRepeat(false);
     make(QStringLiteral("actionGridEntry"), QStringLiteral("Enter bank and number"), [this] { beginGridEntry(); });
-    make(QStringLiteral("actionViewAll"), QStringLiteral("All"), [this] { if (d05Current()) m_viewAll->setChecked(true); });
-    make(QStringLiteral("actionViewFavourites"), QStringLiteral("Favourites"), [this] { if (d05Current()) m_viewFav->setChecked(true); });
-    make(QStringLiteral("actionViewRecents"), QStringLiteral("Recents"), [this] { if (d05Current()) m_viewRecent->setChecked(true); });
+    make(QStringLiteral("actionViewAll"), QStringLiteral("All"), [this] { m_viewAll->setChecked(true); });
+    make(QStringLiteral("actionViewFavourites"), QStringLiteral("Favourites"), [this] { m_viewFav->setChecked(true); });
+    make(QStringLiteral("actionViewRecents"), QStringLiteral("Recents"), [this] { m_viewRecent->setChecked(true); });
     make(QStringLiteral("actionToggleFavourite"), QStringLiteral("Toggle favourite"), [this] { toggleHighlightedFavorite(); })
         ->setAutoRepeat(false);
     make(QStringLiteral("actionRename"), QStringLiteral("Rename"), [this] { renameHighlighted(); })
         ->setAutoRepeat(false);
     make(QStringLiteral("actionAutoSend"), QStringLiteral("Auto-send"), [this] { setAutoSend(!m_autoSendOn); })
         ->setAutoRepeat(false);
-    // Device switching (FR-13, DESIGN-2.md 4.4, 13.2.1). Command+Tab belongs to the system on macOS,
-    // so there the keys are Control+Tab, which Qt calls Meta. Qt delivers Shift+Tab as Backtab.
-    // These are QShortcuts, not table actions: the shortcut table and its sheet get the DEVICE
-    // section with the rest of T8.3 (DESIGN-2.md 8.1).
+    // Device switching and the JU-06A engine toggle (FR-13, DESIGN-2.md 4.4, 13.2.1) are table actions
+    // like the rest, so the sheet's DEVICE section cannot list a key the window lacks. Command+Tab
+    // belongs to the system on macOS, so there the device keys are Control+Tab (Qt's Meta). Qt delivers
+    // Shift+Tab as Backtab, so the previous-device action answers to both.
+    make(QStringLiteral("actionNextDevice"), QStringLiteral("Next device"), [this] { cycleDevice(1); })
+        ->setAutoRepeat(false);
     {
+        QAction *prevDevice =
+            make(QStringLiteral("actionPreviousDevice"), QStringLiteral("Previous device"), [this] { cycleDevice(-1); });
+        prevDevice->setAutoRepeat(false);
 #ifdef Q_OS_MACOS
         constexpr int mod = Qt::META;
 #else
         constexpr int mod = Qt::CTRL;
 #endif
-        const auto device = [this](const QKeySequence &key, int direction) {
-            auto *sc = new QShortcut(key, this, nullptr, nullptr, Qt::WindowShortcut);
-            sc->setObjectName(direction > 0 ? QStringLiteral("shortcutNextDevice") : QStringLiteral("shortcutPreviousDevice"));
-            sc->setAutoRepeat(false);
-            connect(sc, &QShortcut::activated, this, [this, direction] { cycleDevice(direction); });
-        };
-        device(QKeySequence(mod | Qt::Key_Tab), 1);
-        device(QKeySequence(mod | Qt::SHIFT | Qt::Key_Tab), -1);
-        device(QKeySequence(mod | Qt::SHIFT | Qt::Key_Backtab), -1);
+        prevDevice->setShortcuts({Shortcuts::key(QStringLiteral("actionPreviousDevice")),
+                                  QKeySequence(mod | Qt::SHIFT | Qt::Key_Backtab)});
     }
+    make(QStringLiteral("actionToggleEngine"), QStringLiteral("Toggle JU-06A engine"), [this] { toggleEngine(); })
+        ->setAutoRepeat(false);
 
     // The system menu (DESIGN 8.2). The actions carry their shortcuts, so they are the
     // window's shortcuts for Settings, the sheet and Quit.
@@ -583,10 +633,10 @@ PanelButton *MainWindow::viewButton(PatchListModel::View view) const
 // ---------------------------------------------------------------------------- layout
 
 // The parts of the window that depend on the skin (DESIGN-2.md 2.6): which display fills the
-// slot, whether the group slot holds the group bar, the search placeholder. Called once at
-// construction and from Theme::skinChanged(), which Theme::setSkin() emits; the style sheet
-// change and this method run in one event-loop turn, so the window paints once. The style sheet and the painted widgets follow
-// the palette on their own; the group-slot content of the JU-06A skins is T8.3.
+// slot, whether the group slot holds the group bar, the engine control or nothing, the search
+// placeholder. Called once at construction and from Theme::skinChanged(), which Theme::setSkin() emits;
+// the style sheet change and this method run in one event-loop turn, so the window paints once. The style
+// sheet and the painted widgets follow the palette on their own.
 void MainWindow::applySkin()
 {
     const Theme::Skin &skin = Theme::skin();
@@ -594,11 +644,12 @@ void MainWindow::applySkin()
     // The geometry first (it sizes and builds the LED display's atlas once, while it is still
     // hidden), then the visibility and the content.
     m_groupBar->setVisible(skin.groupSlot == Theme::GroupSlot::GroupBar && d05Current());
+    m_engine->setVisible(skin.groupSlot == Theme::GroupSlot::Engine && currentDevice() == Model::JU06A);
     m_search->setPlaceholderText(skin.searchPlaceholder);
     layoutAll();
     m_display->setVisible(!led);
     m_led->setVisible(led);
-    if (led)  // until the window drives it (T8.3): dashes and the idle or connection line
+    if (led)
         updateLedDisplay();
     update();
 }
@@ -610,44 +661,83 @@ QString MainWindow::skinIdForCurrent() const
     return Theme::skinIdFor(modelInfo(currentDevice()).id, m_router->ju06aTracker()->engine());
 }
 
-// What the LED display shows while the window does not yet drive a patch for the device (T8.3): the
-// readout in dashes, no name, and the context line of DESIGN-2.md 4.2 that applies (1a, 1b, 6).
-// With the D-05 current, a skin changed on its own keeps the idle line it always showed.
+// A LED skin that is not the current device's: set on its own (tests, tools) while the D-05 is
+// current, or the device just changed and its skin is not on yet.
+bool MainWindow::ledIsPlaceholder() const
+{
+    return Theme::skin().model != modelInfo(currentDevice()).id;
+}
+
+// The context line of the LED display (DESIGN-2.md 4.2, FR-12), the first that applies.
+QString MainWindow::contextLine(LedDisplayWidget::Tone *tone) const
+{
+#ifdef Q_OS_MACOS
+    const QString ctrl = QStringLiteral("CMD");
+#else
+    const QString ctrl = QStringLiteral("CTRL");
+#endif
+    const Model m = currentDevice();
+    const MidiLink *l = m_router->link(m);
+    const EngineTracker *t = m_router->ju06aTracker();
+    *tone = LedDisplayWidget::Tone::Secondary;
+    if (l->outputPortName().isEmpty()) {  // 1a: enabled, no output port saved
+        *tone = LedDisplayWidget::Tone::Primary;
+        return QStringLiteral("OPEN SETTINGS: ") + Shortcuts::settingsHintKey();
+    }
+    if (!l->isConnected()) {  // 1b
+        *tone = LedDisplayWidget::Tone::Red;
+        return QStringLiteral("NO MIDI OUTPUT");
+    }
+    if (m == Model::JU06A && t->armed()) {  // 2: the prompt belongs to the unit, so it is in the readout's colour
+        *tone = LedDisplayWidget::Tone::Lit;
+        const int x = t->armed()->engine();
+        return t->prompt() == EngineTracker::Prompt::FlipSwitch
+                   ? QStringLiteral("FLIP SWITCH TO %1").arg(x)
+                   : QStringLiteral("FLIP TO %1, THEN %2+E").arg(x).arg(ctrl);
+    }
+    if (m_sendFlash && m_sentOn == m) {  // 3
+        *tone = LedDisplayWidget::Tone::Primary;
+        return QStringLiteral("SENT");
+    }
+    if (m == Model::JU06A && t->hint() != 0) {  // 4
+        *tone = LedDisplayWidget::Tone::Primary;
+        return QStringLiteral("FLIPPED TO %1? %2+E").arg(t->hint()).arg(ctrl);
+    }
+    if (m_model->searchActive()) {  // 5
+        const int n = m_model->rowCount();
+        return n == 0 ? QStringLiteral("NO MATCHES")
+                      : (n == 1 ? QStringLiteral("1 MATCH") : QStringLiteral("%1 MATCHES").arg(n));
+    }
+    return Theme::skin().idleContext;  // 6
+}
+
+// What the LED display shows: the readout, the name and the context line of the current device.
+// A skin that is not the device's keeps the idle line it always showed (dashes, no name).
 void MainWindow::updateLedDisplay()
 {
     if (Theme::skin().display != Theme::DisplayKind::Led)
         return;
     const Theme::Skin &skin = Theme::skin();
-    QString context = skin.idleContext;
-    LedDisplayWidget::Tone tone = LedDisplayWidget::Tone::Secondary;
-    if (!d05Current()) {
-        const MidiLink *l = currentLink();
-        if (l->outputPortName().isEmpty()) {
-            context = QStringLiteral("OPEN SETTINGS: ") + Shortcuts::settingsHintKey();
-            tone = LedDisplayWidget::Tone::Primary;
-        } else if (!l->isConnected()) {
-            context = QStringLiteral("NO MIDI OUTPUT");
-            tone = LedDisplayWidget::Tone::Red;
-        }
+    if (ledIsPlaceholder()) {
+        m_led->setContent(QString(skin.ledCells, QLatin1Char('-')), QString(), skin.idleContext,
+                          LedDisplayWidget::Tone::Secondary);
+        return;
     }
-    m_led->setContent(QString(skin.ledCells, QLatin1Char('-')), QString(), context, tone);
-}
-
-// The D-05's catalogue, list, search, grid and PREV / NEXT are all the window can show until T8.3
-// makes them per model. While another device is current they are hidden, so nothing of the D-05 is
-// on screen under another skin; AUTO SEND and SYSTEM stay.
-void MainWindow::applyContentVisibility()
-{
-    const bool on = d05Current();
-    for (QWidget *w : std::initializer_list<QWidget *>{m_grid, m_prev, m_next, m_viewAll, m_viewFav, m_viewRecent,
-                                                       m_search, m_list}) {
-        if (w->isHidden() == on)
-            w->setVisible(on);
+    const Model m = currentDevice();
+    QString readout, name;
+    const bool ju = m == Model::JU06A;
+    if (m_grid->stage() != BankGrid::Stage::Idle && skin.displayEntryEcho) {
+        readout = m_grid->entryText();  // "__" / "4_" (JP-08), "_-_" / "4-_" (JU-06A); no name while entering
+    } else if (const std::optional<PatchAddress> cur = currentOf(m)) {
+        readout = ju ? QStringLiteral("%1-%2").arg(cur->bank()).arg(cur->number())
+                     : QStringLiteral("%1%2").arg(cur->bank()).arg(cur->number());
+        name = m_catalogs[int(m)]->name(*cur);
+    } else {
+        readout = QString(skin.ledCells, QLatin1Char('-'));  // no patch on that engine
     }
-    const bool bar = on && Theme::skin().groupSlot == Theme::GroupSlot::GroupBar;
-    if (m_groupBar->isHidden() == bar)
-        m_groupBar->setVisible(bar);
-    layoutAll();  // the panel labels above the hidden buttons go too
+    LedDisplayWidget::Tone tone;
+    const QString context = contextLine(&tone);
+    m_led->setContent(readout, name, context, tone);
 }
 
 void MainWindow::layoutAll()
@@ -678,6 +768,7 @@ void MainWindow::layoutAll()
 
     // Left column (DESIGN 4.3): faces at x = 16 + 50 col.
     m_groupBar->move(kMargin - 4, B + 12);
+    m_engine->move(kMargin - 4, B + 12);
     m_grid->move(kMargin - 4, B + 92);
     m_prev->setGeometry(PanelButton::widgetRectForFace(QPoint(kMargin, B + 231)));
     m_next->setGeometry(PanelButton::widgetRectForFace(QPoint(kMargin + 50, B + 231)));
@@ -695,22 +786,15 @@ void MainWindow::layoutAll()
     auto *band = static_cast<Band *>(m_band);
     const QColor &primary = Theme::colors().labelPrimary;
     const QColor &commit = Theme::colors().labelCommit;
-    if (d05Current()) {
-        band->setLabels({
-            {QStringLiteral("ALL"), facesX[0] + 22, 15 + 9, primary},
-            {QStringLiteral("FAVOURITES"), facesX[1] + 22, 15 + 9, primary},
-            {QStringLiteral("RECENTS"), facesX[2] + 22, 15 + 9, primary},
-            {QStringLiteral("AUTO SEND"), facesX[3] + 22, 15 + 9, commit},
-            {QStringLiteral("SYSTEM"), facesX[4] + 22, 15 + 9, primary},
-            {QStringLiteral("PREV"), kMargin + 22, 218 + 9, primary},
-            {QStringLiteral("NEXT"), kMargin + 50 + 22, 218 + 9, primary},
-        });
-    } else {
-        band->setLabels({
-            {QStringLiteral("AUTO SEND"), facesX[3] + 22, 15 + 9, commit},
-            {QStringLiteral("SYSTEM"), facesX[4] + 22, 15 + 9, primary},
-        });
-    }
+    band->setLabels({
+        {QStringLiteral("ALL"), facesX[0] + 22, 15 + 9, primary},
+        {QStringLiteral("FAVOURITES"), facesX[1] + 22, 15 + 9, primary},
+        {QStringLiteral("RECENTS"), facesX[2] + 22, 15 + 9, primary},
+        {QStringLiteral("AUTO SEND"), facesX[3] + 22, 15 + 9, commit},
+        {QStringLiteral("SYSTEM"), facesX[4] + 22, 15 + 9, primary},
+        {QStringLiteral("PREV"), kMargin + 22, 218 + 9, primary},
+        {QStringLiteral("NEXT"), kMargin + 50 + 22, 218 + 9, primary},
+    });
     relayoutStatus();
 }
 
@@ -740,8 +824,13 @@ void MainWindow::showEvent(QShowEvent *event)
 
 bool MainWindow::event(QEvent *e)
 {
-    if (e->type() == QEvent::WindowActivate)
+    if (e->type() == QEvent::WindowActivate) {
         m_router->checkConnections();  // FR-10: the only check while connected (no timer)
+        if (!anyDeviceEnabled()) {
+            refreshDetection();  // the port list is read again: a unit plugged in since is found
+            updateDisplayConnection();
+        }
+    }
     return QMainWindow::event(e);
 }
 
@@ -790,36 +879,45 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *e)
 
 bool MainWindow::sendAddress(const PatchAddress &address)
 {
-    if (!m_link.sendPatch(address)) {
-        showMessage(QStringLiteral("Not sent: ") + m_link.status());
-        m_grid->setCurrent(m_current);  // end any entry, back to the current patch
+    const Model m = address.model();
+    // The D-05 sends through its link as in version 1. The others go through the router: the JP-08
+    // sends, the JU-06A's tracker sends or, for the other engine, arms (nothing is sent then).
+    const bool ok = m == Model::D05 ? m_link.sendPatch(address) : m_router->select(address);
+    if (!ok) {
+        showMessage(QStringLiteral("Not sent: ") + m_router->link(m)->status());
+        showCurrentPatch(false);  // end any entry, back to the current patch
         return false;
     }
+    if (m == currentDevice() && m_grid->stage() != BankGrid::Stage::Idle)
+        showCurrentPatch(false);  // an armed selection sends nothing: the entry ends here
     return true;
 }
 
 void MainWindow::sendHighlighted()
 {
-    if (!d05Current())
-        return;  // the other devices' lists are T8.3's
     const auto a = highlighted();
     if (a)
         sendAddress(*a);
 }
 
+// PREV / NEXT (FR-5): one step in catalogue order of the device (the JU-06A within its believed
+// engine, clamped), then a selection like any other. With no patch (the JU-06A after a flip into
+// an engine that shows ---) either key selects 1-1 of the believed engine.
 void MainWindow::step(int direction)
 {
-    if (!d05Current())
-        return;
-    sendAddress(direction < 0 ? PatchCatalog::prev(m_current) : PatchCatalog::next(m_current));
+    const Model m = currentDevice();
+    const std::optional<PatchAddress> cur = currentOf(m);
+    if (cur) {
+        sendAddress(direction < 0 ? PatchCatalog::prev(*cur) : PatchCatalog::next(*cur));
+    } else if (m == Model::JU06A) {
+        sendAddress(*PatchAddress::fromBankNumber(Model::JU06A, 1, 1, m_router->ju06aTracker()->engine()));
+    }
 }
 
 void MainWindow::beginGridEntry()
 {
-    if (!d05Current())
-        return;
     m_grid->setFocus(Qt::ShortcutFocusReason);
-    m_grid->beginEntry(m_current.group());
+    m_grid->beginEntry(d05Current() ? m_current.group() : 0);
 }
 
 void MainWindow::onSent(const PatchAddress &address)
@@ -830,35 +928,74 @@ void MainWindow::onSent(const PatchAddress &address)
         finishEditing();
         m_library.recordSend(address);
     }
-    m_rt[int(Model::D05)].resendBlocked = false;  // a send worked: resend-on-connect may try again
-    applyCurrent(address, !m_quietSend);
-    m_display->flashSent();
+    m_rt[int(address.model())].resendBlocked = false;  // a send worked: resend-on-connect may try again
+    m_sentOn = address.model();
+    // The JU-06A's current patch is committed by its tracker once the send is on the wire; the
+    // others' is the address that went out.
+    if (address.model() != Model::JU06A)
+        applyCurrent(address, !m_quietSend);
+    if (address.model() == Model::D05) {
+        m_display->flashSent();
+    } else {
+        // The LED skins show SENT on their own context line; the one 400 ms timer and the status LED are
+        // the D-05 display's (a flash of activity, which does not depend on the D-05's connection).
+        m_sendFlash = true;
+        m_display->flashActivity();
+        updateLedDisplay();
+    }
 }
 
-// An incoming Bank Select / Program Change moved the current patch (follow, FR-11): every
-// view follows, the activity LED blinks, and nothing is sent, so auto-send cannot fire.
+// An incoming Bank Select / Program Change moved a device's current patch (follow, FR-11): every
+// view of that device follows, the activity LED blinks, and nothing is sent, so auto-send cannot fire.
 void MainWindow::onFollowed(const PatchAddress &address)
 {
     finishEditing();
+    m_sendFlash = false;  // a followed patch is not a send: it ends a SENT flash
     applyCurrent(address);
     m_display->flashActivity();
 }
 
-// The current patch changed (sent, followed or restored): every view of it follows.
+// A device's current patch changed (sent, followed or restored). The D-05's and the JP-08's are kept
+// here; when the device is the one shown, every view of it follows.
 void MainWindow::applyCurrent(const PatchAddress &address, bool moveHighlight)
 {
-    m_current = address;
-    m_model->setCurrent(address);
-    m_display->setPatch(address, m_catalog.name(address), m_catalog.mode(address));
-    m_groupBar->setLitGroup(address.group());
-    m_grid->setCurrent(address);
-    if (moveHighlight)
-        highlightCurrent(false);
+    switch (address.model()) {
+    case Model::D05:
+        m_current = address;
+        m_display->setPatch(address, m_catalog.name(address), m_catalog.mode(address));
+        m_groupBar->setLitGroup(address.group());
+        break;
+    case Model::JP08:
+        m_jpCurrent = address;
+        break;
+    case Model::JU06A:
+        return;  // the tracker's
+    }
+    if (address.model() == currentDevice())
+        showCurrentPatch(moveHighlight);
+}
+
+// The shown device's current patch into the list, the grid and the displays.
+void MainWindow::showCurrentPatch(bool moveHighlight)
+{
+    const Model m = currentDevice();
+    if (m != m_shown)
+        return;  // the list still holds the previous device: enterDevice() fills it
+    if (const std::optional<PatchAddress> cur = currentOf(m)) {
+        m_model->setCurrent(*cur);
+        m_grid->setCurrent(*cur);
+        if (moveHighlight)
+            highlightCurrent(false);
+    } else {
+        m_model->clearCurrent();
+        m_grid->clearCurrent();
+    }
+    updateLedDisplay();
 }
 
 void MainWindow::setCurrent(const PatchAddress &address)
 {
-    m_link.setCurrent(address);
+    m_router->link(address.model())->setCurrent(address);
     applyCurrent(address);
 }
 
@@ -875,7 +1012,7 @@ std::optional<PatchAddress> MainWindow::highlighted() const
 void MainWindow::onQueryChanged(const QString &text)
 {
     const bool wasSearching = m_model->searchActive();
-    if (!SearchQuery(text).isEmpty()) {
+    if (!SearchQuery(text, m_shown).isEmpty()) {
         if (!wasSearching)
             m_preSearch = highlighted();  // where the user was before searching
         m_restore = Restore::First;
@@ -901,6 +1038,8 @@ void MainWindow::onViewToggled()
 
 void MainWindow::onModelAboutToReset()
 {
+    if (m_restore == Restore::Device)
+        return;  // enterDevice() has set the highlight to come back to
     m_savedHighlight = highlighted();
     if (m_savedHighlight)
         m_lastHighlight = m_savedHighlight;
@@ -908,10 +1047,13 @@ void MainWindow::onModelAboutToReset()
 
 void MainWindow::onModelReset()
 {
-    m_display->setSearch(m_model->searchActive(), m_model->rowCount());
+    if (m_shown == Model::D05)
+        m_display->setSearch(m_model->searchActive(), m_model->rowCount());
     m_list->setEmptyText(m_model->emptyTitle(), m_model->emptyNote());
+    updateLedDisplay();  // the match count is on its context line
     if (m_model->rowCount() == 0)
         return;
+    const std::optional<PatchAddress> cur = currentOf(m_shown);
     switch (m_restore) {
     case Restore::First:
         highlightRow(0, false);
@@ -921,7 +1063,7 @@ void MainWindow::onModelReset()
         // Switching views keeps the highlighted patch if the new view has it.
         if (m_savedHighlight && m_model->rowOf(*m_savedHighlight) >= 0)
             highlightRow(m_model->rowOf(*m_savedHighlight), true);
-        else if (m_model->rowOf(m_current) >= 0)
+        else if (cur && m_model->rowOf(*cur) >= 0)
             highlightCurrent(true);
         else
             highlightRow(0, false);
@@ -930,7 +1072,16 @@ void MainWindow::onModelReset()
         // The search was cleared: back to the row the user had, else the current patch.
         if (m_preSearch && m_model->rowOf(*m_preSearch) >= 0)
             highlightRow(m_model->rowOf(*m_preSearch), true);
-        else if (m_model->rowOf(m_current) >= 0)
+        else if (cur && m_model->rowOf(*cur) >= 0)
+            highlightCurrent(true);
+        else
+            highlightRow(0, false);
+        break;
+    case Restore::Device:
+        // Back to the row this device's list had when the window left it, else the current patch.
+        if (m_savedHighlight && m_model->rowOf(*m_savedHighlight) >= 0)
+            highlightRow(m_model->rowOf(*m_savedHighlight), true);
+        else if (cur && m_model->rowOf(*cur) >= 0)
             highlightCurrent(true);
         else
             highlightRow(0, false);
@@ -962,7 +1113,10 @@ void MainWindow::highlightRow(int row, bool scrollNearTop)
 
 void MainWindow::highlightCurrent(bool scrollNearTop)
 {
-    const int row = m_model->rowOf(m_current);
+    const std::optional<PatchAddress> cur = currentOf(m_shown);
+    if (!cur)
+        return;
+    const int row = m_model->rowOf(*cur);
     if (row >= 0)
         highlightRow(row, scrollNearTop);
 }
@@ -992,23 +1146,22 @@ void MainWindow::toggleFavorite(const PatchAddress &address)
 
 void MainWindow::toggleHighlightedFavorite()
 {
-    if (!d05Current())
-        return;
     // An empty list (no favourites yet) toggles the last highlighted patch, else the current one.
     std::optional<PatchAddress> a = highlighted();
+    if (!a && m_lastHighlight && m_lastHighlight->model() == m_shown)
+        a = m_lastHighlight;
     if (!a)
-        a = m_lastHighlight ? m_lastHighlight : std::optional<PatchAddress>(m_current);
-    toggleFavorite(*a);
+        a = currentOf(m_shown);
+    if (a)
+        toggleFavorite(*a);
 }
 
 void MainWindow::renameHighlighted()
 {
-    if (!d05Current())
-        return;
     const QModelIndex i = m_list->currentIndex();
     if (!i.isValid())
         return;
-    if (!m_model->addressAt(i).isUser()) {
+    if (!PatchListModel::canRename(m_model->addressAt(i))) {
         showMessage(QStringLiteral("Only user slots can be renamed"));
         return;
     }
@@ -1061,6 +1214,7 @@ void MainWindow::finishEditing()
 void MainWindow::refreshDisplayPatch()
 {
     m_display->setPatch(m_current, m_catalog.name(m_current), m_catalog.mode(m_current));
+    updateLedDisplay();  // the name of the JP-08's or JU-06A's current patch may have changed
 }
 
 void MainWindow::confirmClearRecents()
@@ -1100,7 +1254,7 @@ void MainWindow::confirmClearRecents()
     box->setFixedHeight(column->totalHeightForWidth(360));
     connect(clear, &QAbstractButton::clicked, this, [this, box] {
         finishEditing();
-        m_library.clearRecents();
+        m_library.clearRecents(m_shown);  // the shown device's list (Recents are per device)
         box->accept();
     });
     connect(cancel, &QAbstractButton::clicked, box, &QDialog::reject);
@@ -1133,14 +1287,16 @@ void MainWindow::openAbout()
 
 void MainWindow::focusSearch()
 {
-    if (!d05Current())
-        return;
     m_search->setFocus(Qt::ShortcutFocusReason);
     m_search->selectAll();
 }
 
 void MainWindow::onEscape()
 {
+    // Esc first ends the JU-06A's armed selection and its flip hint (FR-13, FR-19), and is then done;
+    // with nothing armed it goes on as before.
+    if (currentDevice() == Model::JU06A && m_router->ju06aTracker()->escape())
+        return;
     if (m_grid->stage() != BankGrid::Stage::Idle) {
         m_grid->cancelEntry();
         m_list->setFocus(Qt::ShortcutFocusReason);
@@ -1158,8 +1314,9 @@ void MainWindow::onEntryChanged()
         qApp->removeEventFilter(this);
     else
         qApp->installEventFilter(this);  // Qt ignores a second install of the same filter
-    m_display->setEntry(m_grid->entryText());
+    m_display->setEntry(d05Current() ? m_grid->entryText() : QString());
     m_groupBar->setLitGroup(idle ? m_current.group() : m_grid->entryGroup(), idle);
+    updateLedDisplay();  // the entry echo
     if (!idle && !m_grid->hasFocus())
         m_grid->setFocus(Qt::OtherFocusReason);
 }
@@ -1170,16 +1327,76 @@ void MainWindow::updateDisplayConnection()
 {
     m_display->setConnected(m_link.isConnected());
     // First run (DESIGN 5.2): no output port was ever chosen, so line 2 points at Settings
-    // instead of saying NO MIDI OUTPUT. A configured port that is missing keeps that text.
-    m_display->setFirstRunHint(m_link.outputPortName().isEmpty()
-                                   ? QStringLiteral("OPEN SETTINGS: ") + Shortcuts::settingsHintKey()
-                                   : QString());
+    // instead of saying NO MIDI OUTPUT. A configured port that is missing keeps that text. With no
+    // device enabled at all the line also says which units were found on USB (DESIGN-2.md 13.2.3).
+    m_display->setFirstRunHint(m_link.outputPortName().isEmpty() ? firstRunHint() : QString());
     updateLedDisplay();
+}
+
+bool MainWindow::anyDeviceEnabled() const
+{
+    for (Model m : allModels())
+        if (m_router->isEnabled(m))
+            return true;
+    return false;
+}
+
+// Reads the port lists through the D-05's link and asks Identify (docs/IDENTIFY.md) which models they
+// hold. Runs only with no device enabled (the first-run hint is the only use) and only when the port
+// list is read anyway: at construction, on window activation, when a device is turned off. Opens and
+// sends nothing; there is no timer.
+void MainWindow::refreshDetection()
+{
+    m_detected.clear();
+    m_detectionDone = true;
+    if (anyDeviceEnabled())
+        return;
+    QString err;
+    QStringList names = m_link.outputPortNames(&err);
+    if (!err.isEmpty())
+        names.clear();
+    names += m_link.inputPortNames(&err);
+    const QList<Identify::Result> found = Identify::identifyPorts(names, m_systemLookup);
+    for (Model m : allModels()) {
+        for (const Identify::Result &r : found) {
+            if (r.model && *r.model == m) {
+                m_detected.append(m);
+                break;
+            }
+        }
+    }
+}
+
+void MainWindow::setSystemLookup(bool on)
+{
+    if (on == m_systemLookup)
+        return;
+    m_systemLookup = on;
+    m_detectionDone = false;
+    if (!anyDeviceEnabled()) {
+        refreshDetection();
+        updateDisplayConnection();
+    }
+}
+
+QString MainWindow::firstRunHint() const
+{
+    if (!anyDeviceEnabled()) {
+        if (m_detected.size() == 1)
+            return QStringLiteral("FOUND %1 ON USB: OPEN SETTINGS").arg(modelInfo(m_detected.first()).name);
+        if (m_detected.size() > 1)
+            return QStringLiteral("FOUND %1 UNITS ON USB: OPEN SETTINGS").arg(m_detected.size());
+    }
+    return QStringLiteral("OPEN SETTINGS: ") + Shortcuts::settingsHintKey();
 }
 
 void MainWindow::refreshConnection()
 {
     auto *s = static_cast<StatusStrip *>(m_statusStrip);
+    if (anyDeviceEnabled())
+        m_detectionDone = false;  // read again the next time no device is enabled
+    else if (!m_detectionDone)
+        refreshDetection();
     const Model cur = currentDevice();
     const MidiLink &link = *m_router->link(cur);
     const QString &inputLabel = m_rt[int(cur)].inputLabel;
@@ -1276,29 +1493,115 @@ void MainWindow::cycleDevice(int direction)
 
 // The window follows the router's current device, whoever caused the switch (the user or a
 // follow event, FR-20). It all happens in this one turn of the event loop, so the window paints
-// once: first the content that belongs to the old device goes, then the skin changes, then the
-// switcher and the status bar say what is current.
+// once: first the content of the new device goes in (list, grid, markers), then the skin changes,
+// then the switcher and the status bar say what is current.
 void MainWindow::onDeviceChanged(Model model, bool)
 {
     finishEditing();
     if (m_grid->stage() != BankGrid::Stage::Idle)
         m_grid->cancelEntry();
-    const bool toD05 = model == Model::D05;
     // Focus in a part that is about to go hidden is dropped (Qt would hand it to AUTO SEND).
-    if (!toD05) {
+    {
         QWidget *f = QApplication::focusWidget();
-        if (f && f->window() == this && f != m_autoSend && f != m_system)
+        if (f && (f == m_groupBar || f == m_engine))
             f->clearFocus();
     }
-    applyContentVisibility();
-    Theme::setSkin(skinIdForCurrent());  // the notifier runs applySkin(); a no-op on the same skin
-    refreshConnection();                 // status bar, display, switcher
-    if (toD05)
+    enterDevice(model);
+    const QString skinId = skinIdForCurrent();
+    const bool skinChanges = Theme::skin().id != skinId;
+    Theme::setSkin(skinId);  // the notifier runs applySkin(); a no-op on the same skin
+    if (!skinChanges)
+        applySkin();  // a skin that was already on still has to take this device's group slot
+    refreshConnection();  // status bar, display, switcher
+    if (model == Model::D05 || !QApplication::focusWidget() || QApplication::focusWidget()->window() != this)
         m_search->setFocus();
     if (m_settings) {
         m_settings->setCurrentDevice(model);
         noteSettingsWrite();
     }
+}
+
+// Points the list, grid, search field and view buttons at `model`'s state. What the list held for the
+// device being left (search text, view, highlighted row) is kept for when the window comes back
+// (FR-4: views are per device). The list resets once.
+void MainWindow::enterDevice(Model model)
+{
+    DeviceUi &old = m_ui[int(m_shown)];
+    old.query = m_search->text();
+    old.view = m_model->view();
+    old.highlight = highlighted();
+    m_shown = model;
+    const DeviceUi &ui = m_ui[int(model)];
+    m_preSearch.reset();
+    m_lastHighlight.reset();
+    {
+        // The widgets say what the model is about to hold; their signals must not rebuild the list again.
+        const QSignalBlocker a(m_search), b(m_viewGroup), c(m_viewAll), d(m_viewFav), e(m_viewRecent);
+        m_search->setText(ui.query);
+        PanelButton *on = ui.view == PatchListModel::View::Favourites ? m_viewFav
+                          : ui.view == PatchListModel::View::Recents ? m_viewRecent
+                                                                     : m_viewAll;
+        on->setChecked(true);
+    }
+    m_grid->setDevice(model, model == Model::JU06A ? m_router->ju06aTracker()->engine() : 0);
+    m_restore = Restore::Device;
+    m_savedHighlight = ui.highlight;
+    m_model->setDevice(*m_catalogs[int(model)], ui.query, ui.view);
+    m_restore = Restore::Keep;
+    syncEngineState();
+    showCurrentPatch(false);
+}
+
+// What the JU-06A's tracker says into the list markers (the believed engine, the armed row, the other
+// engine's remembered patch) and the engine control (DESIGN-2.md 4.3, 6.2, 6.3), and the display's
+// context line. The list only carries them while the JU-06A's catalogue is shown.
+void MainWindow::syncEngineState()
+{
+    const EngineTracker *t = m_router->ju06aTracker();
+    const int armedEngine = t->armed() ? t->armed()->engine() : 0;
+    m_engine->setState(t->engine(), armedEngine != 0 ? armedEngine : t->hint());
+    if (m_shown == Model::JU06A) {
+        m_model->setBelievedEngine(t->engine());
+        m_model->setArmed(t->armed());
+        const int other = t->remembered(t->otherEngine());
+        std::optional<PatchAddress> remembered;
+        if (other >= 0)
+            remembered = PatchAddress::fromBankNumber(Model::JU06A, other / 8 + 1, other % 8 + 1, t->otherEngine());
+        m_model->setOtherRemembered(remembered);
+    } else {
+        m_model->setArmed(std::nullopt);
+        m_model->setOtherRemembered(std::nullopt);
+    }
+    updateLedDisplay();
+}
+
+// The JU-06A's believed engine changed (Ctrl+E, an engine button, a confirmed flip): the skin follows
+// it while the JU-06A is the current device (FR-17), and the grid sends on the new engine.
+void MainWindow::onEngineChanged(int engine)
+{
+    if (m_settings)
+        m_engineChanged = true;  // after startup: the user's action or a confirmed flip
+    if (m_shown == Model::JU06A) {
+        m_grid->setDevice(Model::JU06A, engine);
+        m_model->setBelievedEngine(engine);
+    }
+    syncEngineState();
+    if (currentDevice() == Model::JU06A) {
+        showCurrentPatch(false);
+        Theme::setSkin(skinIdForCurrent());
+    }
+}
+
+void MainWindow::onEngineRequested(int engine)
+{
+    if (engine != m_router->ju06aTracker()->engine())
+        m_router->ju06aTracker()->toggleEngine();
+}
+
+void MainWindow::toggleEngine()
+{
+    if (currentDevice() == Model::JU06A)
+        m_router->ju06aTracker()->toggleEngine();
 }
 
 // A current device that is not enabled (the user turned it off in Settings, or none was ever
@@ -1364,6 +1667,7 @@ bool MainWindow::sendQuiet(Model model)
         return true;
     if (model == Model::JU06A && cur->engine() != m_router->ju06aTracker()->engine())
         return true;
+    const QScopedValueRollback<bool> quiet(m_quietSend, true);
     return m_router->select(*cur);
 }
 
@@ -1552,6 +1856,7 @@ void MainWindow::onSettingsTest(Model model, const AppSettings::DeviceValues &v)
         a.reset();  // the unit's other engine: not a patch TEST may arm a prompt for
     if (!a)
         a = PatchAddress::fromBankNumber(model, 1, 1, model == Model::JU06A ? m_router->ju06aTracker()->engine() : 0);
+    const QScopedValueRollback<bool> quiet(m_quietSend, true);  // TEST is not a selection
     if (a && !m_router->select(*a))
         showMessage(QStringLiteral("Not sent: ") + l->status());
 }
@@ -1672,8 +1977,10 @@ void MainWindow::saveStateNow()
     if (savedOn(Model::D05))
         m_settings->setLastPatch(Model::D05, m_current);
     for (Model m : {Model::JP08, Model::JU06A}) {
-        if (savedOn(m) && m_router->isEnabled(m) && m_router->link(m)->current())
-            m_settings->setLastPatch(m, *m_router->link(m)->current());
+        // The JU-06A's patch is the tracker's (none after a flip into an engine that shows ---).
+        const std::optional<PatchAddress> cur = m == Model::JU06A ? currentOf(m) : m_router->link(m)->current();
+        if (savedOn(m) && m_router->isEnabled(m) && cur)
+            m_settings->setLastPatch(m, *cur);
     }
     if (savedOn(Model::JU06A) && m_router->isEnabled(Model::JU06A)) {
         const EngineTracker *t = m_router->ju06aTracker();
