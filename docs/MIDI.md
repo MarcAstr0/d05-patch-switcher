@@ -114,6 +114,10 @@ Example verified at gate G4 (2026-10-24, macOS, Squarp Hapax with hapaxOS 3.x): 
 Hapax's USB port appears as 16 virtual ports; incoming MIDI goes into the selected
 track (input ALL ACTIVE) and leaves on that track's DIN output on the track's channel;
 the D-05 answered on the third port, and Bank Select and Program Change passed through.
+With input ALL ACTIVE only the selected track receives, so only one unit at a time can be
+driven that way. Verified 2026-10-27 (version 2, three units at once): each unit's track
+input set to USB Device on the unit's channel; in the app all three devices on
+`HAPAX Puerto 1`, each on that same channel. The other USB ports did not reach the tracks.
 
 **Follow the panel** needs the reverse direction too: the D-05's output reaching the
 computer (path 1 carries both directions; paths 2 and 3 need a cable from the D-05's
