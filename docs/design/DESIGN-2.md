@@ -849,6 +849,12 @@ apart:
 4. `MIT licence. Copyright 2026 Mario Castro Squella.` (`type.note`)
 5. `Roland, Boutique, D-05, D-50, JP-08, JUPITER-8, JU-06A, JUNO-60 and JUNO-106 are trademarks of Roland Corporation. This app is not affiliated with or endorsed by Roland.` (`type.note`, three lines)
 6. `Inter and Archivo typefaces, SIL Open Font License 1.1.` (`type.note`; 310 px, one line)
+7. `Uses Qt (LGPLv3) and RtMidi. See THIRD-PARTY-NOTICES.` (`type.note`, one line), kept from
+   the version 1 build (licence obligation; foreman's T8.3 readings). Last paragraph, directly
+   above the 20 px gap and `OK`.
+
+The height comes from the layout: **440 x 333** at 1x (the accepted
+`tests/reference/about@1x.png`).
 
 ### 8.3 Menus and titles
 
@@ -1213,6 +1219,9 @@ references pixel for pixel. Compare against section 10's mockups.
    line 2 shows `FOUND <MODEL> ON USB: OPEN SETTINGS` when `Identify` finds exactly one
    model, `FOUND <n> UNITS ON USB: OPEN SETTINGS` for more than one, else version 1's
    `OPEN SETTINGS: CTRL+,` (`CMD+,`). All fit 40 columns (34 at most).
+   The status bar shows no ports while nothing is enabled: `OUT None  CH 1  IN None`, both
+   `None` in `labelDim`, exactly as version 1's `firstrun` reference; a disabled device's
+   saved input is neither opened nor named.
 4. **Two names, one search.** `SearchQuery` must return, for each match range, which of
    the two names (user or factory) it indexes, so the delegate can draw it (6.4).
 5. **Settings refuses with OK disabled** while a port-and-channel conflict exists, and
